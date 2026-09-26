@@ -16,6 +16,8 @@ import { SOLID } from '../core/physics';
 import type { Game as GameT } from '../core/game';
 
 const HEAT_LEVELS = [0, 1, 3, 6, 10, 15];
+/** Puntería de los agentes según las sirenas (ver combatant.ts). */
+const POLICE_ACC = [0.46, 0.46, 0.46, 0.48, 0.55, 0.62];
 /** Calor por cada disparo tuyo (antes 1: con defenderte de una emboscada llegabas a 5 sirenas). */
 const HEAT_SHOT = 0.3;
 /** Sin un policía delante, los disparos (la gente llamando) no pasan de 2 sirenas. */
@@ -552,6 +554,9 @@ export class Police implements System {
         b.aggro = true;
         // si hace rato que no te ven, van a donde te vieron por última vez (no saben dónde estás)
         b.hunt = this.unseen > 3 ? this.lastSeen : null;
+        // con 4-5 sirenas son los especiales: se acercan más y afinan más
+        b.acc = POLICE_ACC[this.wanted];
+        b.engageRange = this.wanted >= 4 ? (this.wanted >= 5 ? 22 : 28) : null;
       }
       updateCombatant(g, o, dt);
       // volver al coche si el jugador se va en vehículo y está lejos
@@ -580,7 +585,7 @@ export class Police implements System {
     // bajarse cerca si el jugador va a pie o está parado
     const playerSlow = p.state === 'foot' || (this.vm.current && Math.abs(this.vm.current.speed) < 3);
     // (o si se ha atascado ya cerca: mejor a pie que empujando una esquina)
-    if ((dist < 14 && playerSlow) || (dist < 30 && u.unstick.tries > 0)) {
+    if ((dist < 14 && playerSlow) || (dist < 50 && u.unstick.tries > 0 && playerSlow)) {
       this.dismount(u);
       return false;
     }

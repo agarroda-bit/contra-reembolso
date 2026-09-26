@@ -38,6 +38,10 @@ export interface CombatBrain {
   holdAt: THREE.Vector3 | null;
   /** Multiplicador de daño de sus disparos (el jefe pega más). */
   dmgMul: number;
+  /** Puntería propia (si no, la de su bando). La policía la sube con las sirenas. */
+  acc: number | null;
+  /** Distancia desde la que se para a disparar (si no, la de su arma). Con muchas sirenas se acercan más. */
+  engageRange: number | null;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
@@ -67,7 +71,7 @@ export function makeCombatBrain(side: 'police' | 'gang', weapon: WeaponId): Comb
   return {
     side, weapon, mode: 'idle', los: false, losTimer: rnd.next() * 0.3, telegraph: 0, warned: false, fireTimer: 0, burst: 0,
     modeTimer: 0, goal: null, lastHurt: -99, arrestOnly: false, aggro: false, home: null, shouted: 0,
-    path: null, pathTimer: 0, hunt: null, holdAt: null, dmgMul: 1,
+    path: null, pathTimer: 0, hunt: null, holdAt: null, dmgMul: 1, acc: null, engageRange: null,
   };
 }
 
@@ -124,7 +128,7 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
   }
 
   const def = WEAPONS[b.weapon];
-  const range = Math.min(def.range * 0.8, b.side === 'police' ? 36 : 32);
+  const range = b.engageRange ?? Math.min(def.range * 0.8, b.side === 'police' ? 36 : 32);
   b.modeTimer -= dt;
   b.fireTimer -= dt;
 
@@ -292,7 +296,7 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   // ¿este disparo va a dar? Depende de la distancia y de si te mueves (corriendo o en coche fallan más)
   const p = game.mod.player;
   const v = game.mod.vehicles?.current;
-  let chance = (b.side === 'police' ? ACC_POLICE : ACC_GANG) * THREE.MathUtils.clamp(1.15 - dist / 40, 0.2, 1);
+  let chance = (b.acc ?? (b.side === 'police' ? ACC_POLICE : ACC_GANG)) * THREE.MathUtils.clamp(1.15 - dist / 40, 0.2, 1);
   if (v) chance *= 1 - Math.min(0.65, Math.abs(v.speed) / 28);
   else {
     const sp = Math.hypot(p.velocity.x, p.velocity.z);
