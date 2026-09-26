@@ -34,7 +34,13 @@ interface Projectile {
   fuse: number;
   owner: Shooter;
   hit: Set<Npc>;
+  /** Daño (paquete FRÁGIL: el de quien lo lanza; el jefe lanza unos más flojos). */
+  damage?: number;
+  /** Paquete FRÁGIL del jugador: ya ha tocado algo (explota enseguida). */
+  landed?: boolean;
 }
+
+const nearList: Npc[] = [];
 
 const HIT_MASK = SOLID | G.NPC | G.VEHICLE | G.PLAYER | G.PROP;
 const tmpV = new THREE.Vector3();
@@ -369,7 +375,7 @@ export class Combat implements System {
         this.spawnTape(shooter, muzzle, dir);
         return;
       case 'grenade':
-        this.spawnGrenade(shooter, muzzle, dir);
+        this.spawnGrenade(shooter, muzzle, dir, def.damage);
         return;
     }
     // hitscan y sellos
@@ -531,7 +537,7 @@ export class Combat implements System {
     this.projectiles.push({ kind: 'tape', mesh, pos: pos.clone(), vel: dir.clone().multiplyScalar(38), t: 0, fuse: 0, owner, hit: new Set() });
   }
 
-  private spawnGrenade(owner: Shooter, pos: THREE.Vector3, dir: THREE.Vector3) {
+  private spawnGrenade(owner: Shooter, pos: THREE.Vector3, dir: THREE.Vector3, damage = WEAPONS.fragile.damage) {
     const w = this.game.physics.world;
     const throwDir = dir.clone();
     throwDir.y += 0.35;
@@ -553,7 +559,7 @@ export class Combat implements System {
     mesh.add(band);
     mesh.castShadow = true;
     this.game.scene.add(mesh);
-    this.projectiles.push({ kind: 'grenade', mesh, body, pos: pos.clone(), vel: dir.clone(), t: 0, fuse: 2.4, owner, hit: new Set() });
+    this.projectiles.push({ kind: 'grenade', mesh, body, pos: pos.clone(), vel: throwDir.clone().multiplyScalar(17), t: 0, fuse: 2.4, owner, hit: new Set(), damage });
     this.game.mod.audio?.play('whoosh');
   }
 
@@ -604,8 +610,20 @@ export class Combat implements System {
       } else if (pr.kind === 'tape') {
         const step = tmpV.copy(pr.vel).multiplyScalar(dt);
         const len = step.length();
-        const hit = g.physics.raycast(pr.pos, step, len + 0.3, HIT_MASK, pr.owner.exclude);
+        let hit = g.physics.raycast(pr.pos, step, len + 0.3, HIT_MASK, pr.owner.exclude);
         pr.mesh.rotation.x += dt * 20;
+        // pasar rozando también precinta (el rollo es gordo y los muñecos, delgados)
+        if (npcs && (!hit || !(hit.owner instanceof Npc))) {
+          const probe = tmpV2.copy(pr.pos).addScaledVector(step, 0.5);
+          for (const n of npcs.within(probe, 1.4, nearList)) {
+            if (!n.alive || n.vehicle || (pr.owner.kind === 'npc' && pr.owner.npc === n)) continue;
+            const dy = probe.y - n.position.y;
+            if (dy < 0.1 || dy > 1.9 || Math.hypot(probe.x - n.position.x, probe.z - n.position.z) > 0.75) continue;
+            if (hit && hit.distance < probe.distanceTo(pr.pos)) break; // hay una pared antes
+            hit = { point: probe.clone(), normal: step.clone().normalize().negate(), distance: 0, collider: null as any, owner: n };
+            break;
+          }
+        }
         if (hit) {
           const owner: any = hit.owner;
           if (owner instanceof Npc) {
@@ -628,13 +646,33 @@ export class Combat implements System {
         if (pr.t > 2) this.removeProjectile(i);
       } else if (pr.kind === 'grenade') {
         pr.fuse -= dt;
+        if (pr.owner.kind === 'player' && pr.body && !pr.landed) {
+          // al primer golpe (cambio brusco de velocidad) o junto a un enemigo: ¡crac! y explota
+          const lv = pr.body.linvel();
+          const dv = Math.hypot(lv.x - pr.vel.x, lv.y - pr.vel.y, lv.z - pr.vel.z);
+          pr.vel.set(lv.x, lv.y, lv.z);
+          let near = false;
+          if (npcs && pr.t > 0.12) {
+            for (const n of npcs.within(pr.pos, 1.3, nearList)) {
+              if (n.alive && n.hostile && !n.vehicle) {
+                near = true;
+                break;
+              }
+            }
+          }
+          if ((dv > 4 && pr.t > 0.08) || near) {
+            pr.landed = true;
+            pr.fuse = Math.min(pr.fuse, near ? 0.05 : 0.3);
+            g.mod.audio?.play('glass', { pos: pr.pos, volume: 0.6 });
+          }
+        }
         // parpadeo al final
         const blink = pr.fuse < 0.8 && Math.sin(pr.t * 40) > 0;
         (pr.mesh as THREE.Mesh).scale.setScalar(blink ? 1.15 : 1);
         if (pr.fuse <= 0) {
           const pos = pr.pos.clone();
           this.removeProjectile(i);
-          this.explode(pos, 7, WEAPONS.fragile.damage, pr.owner);
+          this.explode(pos, 7, pr.damage ?? WEAPONS.fragile.damage, pr.owner);
         }
       }
     }
