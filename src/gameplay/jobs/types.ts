@@ -14,7 +14,8 @@ export type Quirk =
   | 'pijama_perro' // baja en pijama con un perro que te persigue
   | 'no_he_pedido' // dice que no ha pedido nada... y luego sí
   | 'influencer' // te graba mientras entregas
-  | 'regatea'; // regatea el reembolso
+  | 'regatea' // regatea el reembolso
+  | 'firmas'; // te hace firmar un papel tras otro antes de pagar
 
 export interface ClientProfile {
   id: string;
@@ -22,6 +23,8 @@ export interface ClientProfile {
   avatar: string; // emoji
   look: LookKind;
   quirk: Quirk;
+  /** Tipo de paquete que siempre pide (la pastelería, FRÁGIL; el gimnasio, PESADO...). */
+  prefers?: PackageType;
   /** Barrios donde suele vivir (si no, cualquiera). */
   districts?: DistrictId[];
   /** Lo que piden (se elige uno). */

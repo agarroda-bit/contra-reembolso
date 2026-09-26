@@ -1,7 +1,17 @@
 // Dinero: EFECTIVO (encima, se puede perder) y BANCO (seguro). También la FAMA.
 import type { Game, System } from '../core/game';
 
-export const FAME_LEVELS = [0, 100, 300, 650, 1200, 2000, 3200, 5000, 7500, 11000];
+// Puntos de fama para cada nivel (nivel 1 = 0). Hechos a medida del ritmo de juego:
+// una entrega da 3-15 puntos (perfecta 15) y cada misión del tablón 100-400. Así, jugando bien,
+// el nivel 2 (primera misión) llega a los ~12 minutos y el 6 (jefe final) hacia la hora y media.
+// Del 7 al 10 son metas largas (lujos, ático, empresa): cada nivel sube un 12 % lo que pagan los encargos.
+export const FAME_LEVELS = [0, 80, 250, 500, 850, 1300, 2000, 3000, 4500, 6500];
+
+/** Puntos que hacen falta para llegar a un nivel (más allá del último, la barra se queda llena). */
+export function fameThreshold(level: number): number {
+  const i = Math.max(0, Math.min(level, FAME_LEVELS.length) - 1);
+  return FAME_LEVELS[i];
+}
 
 export function fameLevel(fame: number): number {
   let lvl = 1;
@@ -59,6 +69,14 @@ export class Economy implements System {
     return a;
   }
 
+  /** Dinero que entra directamente en el banco (regalos, sueldos de la empresa). */
+  addBank(amount: number, reason = 'ingreso') {
+    if (amount <= 0) return;
+    this.bank = Math.round((this.bank + amount) * 100) / 100;
+    this.stats.earned += amount;
+    this.game.events.emit('money', { cash: this.cash, bank: this.bank, delta: 0, reason });
+  }
+
   withdraw(amount: number): boolean {
     const a = Math.min(amount, this.bank);
     if (a <= 0) return false;
@@ -93,7 +111,14 @@ export class Economy implements System {
     this.game.events.emit('money', { cash: this.cash, bank: this.bank, delta, reason });
   }
 
+  private hudLinked = false;
+
   update() {
+    // la barra de fama del HUD usa los mismos umbrales que los niveles (antes llevaba otra cuenta)
+    if (!this.hudLinked && this.game.mod.hud) {
+      this.hudLinked = true;
+      this.game.mod.hud.fameThreshold = fameThreshold;
+    }
     const h = this.game.hud;
     h.cash = this.cash;
     h.bank = this.bank;

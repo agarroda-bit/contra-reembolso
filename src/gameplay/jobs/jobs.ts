@@ -12,14 +12,51 @@ import { randomLookFor } from '../../actors/looks';
 import { Rng, fx as rnd } from '../../core/rng';
 import { GeoBuilder, vertexColorMaterial } from '../../core/geo';
 
+// timeK: cuánto tiempo dan respecto a uno normal. URGENTE va justo (un buen conductor llega con
+// margen para propina; uno tranquilo, si no se entretiene); FRÁGIL obliga a ir despacio; SOSPECHOSO
+// incluye la pelea con la emboscada.
 const TYPE_INFO: Record<PackageType, { label: string; mult: number; color: string; timeK: number }> = {
   normal: { label: 'Normal', mult: 1, color: '#ffd23f', timeK: 1 },
-  fragil: { label: 'FRÁGIL', mult: 1.6, color: '#ff4f81', timeK: 1.15 },
-  urgente: { label: 'URGENTE', mult: 1.7, color: '#ff7b54', timeK: 0.55 },
-  sospechoso: { label: 'SOSPECHOSO', mult: 3, color: '#6c3bd1', timeK: 1.1 },
+  fragil: { label: 'FRÁGIL', mult: 1.6, color: '#ff4f81', timeK: 1.2 },
+  urgente: { label: 'URGENTE', mult: 1.7, color: '#ff7b54', timeK: 0.7 },
+  sospechoso: { label: 'SOSPECHOSO', mult: 3, color: '#6c3bd1', timeK: 1.35 },
   pesado: { label: 'PESADO', mult: 1.5, color: '#2ec4b6', timeK: 1.2 },
 };
 export { TYPE_INFO };
+
+/**
+ * Tiempo de un encargo = paradas (bajar, recoger, aparcar, entregar) + camino por calle a un ritmo
+ * tranquilo con la furgoneta. Medido en la isla: por calle se recorre ~1,3 veces la línea recta,
+ * y un conductor normal va a ~8 m/s de media (curvas, tráfico, algún golpe). Con 6,5 m/s de
+ * referencia sobra un 25 % para equivocarse; la propina (entrega perfecta) pide llegar con un
+ * cuarto del tiempo aún en el reloj.
+ */
+const JOB_STOP_TIME = 35;
+const JOB_SPEED = 6.5;
+
+/** Puntos de fama por entrega. */
+const FAME_PERFECT = 15;
+const FAME_OK = 8;
+const FAME_BAD = 3;
+
+/** ¿Ha pulsado E? Si es así, la gasta para que no haga además otra cosa en el mismo frame (entrar en una tienda...). */
+function takeE(g: Game): boolean {
+  if (!g.input.enabled || !g.input.pressed('interact')) return false;
+  (g.input as any).justDown?.delete?.('interact');
+  return true;
+}
+
+/** Nombre corto del cliente para las frases ("Loli (siempre en el bar)" → "Loli"). */
+function shortName(name: string): string {
+  return name.split(/[\s(«"]/)[0] || name;
+}
+
+const REDIRECTS = [
+  'Uy, que me he ido a casa de mi primo 😅',
+  'Cambio de planes: nos hemos movido 🎉',
+  'Perdona, me había equivocado de calle. Bueno, de barrio 🙈',
+  'Es que me he ido a por churros 🍩',
+];
 
 const JOB_COLORS = ['#ffd23f', '#2ec4b6', '#ff4f81', '#ff7b54', '#06d6a0', '#9b5de5'];
 const tmpV = new THREE.Vector3();
@@ -99,9 +136,7 @@ export class Jobs implements System {
       else if (r < 0.28) type = 'urgente';
       else if (r < 0.36 && fameLvl >= 2) type = 'sospechoso';
       else if (r < 0.46) type = 'pesado';
-      if (client.id === 'fiorella') type = 'fragil';
-      if (client.id === 'misterio') type = 'sospechoso';
-      if (client.id === 'gimnasio') type = 'pesado';
+      if (client.prefers) type = client.prefers;
     }
     const pickups = this.pickupPois();
     const pickup = opts.pickup ?? (this.rng.next() < 0.55 ? pickups.find((p) => p.kind === 'office') ?? pickups[0] : pickups[Math.floor(this.rng.next() * pickups.length)]);
@@ -118,9 +153,9 @@ export class Jobs implements System {
     const info = TYPE_INFO[type];
     const districtK = dest.district === 'colina' ? 1.5 : dest.district === 'poligono' ? 1.2 : 1;
     const pay = opts.pay ?? Math.round((25 + dist * 0.28) * info.mult * districtK * (1 + (fameLvl - 1) * 0.12) / 5) * 5;
-    // tiempo: ir a recoger + llevarlo, a unos 6 m/s de media, con margen
-    const toPickup = this.game.mod.player ? this.game.mod.player.position.distanceTo(pickup.door) : 100;
-    const time = opts.time ?? Math.round((50 + (toPickup + dist) / 6) * info.timeK);
+    // tiempo: ir a recoger + llevarlo, por calle (ver fairTime)
+    const from = this.game.mod.player?.position ?? pickup.door;
+    const time = opts.time ?? this.fairTime(from, pickup.door, dest.door, type);
     const item = client.items[Math.floor(this.rng.next() * client.items.length)];
     const ask = client.ask[Math.floor(this.rng.next() * client.ask.length)];
     const mm = Math.floor(time / 60), ss = time % 60;
@@ -151,6 +186,12 @@ export class Jobs implements System {
       return false;
     }
     this.offers.splice(i, 1);
+    // si ha tardado en aceptar y se ha alejado, el reloj se ajusta (nunca a menos de lo prometido)
+    const pl = this.game.mod.player;
+    if (pl) {
+      const fresh = this.fairTime(pl.position, o.pickupPos, o.dest.door, o.type);
+      if (fresh > o.time) o.time = fresh;
+    }
     const job: ActiveJob = {
       offer: o, state: 'pickup', integrity: 100, timeLeft: o.time, where: 'none', vehicleId: null,
       color: JOB_COLORS[(o.id - 1) % JOB_COLORS.length],
@@ -169,6 +210,32 @@ export class Jobs implements System {
     const o = this.offers[i];
     this.offers.splice(i, 1);
     this.msgs?.reply('cliente-' + o.client.id, 'Lo siento, hoy no puedo 🙏');
+  }
+
+  // ─────────── Distancias y tiempos ───────────
+
+  /** Metros por calle entre dos puntos (ruta de la red de calles; sin red, línea recta con recargo). */
+  roadDist(a: THREE.Vector3, b: THREE.Vector3): number {
+    const straight = a.distanceTo(b);
+    const roads = this.game.mod.traffic?.roads;
+    if (!roads || straight < 25) return straight * 1.35;
+    let pts: THREE.Vector3[] = [];
+    try {
+      pts = roads.route(a, b);
+    } catch {
+      pts = [];
+    }
+    if (!pts.length) return straight * 1.35 + 30;
+    let d = a.distanceTo(pts[0]);
+    for (let i = 1; i < pts.length; i++) d += pts[i].distanceTo(pts[i - 1]);
+    d += pts[pts.length - 1].distanceTo(b);
+    return Math.max(straight, d);
+  }
+
+  /** Segundos justos para ir de `from` a recoger en `pickup` y entregar en `dest`. */
+  fairTime(from: THREE.Vector3, pickup: THREE.Vector3, dest: THREE.Vector3, type: PackageType): number {
+    const road = this.roadDist(from, pickup) + this.roadDist(pickup, dest);
+    return Math.round((JOB_STOP_TIME + road / JOB_SPEED) * TYPE_INFO[type].timeK);
   }
 
   // ─────────── Integridad ───────────
@@ -515,7 +582,7 @@ export class Jobs implements System {
           this.setHint('E — «Quédese con el cambio» (cobras menos)');
         } else if (s.step === 1) {
           s.data.next -= dt;
-          if (input.pressed('interact')) {
+          if (takeE(g)) {
             this.say('¡Qué majo! Toma, lo que llevo contado.');
             this.finish(0.7, 'prisa');
             return;
@@ -551,7 +618,7 @@ export class Jobs implements System {
       }
       case 'vecino_banda': {
         if (s.step === 0) {
-          this.say('Sergio no está. Dice que me lo des a mí, que soy el vecino 😇', 3);
+          this.say(`${shortName(j.offer.client.name)} no está. Dice que me lo des a mí, que soy el vecino 😇`, 3);
           s.step = 1;
         } else if (s.step === 1 && s.t > 3) {
           // el vecino es de la banda
@@ -597,7 +664,7 @@ export class Jobs implements System {
           s.step = 1;
           this.setHint(`E — Aceptar ${s.data.offer} €   ·   Q — ¡Ni hablar!`);
         } else if (s.step === 1) {
-          if (input.pressed('interact')) {
+          if (takeE(g)) {
             this.finish(s.data.offer / j.offer.pay, 'regateo');
           } else if (input.pressed('radioPrev')) {
             if (rnd.next() < 0.55) {
@@ -614,10 +681,40 @@ export class Jobs implements System {
         } else if (s.step === 2 && s.t > 0) {
           this.finish(s.data.k ?? 1, '');
         } else if (s.step === 3) {
-          if (input.pressed('interact')) this.finish(s.data.offer / j.offer.pay, 'regateo');
+          if (takeE(g)) this.finish(s.data.offer / j.offer.pay, 'regateo');
           else if (input.pressed('radioPrev')) {
             this.say('¡Qué duro eres! Toma, todo. Y no vuelvas.', 2.5);
             this.finish(1, '');
+          }
+        }
+        break;
+      }
+      case 'firmas': {
+        if (s.step === 0) {
+          s.data.n = 0;
+          s.data.need = 3 + Math.floor(rnd.next() * 2);
+          s.data.idle = 0;
+          this.say('Antes de pagar, firme aquí, por favor. 🖊️', 3);
+          this.setHint(`E — Firmar (1/${s.data.need})`);
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          if (takeE(g)) {
+            s.data.n++;
+            s.data.idle = 0;
+            g.mod.audio?.play('click', { volume: 0.5 });
+            if (s.data.n >= s.data.need) {
+              this.say('Todo en regla. Tenga, y un extra por la paciencia.', 3);
+              this.finish(1.12, 'firmas');
+              return;
+            }
+            const lines = ['Y aquí.', 'Aquí también. Con la otra mano.', 'Ahora rubrique. No, eso es un garabato.', 'Y la fecha. En números romanos.', 'Iniciales. Todas.'];
+            this.say(lines[(s.data.n - 1) % lines.length], 2);
+            this.setHint(`E — Firmar (${s.data.n + 1}/${s.data.need})`);
+          } else if (s.data.idle > 20) {
+            this.say('¿Firma o no firma? Que tengo gente esperando. Tome, y la próxima vez traiga boli.', 3);
+            this.finish(0.85, '');
+            return;
           }
         }
         break;
@@ -682,11 +779,12 @@ export class Jobs implements System {
       eco.stats.deliveries++;
       if (perfect) eco.stats.perfect++;
       if (tip) eco.stats.tips += tip;
-      eco.addFame(perfect ? 12 : broken || late ? 2 : 6, 'entrega');
     }
+    const famePts = perfect ? FAME_PERFECT : broken || late ? FAME_BAD : FAME_OK;
+    eco?.addFame(famePts, 'entrega');
     g.mod.particles?.emit('money', g.mod.player.position.clone().setY(g.mod.player.position.y + 1.5), { count: 10 });
     const title = perfect ? '¡ENTREGA PERFECTA!' : broken ? 'Entrega… regular' : late ? 'Entrega con retraso' : '¡Entregado!';
-    g.events.emit('toast', { text: `${title}  +${pay} €${tip ? ` (+${tip} € de propina)` : ''}`, color: perfect ? '#ffd23f' : broken ? '#ff4f81' : '#2ec4b6', time: 3 });
+    g.events.emit('toast', { text: `${title}  +${pay} €${tip ? ` (+${tip} € de propina)` : ''}  ·  ⭐ +${famePts}`, color: perfect ? '#ffd23f' : broken ? '#ff4f81' : '#2ec4b6', time: 3 });
     g.events.emit('job:done' as any, { job: j, pay, tip, perfect } as any);
     this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, broken ? 'Te dejo una estrella por la puntualidad. Las otras cuatro, no. 😒' : perfect ? '⭐⭐⭐⭐⭐ ¡Repetiré!' : '⭐⭐⭐ Bien, sin más.', undefined, false);
     // el cliente se mete en casa
@@ -717,10 +815,13 @@ export class Jobs implements System {
       this.game.mod.npcs?.remove(old);
       this.clientNpcs.delete(j);
     }
-    j.offer = { ...j.offer, dest: nd, pay: Math.round(j.offer.pay * 1.2) };
-    j.timeLeft = Math.max(j.timeLeft, 0) + 40;
+    const extra = Math.round((10 + this.roadDist(j.offer.dest.door, nd.door) / JOB_SPEED) * TYPE_INFO[j.offer.type].timeK);
+    j.offer = { ...j.offer, dest: nd, pay: Math.round(j.offer.pay * 1.2), time: j.offer.time + extra };
+    j.timeLeft = Math.max(j.timeLeft, 0) + extra;
     const c = j.offer.client;
-    this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, `Uy, que me he ido a casa de mi primo 😅 Ahora estoy en ${nd.label}. Te subo a ${j.offer.pay} € por las molestias.`);
+    const why = REDIRECTS[Math.floor(rnd.next() * REDIRECTS.length)];
+    this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, `${why} Ahora estoy en ${nd.label}. Te subo a ${j.offer.pay} € por las molestias.`);
+    this.game.events.emit('toast', { text: `📍 ${shortName(c.name)} ha cambiado de sitio: +${extra} s`, color: j.color, time: 2.5 });
   }
 
   // ─────────── Perro ───────────
