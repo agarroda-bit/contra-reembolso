@@ -13,6 +13,8 @@ export interface Pickup {
   amount: number;
   mesh: THREE.Object3D;
   t: number;
+  /** Segundos desde que apareció (un paquete recién caído no se recoge en el mismo instante). */
+  age: number;
   life: number; // segundos (Infinity = siempre)
   data?: any;
   onTake?: (p: Pickup) => void;
@@ -56,6 +58,8 @@ function geoFor(kind: PickupKind): THREE.BufferGeometry {
 
 let nextId = 1;
 const tmpV = new THREE.Vector3();
+/** Un paquete que se acaba de caer tarda esto en poder recogerse (si no, se cae y se recoge a la vez). */
+const PACKAGE_GRACE = 1.5;
 
 export class Pickups implements System {
   name = 'pickups';
@@ -72,7 +76,7 @@ export class Pickups implements System {
     mesh.castShadow = true;
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    const p: Pickup = { id: nextId++, kind, pos: pos.clone(), amount, mesh, t: Math.random() * 6, life, onTake, data };
+    const p: Pickup = { id: nextId++, kind, pos: pos.clone(), amount, mesh, t: Math.random() * 6, age: 0, life, onTake, data };
     this.list.push(p);
     return p;
   }
@@ -85,6 +89,10 @@ export class Pickups implements System {
 
   /** Coloca los 20 paquetes perdidos (salvo los ya cogidos). */
   placeCollectibles(already: number[] = []) {
+    // se llama al arrancar y otra vez al cargar partida: primero se quitan los que ya había puestos
+    // (si no, salen repetidos, pagan dos veces y vuelven los que ya habías cogido)
+    for (let i = this.list.length - 1; i >= 0; i--) if (this.list[i].kind === 'collectible') this.remove(this.list[i]);
+    this.collectibleMeshes.clear();
     this.collected = new Set(already);
     const pts = this.game.world.collectibles;
     pts.forEach((pt, i) => {
@@ -110,7 +118,9 @@ export class Pickups implements System {
         this.remove(p);
         continue;
       }
+      p.age += dt;
       if (player.state === 'dead') continue;
+      if (p.kind === 'package' && p.age < PACKAGE_GRACE) continue;
       const dx = p.pos.x - ppos.x, dz = p.pos.z - ppos.z, dy = p.pos.y - ppos.y;
       if (dx * dx + dz * dz < reach * reach && Math.abs(dy) < 2.5) this.take(p);
     }
@@ -151,6 +161,7 @@ export class Pickups implements System {
       case 'collectible': {
         const idx = p.data?.index ?? -1;
         this.collected.add(idx);
+        this.collectibleMeshes.delete(idx);
         const n = this.collected.size;
         eco?.addCash(250, 'paquete perdido');
         eco?.addFame(15, 'coleccionable');
