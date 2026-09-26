@@ -1,10 +1,11 @@
 // La interfaz en pantalla: lee game.hud cada frame y solo toca el DOM cuando algo cambia.
 import * as THREE from 'three';
 import type { Game, System } from '../../core/game';
-import type { HudState } from '../../core/contracts';
+import type { HudState, Poi } from '../../core/contracts';
 import { Minimap, invalidateMapSource } from './minimap';
 import { BigMap } from './bigmap';
 import { Notifications } from './notifications';
+import { POI_STYLE } from './icons';
 import { formatMoney, formatClock, formatTimer, healthColor, clamp01, esc } from './format';
 
 const DISTRICT_COLORS: Record<string, string> = {
@@ -84,6 +85,12 @@ export class HudImpl implements Hud {
   private radioTimer = 0;
   private mapPrev: { paused: boolean; input: boolean } | null = null;
   private sirens: HTMLElement[] = [];
+  /** Hasta cuándo (performance.now) no se anuncian barrios (al entrar o salir de interiores). */
+  private districtQuietUntil = 0;
+  private mapToggledAt = -1;
+  /** Interior en el que está el jugador (para el minimapa) y la puerta de fuera. */
+  private insideId: string | null = null;
+  private insideDoor: { x: number; z: number } | null = null;
 
   constructor(private game: Game) {
     const root = document.createElement('div');
@@ -128,9 +135,18 @@ export class HudImpl implements Hud {
       }),
       ev.on('toast', (p) => this.notes.toast(p)),
       ev.on('district', (p) => {
+        // nada de cartel en los menús, dentro de un interior o justo al entrar/salir de uno
+        if (!game.hud.visible || this.bigMap.isOpen() || game.mod.interiors?.inside) return;
+        if (performance.now() < this.districtQuietUntil) return;
         const d = game.world?.districts.find((x) => x.id === p.id);
-        this.notes.district(p.name, d?.color || DISTRICT_COLORS[p.id] || '#ffd23f');
+        if (this.notes.district(p.name, d?.color || DISTRICT_COLORS[p.id] || '#ffd23f')) {
+          // el cartel sale arriba al centro, donde el de la radio: la radio se aparta
+          this.radioTimer = 0;
+          this.$.radio.classList.remove('hud-radio--ve');
+        }
       }),
+      ev.on('interior:enter' as any, () => this.onInterior()),
+      ev.on('interior:exit' as any, () => this.onInterior()),
       ev.on('player:hurt', (p) => {
         // destello rojo en los bordes de la pantalla (más fuerte cuanto más daño)
         const el = this.$.dano;
@@ -213,11 +229,39 @@ export class HudImpl implements Hud {
     if (this.game.mod.hud === this) delete this.game.mod.hud;
   }
 
+  /** Al entrar o salir de un interior: fuera el cartel del barrio y un rato sin anunciarlos. */
+  private onInterior() {
+    this.districtQuietUntil = performance.now() + 2500;
+    this.notes.clearDistrict();
+  }
+
+  /**
+   * Dentro de un interior (lejos de la isla) el minimapa enseñaría mar: en su lugar sale un
+   * cartel con el sitio, y los mapas usan la puerta de fuera como posición del jugador.
+   */
+  private updateInterior() {
+    const game = this.game;
+    const cur = game.mod.interiors?.current as { def: { id: string; name: string; poi: (p: Poi) => boolean } } | null | undefined;
+    const id = cur ? cur.def.id : null;
+    if (id === this.insideId) return;
+    this.insideId = id;
+    this.insideDoor = null;
+    if (!cur) {
+      this.minimap.setInside(null);
+      return;
+    }
+    const poi = game.world?.pois.find(cur.def.poi);
+    if (poi) this.insideDoor = { x: poi.door.x, z: poi.door.z };
+    const st = poi ? POI_STYLE[poi.kind] : undefined;
+    const name = cur.def.name.charAt(0).toUpperCase() + cur.def.name.slice(1);
+    this.minimap.setInside({ icon: st?.icon ?? '🚪', color: st?.color ?? '#ffd23f', name });
+  }
+
   /** Posición del jugador (o de la cámara) y rumbo de la cámara. */
   private updateView() {
     const game = this.game;
     const f = this.follow?.();
-    const p = (f ?? game.mod.player?.position) as { x: number; z: number } | undefined;
+    const p = (this.insideDoor ?? f ?? game.mod.player?.position) as { x: number; z: number } | undefined;
     const src = p && Number.isFinite(p.x) && Number.isFinite(p.z) ? p : game.camera.position;
     this.view.x = src.x;
     this.view.z = src.z;
@@ -242,20 +286,25 @@ export class HudImpl implements Hud {
     // mapa grande: M abre (jugando, sin menús); M o Esc cierran (en pausa).
     // Input deja pasar 'map' aunque esté desactivado (para poder cerrar): por eso solo se
     // abre con input.enabled, si no la M abriría el mapa encima del móvil o de una tienda.
+    // (el margen de 0,3 s: con mando, soltar las acciones al abrir hace que el botón aún
+    // pulsado cuente otra vez y el mapa se cerraría solo)
+    const canToggle = game.time.real - this.mapToggledAt > 0.3;
     if (this.bigMap.isOpen()) {
-      if (game.input.pressed('map') || game.input.pressed('pause')) this.closeMap();
-    } else if (!paused && hud.visible && game.input.enabled && game.input.pressed('map')) {
+      if (canToggle && (game.input.pressed('map') || game.input.pressed('pause'))) this.closeMap();
+    } else if (canToggle && !paused && hud.visible && game.input.enabled && game.input.pressed('map')) {
       this.openMap();
+      this.mapToggledAt = game.time.real;
     }
 
     if (!hud.visible) return;
+    this.updateInterior();
     this.updateView();
     const world = game.world;
     if (this.bigMap.isOpen()) {
       if (world) this.bigMap.draw(world, this.view.x, this.view.z, this.view.heading, realDt);
       return; // con el mapa abierto no hace falta pintar lo de debajo
     }
-    if (world) {
+    if (world && !this.insideId) {
       const t0 = performance.now();
       this.minimap.draw(game, world, this.view.x, this.view.z, this.view.heading, realDt);
       this.stats.minimapMs += (performance.now() - t0 - this.stats.minimapMs) * 0.05;
@@ -328,7 +377,11 @@ export class HudImpl implements Hud {
   private updateJobs(hud: HudState) {
     const jobs = hud.jobs;
     const $ = this.$;
-    if (this.changed('jobsN', jobs.length)) $.encargos.classList.toggle('hud-oculto', jobs.length === 0);
+    if (this.changed('jobsN', jobs.length)) {
+      $.encargos.classList.toggle('hud-oculto', jobs.length === 0);
+      // con 4 o más encargos, tarjetas de una línea: si no, en 720 px bajarían hasta el minimapa
+      $.encargos.classList.toggle('hud-tl--muchos', jobs.length >= 4);
+    }
     // quitar los que ya no están (bucle simple: sin crear funciones por frame)
     if (this.jobViews.size) {
       for (const [id, v] of this.jobViews) {
@@ -459,7 +512,11 @@ export class HudImpl implements Hud {
         $.radioPrograma.textContent = show;
         $.radioPrograma.hidden = !show;
       }
-      if (station && (stationChanged || show)) {
+      // el cartel del barrio y el de la radio comparten sitio: si cambias tú de emisora manda
+      // la radio; si solo cambia el programa, espera a que se vaya el del barrio
+      const districtUp = this.notes.districtVisible();
+      if (station && stationChanged && districtUp) this.notes.clearDistrict();
+      if (station && (stationChanged || (show && !districtUp))) {
         $.radio.classList.remove('hud-radio--ve');
         void $.radio.offsetWidth;
         $.radio.classList.add('hud-radio--ve');
@@ -482,10 +539,16 @@ export class HudImpl implements Hud {
       if (!hud.hint) {
         $.pista.classList.add('hud-oculto');
       } else {
-        const m = /^\s*([^\s—–-][^—–-]{0,9}?)\s+[—–-]\s+(.+)$/.exec(hud.hint);
-        $.pista.innerHTML = m
-          ? `<span class="cr-tecla">${esc(m[1].trim())}</span><span>${esc(m[2])}</span>`
-          : `<span>${esc(hud.hint)}</span>`;
+        // «E — Entrar   ·   F — Subir a la furgoneta»: cada tecla en su cajita
+        let html = '';
+        for (const seg of hud.hint.split(HINT_SEP)) {
+          const m = HINT_KEY.exec(seg);
+          if (html) html += '<i class="hud-pista__sep"></i>';
+          html += m
+            ? `<span class="hud-pista__seg"><span class="cr-tecla">${esc(m[1].trim())}</span><span class="hud-pista__txt">${esc(m[2])}</span></span>`
+            : `<span class="hud-pista__seg"><span class="hud-pista__txt">${esc(seg.trim())}</span></span>`;
+        }
+        $.pista.innerHTML = html;
         $.pista.classList.remove('hud-oculto');
         $.pista.classList.remove('hud-pista--entra');
         void $.pista.offsetWidth;
@@ -496,6 +559,10 @@ export class HudImpl implements Hud {
 }
 
 const ARC_LEN = 245; // longitud del arco del velocímetro (ver TEMPLATE)
+/** Separador entre dos pistas juntas (interact.ts las une con «   ·   »). */
+const HINT_SEP = /\s{2,}·\s{2,}/;
+/** «E — texto», «Q/E — texto», «Clic — texto»: tecla corta, guion y el resto. */
+const HINT_KEY = /^\s*([^\s—–-][^—–-]{0,9}?)\s+[—–-]\s+(.+)$/;
 
 const TEMPLATE = `
 <div class="hud-dano" data-id="dano"></div>
