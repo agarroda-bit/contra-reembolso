@@ -80,6 +80,9 @@ export class PhotoMode implements System {
     this.poseWas = p.pose;
     this.target.copy(p.state === 'vehicle' && g.mod.vehicles?.current ? g.mod.vehicles.current.getPosition(new THREE.Vector3()) : p.position);
     this.target.y += 1.1;
+    // en un vehículo la cámara empieza más lejos (a 5 m se metía casi dentro de la furgoneta)
+    this.dist = p.state === 'vehicle' ? 9 : 5;
+    this.pitch = p.state === 'vehicle' ? 0.25 : 0.15;
     this.yaw = (g.mod.cameraRig?.yaw ?? 0);
     this.panel.innerHTML = '<span>📸 MODO FOTO · arrastra para girar, rueda para acercar</span>';
     // los botones dicen lo que hay puesto (hora y pose), no solo lo que hacen
