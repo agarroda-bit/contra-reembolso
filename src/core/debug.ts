@@ -9,7 +9,7 @@ export function installDebug(game: Game) {
   const panel = document.createElement('div');
   panel.id = 'debug-panel';
   panel.style.cssText =
-    'position:fixed;left:8px;bottom:8px;z-index:50;background:rgba(0,0,0,.72);color:#fff;font:12px/1.4 ui-monospace,monospace;padding:8px 10px;border-radius:8px;max-width:340px;pointer-events:auto';
+    'position:fixed;left:8px;bottom:250px;z-index:50;background:rgba(0,0,0,.72);color:#fff;font:12px/1.4 ui-monospace,monospace;padding:8px 10px;border-radius:8px;max-width:340px;pointer-events:auto';
   const info = document.createElement('div');
   panel.appendChild(info);
   const btns = document.createElement('div');
