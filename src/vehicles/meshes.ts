@@ -21,6 +21,28 @@ export interface VehicleMesh {
 
 // Materiales compartidos por todos los vehículos
 export const vehicleBodyMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+/**
+ * Brillo de faros y pilotos (0,55 de día, 1,45 de noche). Los vértices de la carrocería con
+ * `glow` = 1 son luces: no reciben sombra ni luz, brillan con su color × este valor
+ * (igual que el antiguo material de faros, pero sin una malla aparte por coche).
+ */
+const lightK = { value: 0.55 };
+vehicleBodyMaterial.onBeforeCompile = (shader) => {
+  shader.uniforms.uLightK = lightK;
+  shader.vertexShader = 'attribute float glow;\nvarying float vGlow;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGlow = glow;');
+  shader.fragmentShader =
+    'varying float vGlow;\nuniform float uLightK;\n' +
+    shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * vGlow * uLightK;\n\tdiffuseColor.rgb *= 1.0 - vGlow;',
+    );
+};
+
+function withGlow(g: THREE.BufferGeometry, v: number): THREE.BufferGeometry {
+  const n = g.getAttribute('position').count;
+  g.setAttribute('glow', new THREE.BufferAttribute(new Float32Array(n).fill(v), 1));
+  return g;
+}
 export const headlightMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
 export const sirenMaterialRed = new THREE.MeshBasicMaterial({ color: '#ff2040' });
 export const sirenMaterialBlue = new THREE.MeshBasicMaterial({ color: '#2060ff' });
@@ -393,12 +415,27 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
     }
   }
 
-  const bodyGeo = b.build();
+  let bodyGeo: THREE.BufferGeometry;
+  let lights: THREE.Mesh;
+  if (live && !L.empty) {
+    // faros y pilotos dentro de la carrocería (atributo `glow`): un draw call menos por coche
+    const bg = withGlow(b.build(), 0);
+    const lg = withGlow(L.build(), 1);
+    bodyGeo = mergeGeometries([bg, lg], false)!;
+    bg.dispose();
+    lg.dispose();
+    bodyGeo.computeBoundingSphere();
+    bodyGeo.computeBoundingBox();
+    lights = new THREE.Mesh(new THREE.BufferGeometry(), headlightMaterial);
+    lights.visible = false;
+  } else {
+    bodyGeo = b.build();
+    lights = new THREE.Mesh(L.empty ? new THREE.BufferGeometry() : L.build(), headlightMaterial);
+  }
   const body = new THREE.Mesh(bodyGeo, vehicleBodyMaterial);
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
-  const lights = new THREE.Mesh(L.empty ? new THREE.BufferGeometry() : L.build(), headlightMaterial);
   group.add(lights);
   for (const d of decals) group.add(d);
   if (siren) group.add(siren);
@@ -444,4 +481,5 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
 export function setHeadlightsNight(night: number) {
   const k = 0.55 + night * 0.9;
   headlightMaterial.color.setRGB(k, k, k);
+  lightK.value = k;
 }
