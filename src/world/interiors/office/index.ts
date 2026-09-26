@@ -1327,11 +1327,6 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
         const lvl = companyState(game).level;
         toast(game, lvl === 0 ? 'Tu oficina. Bueno, «oficina». Mejórala desde el TABLÓN.' : 'La oficina. El TABLÓN de la pared es tu centro de mando.', '#ffd23f', 3.2);
       }
-      try {
-        game.renderer.compile(root, game.camera, game.scene);
-      } catch {
-        /* se compilarán al pintar */
-      }
     },
     onExit() {
       if (seats.busy) seats.stand();

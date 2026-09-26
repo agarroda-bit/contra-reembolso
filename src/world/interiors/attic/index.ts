@@ -1091,12 +1091,6 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       garage.setCars((game.mod.shops?.owned as OwnedLike[] | undefined) ?? null);
       apply(false);
       if (attic.items.size === 0) toast(game, 'Tu ático. Precioso… y vacío. La tablet de DECORACIÓN de la entrada vende caprichos.', '#ff4f81', 3.6);
-      // compilar los shaders ahora, con la pantalla en negro (si no, tirón al aparecer)
-      try {
-        game.renderer.compile(root, game.camera, game.scene);
-      } catch {
-        /* no pasa nada: se compilarán al pintar */
-      }
     },
     onExit() {
       insideFog = false;

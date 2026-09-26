@@ -153,7 +153,6 @@ export class ClubInterior implements InteriorInstance {
   private musicRetry = 0;
   private cinematicTimer = 0;
   private afterCinematic: (() => void) | null = null;
-  private lampGroup: THREE.Object3D | null = null;
   private fade: HTMLDivElement;
   private flash: HTMLDivElement;
   private playerLocal = new THREE.Vector3();
@@ -200,8 +199,6 @@ export class ClubInterior implements InteriorInstance {
     this.root.visible = true;
     this.fx.setActive(true);
     this.applyState(true);
-    this.lampGroup = this.game.scene.getObjectByName('luces-farolas') ?? null;
-    if (this.lampGroup) this.lampGroup.visible = false;
     this.musicRetry = 0;
     this.music.start();
     this.fx.setLedText(LED_NORMAL);
@@ -222,7 +219,6 @@ export class ClubInterior implements InteriorInstance {
     this.fx.clearTransient();
     this.fx.setActive(false);
     this.root.visible = false;
-    if (this.lampGroup) this.lampGroup.visible = true;
     const p = this.player;
     if (p && this.myPose && (p.pose === 'dance' || p.pose === 'sit')) {
       p.pose = 'normal';
