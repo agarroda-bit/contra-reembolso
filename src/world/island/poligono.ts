@@ -248,14 +248,22 @@ function buildJunkyard(ctx: Ctx, out: Out, lot: Lot) {
   const colors = ['#c0392b', '#2f6fb0', '#e8a01b', '#3f8f5a', '#dddddd', '#555a60', '#8a4fb0', '#1f9e9a', '#b38a5a'];
   const piles: [number, number][] = [];
   for (let px = -hw + 6; px <= hw - 6; px += 9) for (let pz = -hd + 5; pz <= hd - 12; pz += 7.5) piles.push([px + rng.range(-1, 1), pz]);
+  // pasillo libre en el centro para la rampa (carrerilla desde el portón y aterrizaje hasta el fondo).
+  // Las pilas del pasillo se "generan" igual pero no se ponen, para no cambiar los números al azar
+  // del resto de la isla.
+  let dropped = 0;
   for (const [px, pz] of piles) {
     if (rng.chance(0.18)) continue;
+    const skip = Math.abs(px) < 5.5;
     const h = rng.int(2, 5);
     const r0 = rng.range(-0.3, 0.3);
     for (let k = 0; k < h; k++) {
       const p = lotPoint(lot, px + rng.range(-0.25, 0.25), pz + rng.range(-0.2, 0.2));
-      cars.push({ x: p.x, y: lot.h + k * 1.12, z: p.z, r: lot.rot + Math.PI / 2 + r0 + rng.range(-0.15, 0.15), c: rng.pick(colors) });
+      const car = { x: p.x, y: lot.h + k * 1.12, z: p.z, r: lot.rot + Math.PI / 2 + r0 + rng.range(-0.15, 0.15), c: rng.pick(colors) };
+      if (skip) dropped++;
+      else cars.push(car);
     }
+    if (skip) continue;
     const pc = lotPoint(lot, px, pz);
     ctx.box(pc.x, lot.h + (h * 1.12) / 2, pc.z, 2.2, (h * 1.12) / 2, 1.1, lot.rot + Math.PI / 2 + r0);
     ctx.foot.push({ x: pc.x, z: pc.z, hw: 2.1, hd: 1.0, rot: lot.rot + Math.PI / 2 + r0, color: '#8a7a6a', height: h });
@@ -270,6 +278,7 @@ function buildJunkyard(ctx: Ctx, out: Out, lot: Lot) {
     im.setMatrixAt(i, m.compose(p.set(c.x, c.y, c.z), q.setFromEuler(e), one));
     im.setColorAt(i, lin(c.c).clone());
   });
+  for (let i = 0; i < dropped * 2; i++) rng.range(0, 1);
   im.computeBoundingSphere();
   ctx.game.scene.add(im);
   // grúa con electroimán
@@ -295,12 +304,13 @@ function buildJunkyard(ctx: Ctx, out: Out, lot: Lot) {
     const tp = lotPoint(lot, -hw + 3 + i * 1.1, -hd + 3);
     ctx.props.add('tyres', tp.x, lot.h, tp.z, 0, 1);
   }
-  // camión de la basura aparcado dentro y coleccionable detrás de las pilas
-  const gp = lotPoint(lot, 2, hd - 6);
-  ctx.specials.push({ kind: 'garbage', pos: ground(ctx, gp.x, gp.z), heading: lot.rot + Math.PI / 2 });
+  // camión de la basura aparcado dentro (a un lado, mirando al portón) y coleccionable detrás de las pilas
+  const gp = lotPoint(lot, 14.5, hd - 5);
+  ctx.specials.push({ kind: 'garbage', pos: ground(ctx, gp.x, gp.z), heading: lot.rot });
   const hp = lotPoint(lot, hw - 2.5, -hd + 2.5);
   collectible(ctx, hp.x, ctx.heightAt(hp.x, hp.z), hp.z);
-  jumpRamp(ctx, lotPoint(lot, -6, hd - 14).x, lotPoint(lot, -6, hd - 14).z, lot.rot + Math.PI, 8, 4.5, 1.6);
+  // rampa alineada con el portón: se entra desde la avenida en recto y se vuela por el pasillo central
+  jumpRamp(ctx, lotPoint(lot, 0, hd - 14).x, lotPoint(lot, 0, hd - 14).z, lot.rot + Math.PI, 8, 4.5, 1.6);
   out.pois.push(makePoi(ctx, 'junkyard', 'junkyard', 'Desguace El Siniestro Total', lot, 0, true, 1.2));
   ctx.paved.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: '#9a8f7c' });
   for (let i = 0; i < 3; i++) {
