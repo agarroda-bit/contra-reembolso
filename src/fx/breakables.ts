@@ -3,8 +3,9 @@
 // las balas y explosiones también. Vuelven a aparecer al rato si no las estás mirando.
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
-import { G } from '../core/physics';
+import { G, groups } from '../core/physics';
 import { GeoBuilder, vertexColorMaterial } from '../core/geo';
+import { OVERHANG_FILTER } from '../world/island/ctx';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { ParticleKind } from './particles';
 import type { RAPIER } from '../core/physics';
@@ -80,11 +81,17 @@ interface Item {
   broken: boolean;
   brokenAt: number;
   collider: RAPIER.Collider;
+  /** Toldo del puesto de fruta: colisor aparte para que la cámara no se meta dentro de la lona. */
+  awning?: RAPIER.Collider;
 }
+
+/** Toldo de los puestos de fruta (mismas medidas que en buildGeo): centro a 1,9 m, 2 x 1,2 m, inclinado 0,12. */
+const FRUIT_AWNING = { y: 1.9, hx: 1.02, hy: 0.09, hz: 0.62, tilt: 0.12 };
 
 const dummy = new THREE.Object3D();
 const tmpV = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
+const tmpE = new THREE.Euler();
 const tmpL = new THREE.Vector3();
 const CELL = 12;
 
@@ -118,7 +125,23 @@ export class Breakables implements System {
         const d = DEFS[kind];
         const col = game.physics.addStaticBox(s.pos.x, s.pos.y + d.half[1], s.pos.z, d.half[0], d.half[1], d.half[2], s.rotY, G.PROP);
         const item: Item = { kind, index: i, pos: s.pos.clone(), rotY: s.rotY, broken: false, brokenAt: 0, collider: col };
-        game.physics.tag(col, { hit: () => this.breakItem(item, null) });
+        const owner = { hit: () => this.breakItem(item, null) };
+        game.physics.tag(col, owner);
+        if (kind === 'fruit') {
+          // La lona está a 1,9 m y el colisor del puesto solo llega a 1 m: sin esto, la cámara (que solo
+          // choca con lo estático) se metía dentro del toldo al pasar al lado. Es un voladizo como los
+          // toldos de las tiendas: chocan la cámara, el personaje y las balas; los coches no (lo rompen).
+          const a = FRUIT_AWNING;
+          const q = tmpQ.setFromEuler(tmpE.set(a.tilt, s.rotY, 0, 'YXZ'));
+          const desc = game.physics.R.ColliderDesc.cuboid(a.hx, a.hy, a.hz)
+            .setTranslation(s.pos.x, s.pos.y + a.y, s.pos.z)
+            .setRotation({ x: q.x, y: q.y, z: q.z, w: q.w })
+            .setCollisionGroups(groups(G.STATIC, OVERHANG_FILTER));
+          item.awning = game.physics.world.createCollider(desc);
+          game.physics.tag(item.awning, owner);
+          // en vehículo se apaga con los demás voladizos del mundo (ver setOverhangs en world/island)
+          ((game.world as any).extra?.overhangs as RAPIER.Collider[] | undefined)?.push(item.awning);
+        }
         this.items.push(item);
         const key = this.key(s.pos.x, s.pos.z);
         const cell = this.grid.get(key) ?? [];
@@ -154,6 +177,7 @@ export class Breakables implements System {
     it.broken = true;
     it.brokenAt = g.time.elapsed;
     it.collider.setEnabled(false);
+    it.awning?.setEnabled(false);
     const mesh = this.meshes.get(it.kind)!;
     dummy.position.copy(it.pos);
     dummy.scale.setScalar(0);
@@ -219,6 +243,7 @@ export class Breakables implements System {
         if (!it.broken || now - it.brokenAt < 90 || it.pos.distanceTo(cam) < 70) continue;
         it.broken = false;
         it.collider.setEnabled(true);
+        it.awning?.setEnabled(true);
         const mesh = this.meshes.get(it.kind)!;
         dummy.position.copy(it.pos);
         dummy.rotation.set(0, it.rotY, 0);

@@ -13,6 +13,7 @@
 //   ambulance: {pos, heading}     plaza de ambulancia del centro de salud
 //   atticTerrace, mirador, plazuela, parkingRoof, lonjaRoof, lighthouse: Vector3 (sitios con encanto)
 //   climbs: [{name, a, b, c}]     recorridos para subir a azoteas/cubiertas (abajo, arriba, azotea)
+//   overhangs: Collider[]         voladizos bajos que se apagan en vehículo (se pueden añadir más)
 // y (world as any).terrainCollider es el colisor del terreno (trimesh).
 import * as THREE from 'three';
 import type { Game } from '../../core/game';
@@ -121,6 +122,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     ...makeColliderHelpers(game),
   };
   const out: Out = { pois: [], parking: [], delivery: [], extra: {}, animated: [], nightMeshes: [] };
+  // (solo en la página de prueba de la isla: deja a mano el contexto para inspeccionar la ocupación)
+  if ((globalThis as any).__debugLots) (globalThis as any).__islandCtx = ctx;
 
   // ── sitios especiales ──
   for (const s of specials) s.build(ctx, out);
@@ -152,6 +155,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   }
 
   out.extra.climbs = ctx.climbs;
+  // voladizos bajos que se apagan en vehículo: otros módulos pueden añadir los suyos (toldos de los puestos de fruta)
+  out.extra.overhangs = ctx.overhangs;
 
   // ── mobiliario urbano y vegetación ──
   streetFurniture(ctx, out);
