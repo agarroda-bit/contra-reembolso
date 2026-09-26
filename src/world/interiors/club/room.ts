@@ -48,9 +48,8 @@ export interface RoomParts {
   flickerMat: THREE.MeshBasicMaterial;
   /** Conos de los altavoces (se empujan con el bombo). */
   speakerCones: THREE.Mesh;
-  /** Puntas de las bengalas de las botellas (local). */
+  /** Dónde van las botellas sobre tu mesa (local, el pie de cada botella). */
   bottleSlots: THREE.Vector3[];
-  /** Posiciones de las botellas de las mesas de otros (para bengalas de ambiente). */
   dispose(): void;
 }
 

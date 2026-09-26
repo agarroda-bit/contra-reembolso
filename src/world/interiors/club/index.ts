@@ -660,10 +660,8 @@ export class ClubInterior implements InteriorInstance {
   // ───── Cada frame ─────
 
   update(dt: number, inside: boolean) {
-    if (!inside) {
-      // el cordón termina su animación aunque no mires
-      return;
-    }
+    // fuera no se mueve nada (al volver a entrar, applyState coloca el cordón al instante)
+    if (!inside) return;
     const g = this.game;
     this.applyState();
 
