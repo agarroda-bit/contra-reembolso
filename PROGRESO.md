@@ -4,7 +4,15 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 4 — Encargos y dinero (integrando)
+## Fase actual: 5 — Tiendas y progreso (integrando)
+
+## Fase 4 — Encargos y dinero ✅ (26/09, 07:10, publicada)
+- Móvil «Pomelo» (Tab) con la app de mensajería inventada «PaqueChat»: van llegando encargos de clientes con qué quieren, dónde, cuánto pagan y el tiempo; se aceptan con un botón o Enter. Apps de Banco, Fama y Ayuda.
+- Encargos: recoger en la oficina o en tiendas (📦 en el mapa y columna de luz en la puerta), llevar sin romper (la integridad baja con golpes y saltos), entregar con E y cobrar en EFECTIVO; propina si llega rápido y entero, menos dinero si llega roto o tarde.
+- Tipos: FRÁGIL, URGENTE, SOSPECHOSO (triple y emboscada), PESADO (solo furgoneta o furgón). Capacidad según vehículo; a pie, un paquete.
+- 16 clientes absurdos con muchas frases y 7 manías con escena: la abuela que cuenta céntimos, el «déjaselo al vecino» (que es de la banda y te lo roba), el que cambia de dirección al llegar, la de pijama con el perro Pancho que te persigue, el que dice que no ha pedido nada, la influencer que te graba y el que regatea (E acepta, Q regatea).
+- Cajeros 🏧 (3) para ingresar el efectivo. Si te matan Los Devueltos, se llevan tu efectivo y tus paquetes a su guarida: tienes un día de juego para asaltarla y abrir la caja fuerte. Las embestidas de la furgoneta morada tiran paquetes al suelo, y si paras, te sacan del vehículo.
+- Pruebas: + abrir el móvil y aceptar un encargo (`capturas/fase-4/`).
 
 ## Fase 3 — Armas y enemigos ✅ (26/09, 07:00, publicada)
 - Armas normales: pistola (empiezas con ella), escopeta, subfusil y fusil; locas: lanzapaquetes (cajas que rebotan y tumban) y pistola de cinta de embalar (deja pegados al suelo). Hay una tirada en cada barrio, más botiquines y un chaleco; reaparecen a los 3 min.
