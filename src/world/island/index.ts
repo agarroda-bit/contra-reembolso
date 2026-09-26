@@ -105,6 +105,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     ramps: [],
     breakables: [],
     specials: [],
+    climbs: [],
     ...makeColliderHelpers(game),
   };
   const out: Out = { pois: [], parking: [], delivery: [], extra: {}, animated: [], nightMeshes: [] };
@@ -137,6 +138,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
         break;
     }
   }
+
+  out.extra.climbs = ctx.climbs;
 
   // ── mobiliario urbano y vegetación ──
   streetFurniture(ctx, out);

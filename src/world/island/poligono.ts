@@ -595,6 +595,10 @@ function buildStairNave(ctx: Ctx, out: Out, lot: Lot) {
   const sx = hw + 0.75;
   const start = lotPoint(nl, sx, hd - 1.5);
   const st = stairs(ctx, b, start.x, lot.h, start.z, lot.rot + Math.PI, H, 1.3, '#8a9098', '#e8a01b', -1, false);
+  {
+    const a = lotPoint(nl, sx, hd - 0.7), top = lotPoint(nl, sx, hd - 1.5 - st.run - 1.2), roof = lotPoint(nl, 0, -hd + 4);
+    ctx.climbs.push({ name: 'nave', a: new THREE.Vector3(a.x, lot.h, a.z), b: new THREE.Vector3(top.x, lot.h + H, top.z), c: new THREE.Vector3(roof.x, lot.h + H, roof.z) });
+  }
   const land = lotPoint(nl, sx, hd - 1.5 - st.run - 1.2);
   b.frame(0, 0, 0, 0);
   b.box(land.x, lot.h + H - 0.1, land.z, 1.3, 0.2, 2.4, '#8a9098');

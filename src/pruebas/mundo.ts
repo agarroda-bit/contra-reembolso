@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from '../core/game';
-import { G, SOLID } from '../core/physics';
+import { G, SOLID, groups } from '../core/physics';
 import { buildIsland } from '../world/island';
 
 async function boot() {
@@ -146,8 +146,71 @@ async function boot() {
     triTot += t;
     meshes++;
   });
+  // rampas: a 3/4 de su longitud el rayo debe dar en la tapa inclinada (entre 0,8 y 1,8 m sobre el suelo)
+  const rampRes = world.ramps.map((r) => {
+    const fx = Math.sin(r.heading), fz = Math.cos(r.heading);
+    const x = r.pos.x + fx * 6.2, z = r.pos.z + fz * 6.2;
+    const hit = game.physics.raycast(new THREE.Vector3(x, r.pos.y + 20, z), down, 40, SOLID);
+    const up = hit ? hit.point.y - world.heightAt(x, z) : -1;
+    return up > 0.8 && up < 1.8 ? 'OK' : `MAL(${up.toFixed(2)})`;
+  });
+  log(`rampas: ${rampRes.join(' ')}`);
   log(`escena: ${meshes} mallas, ${(triTot / 1000).toFixed(0)}k triángulos`);
   log(Object.entries(triBy).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}k`).join(' · '));
+
+  // prueba física: una cápsula con el controlador de personaje de Rapier recorre puntos (x, z)
+  const walk = (pts: THREE.Vector3[]) => {
+    const w = game.physics.world;
+    const p0 = pts[0];
+    const body = w.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(p0.x, p0.y + 1.0, p0.z));
+    const col = w.createCollider(RAPIER.ColliderDesc.capsule(0.55, 0.35).setCollisionGroups(groups(G.PLAYER, G.ALL)), body);
+    const cc = w.createCharacterController(0.02);
+    cc.enableAutostep(0.35, 0.2, true);
+    cc.setMaxSlopeClimbAngle((50 * Math.PI) / 180);
+    cc.enableSnapToGround(0.4);
+    const pos = new THREE.Vector3(p0.x, p0.y + 1.0, p0.z);
+    w.step();
+    const res: string[] = [];
+    for (let k = 1; k < pts.length; k++) {
+      const t = pts[k];
+      let stuck = 0;
+      for (let i = 0; i < 2500; i++) {
+        const dx = t.x - pos.x, dz = t.z - pos.z, d = Math.hypot(dx, dz);
+        if (d < 0.15) break;
+        const sp = Math.min(0.1, d);
+        cc.computeColliderMovement(col, { x: (dx / d) * sp, y: -0.06, z: (dz / d) * sp });
+        const mv = cc.computedMovement();
+        if (Math.hypot(mv.x, mv.z) < 0.01) {
+          if (++stuck === 20) {
+            for (let c = 0; c < cc.numComputedCollisions(); c++) {
+              const hit = cc.computedCollision(c);
+              const hc = hit?.collider;
+              if (!hc) continue;
+              const tr = hc.translation(), sh = hc.shape as any;
+              const n1 = (hit as any).normal1, wp = (hit as any).witness1;
+              res.push(`[choca con forma ${sh.type} en (${tr.x.toFixed(1)},${tr.y.toFixed(1)},${tr.z.toFixed(1)}) medias ${sh.halfExtents ? `${sh.halfExtents.x.toFixed(2)},${sh.halfExtents.y.toFixed(2)},${sh.halfExtents.z.toFixed(2)}` : sh.radius} normal (${n1?.x?.toFixed(2)},${n1?.y?.toFixed(2)},${n1?.z?.toFixed(2)}) punto (${wp?.x?.toFixed(2)},${wp?.y?.toFixed(2)},${wp?.z?.toFixed(2)}) cápsula (${pos.x.toFixed(2)},${pos.y.toFixed(2)},${pos.z.toFixed(2)})]`);
+            }
+            break;
+          }
+        } else stuck = 0;
+        pos.x += mv.x;
+        pos.y += mv.y;
+        pos.z += mv.z;
+        body.setNextKinematicTranslation({ x: pos.x, y: pos.y, z: pos.z });
+        w.step();
+      }
+      const feet = pos.y - 0.9;
+      res.push(`(${pos.x.toFixed(1)},${feet.toFixed(2)},${pos.z.toFixed(1)}) objetivo y=${t.y.toFixed(2)} d=${Math.hypot(t.x - pos.x, t.z - pos.z).toFixed(1)}`);
+    }
+    w.removeCharacterController(cc);
+    w.removeRigidBody(body);
+    return res.join(' → ');
+  };
+  (window as any).__walk = walk;
+  (window as any).__climbs = () => {
+    const cl = ((world as any).extra?.climbs ?? []) as { name: string; a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3 }[];
+    return cl.map((c) => `${c.name}: ${walk([c.a, c.b, c.c])}`);
+  };
 
   // perfil de coste de dibujo por grupo (fuerza a la GPU a terminar con readPixels)
   (window as any).__prof = () => {
