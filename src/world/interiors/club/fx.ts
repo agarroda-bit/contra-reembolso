@@ -443,7 +443,8 @@ export class ClubFx {
       this.jets.push({ mesh, mat, t: 0 });
     }
 
-    // ── Luces reales (solo se añaden a la escena mientras estás dentro) ──
+    // ── Luces reales: siempre en el grupo del club, que fuera está oculto (no cuentan ni gastan).
+    // Así la precarga de interiores las ve y compila los shaders con ellas (calidad baja).
     const L0 = new THREE.PointLight('#ff2e88', 0, 17, 1.3);
     L0.position.set(-3.8, 4.6, -2.8);
     const L1 = new THREE.PointLight('#19e6d2', 0, 17, 1.3);
@@ -451,6 +452,7 @@ export class ClubFx {
     const L2 = new THREE.PointLight('#ffb35c', 0, 15, 1.3);
     L2.position.set(11.2, 3.6, -1.2);
     this.lights.push(L0, L1, L2);
+    root.add(L0, L1, L2);
   }
 
   private beamMaterial(color: THREE.Color): THREE.ShaderMaterial {
@@ -470,14 +472,9 @@ export class ClubFx {
     });
   }
 
-  /** Enciende o apaga las luces reales (se quitan de la escena al salir para no gastar fuera). */
+  /** Dentro o fuera (las luces están siempre en el grupo del club, que fuera se oculta entero). */
   setActive(on: boolean) {
-    if (on === this.active) return;
     this.active = on;
-    for (const l of this.lights) {
-      if (on) this.root.add(l);
-      else l.removeFromParent();
-    }
   }
 
   setLedText(text: string) {

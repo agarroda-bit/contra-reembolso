@@ -173,30 +173,15 @@ export class Interiors implements System {
   // ve dentro (interior, personaje, gente, partículas...) en el primer frame: pantalla negra de 1 a
   // 10 s. Por eso, dentro, las luces puntuales de fuera (farolas cercanas, destello de explosiones;
   // están a kilómetros) se apagan y el interior usa exactamente las mismas: rellena con luces
-  // apagadas si tiene menos, o apaga las más flojas si tiene más (calidad baja: fuera no hay
-  // ninguna). Así los shaders de dentro son los de fuera y los propios del interior se precompilan
-  // en segundo plano (precompile).
+  // apagadas si tiene menos. Así los shaders de dentro son los de fuera y los propios del interior se
+  // precompilan en segundo plano (precompile).
+  // Si el interior tiene más luces que huecos (calidad baja: fuera no hay ninguna), no se apaga
+  // ninguna (el club, la oficina y el ático se quedarían a oscuras): dentro hay otro número de luces y
+  // precompile compila con ese número los shaders del interior y los del personaje.
   private hiddenOutside: THREE.Light[] = [];
-  private hiddenInside: THREE.Light[] = [];
 
-  private swapLights(b: Built, inside: boolean) {
-    if (!inside) {
-      for (const l of this.hiddenOutside) l.visible = true;
-      for (const l of this.hiddenInside) l.visible = true;
-      this.hiddenOutside.length = 0;
-      this.hiddenInside.length = 0;
-      for (const l of b.pads) l.visible = false;
-      return;
-    }
-    const g = this.game;
-    // luces puntuales de fuera que se ven ahora (el interior aún está oculto)
-    const outside = this.hiddenOutside;
-    outside.length = 0;
-    g.scene.traverseVisible((o) => {
-      if ((o as THREE.PointLight).isPointLight) outside.push(o as THREE.Light);
-    });
-    for (const l of outside) l.visible = false;
-    // las del interior (sin contar el relleno)
+  /** Luces puntuales propias del interior que se verían dentro (sin el relleno). */
+  private ownLights(b: Built): THREE.PointLight[] {
     const own: THREE.PointLight[] = [];
     const vis = b.root.visible;
     b.root.visible = true;
@@ -204,14 +189,30 @@ export class Interiors implements System {
       if ((o as THREE.PointLight).isPointLight && !b.pads.includes(o as THREE.PointLight)) own.push(o as THREE.PointLight);
     });
     b.root.visible = vis;
-    const want = outside.length;
-    if (own.length > want) {
-      own.sort((a, c) => a.intensity - c.intensity);
-      for (let i = 0; i < own.length - want; i++) {
-        own[i].visible = false;
-        this.hiddenInside.push(own[i]);
-      }
+    return own;
+  }
+
+  /** Apaga las luces puntuales de fuera que se ven ahora (y las deja en `out` para volver a encenderlas). */
+  private hideOutsideLights(out: THREE.Light[]) {
+    out.length = 0;
+    this.game.scene.traverseVisible((o) => {
+      if ((o as THREE.PointLight).isPointLight) out.push(o as THREE.Light);
+    });
+    for (const l of out) l.visible = false;
+  }
+
+  private swapLights(b: Built, inside: boolean) {
+    if (!inside) {
+      for (const l of this.hiddenOutside) l.visible = true;
+      this.hiddenOutside.length = 0;
+      for (const l of b.pads) l.visible = false;
+      return;
     }
+    // luces puntuales de fuera que se ven ahora (el interior aún está oculto)
+    this.hideOutsideLights(this.hiddenOutside);
+    const want = this.hiddenOutside.length;
+    // las del interior (sin contar el relleno); si son más que los huecos, se usan todas (ver arriba)
+    const own = this.ownLights(b);
     const pad = Math.max(0, want - own.length);
     while (b.pads.length < pad) {
       const l = new THREE.PointLight('#000000', 0, 0.01, 2);
@@ -224,9 +225,12 @@ export class Interiors implements System {
   }
 
   /**
-   * Compila en segundo plano (en paralelo) los shaders del interior con las luces de fuera, que son
-   * las mismas que habrá dentro (ver swapLights). Medido: fuera no da tirones, porque ningún frame
-   * usa esos shaders hasta que entras.
+   * Compila en segundo plano (en paralelo) los shaders del interior con las luces que habrá dentro
+   * (ver swapLights). Medido: fuera no da tirones, porque ningún frame usa esos shaders hasta que
+   * entras.
+   * - Si las luces del interior caben en los huecos de fuera: con las luces de fuera (mismo número).
+   * - Si no caben (calidad baja): con las de fuera apagadas y las del interior encendidas, y también
+   *   los del personaje, que dentro se ve con ese otro número de luces.
    */
   private precompile(b: Built): Promise<void> {
     const g = this.game;
@@ -240,19 +244,42 @@ export class Interiors implements System {
     }
     b.warm = 'pending';
     const vis = b.root.visible;
-    let job: Promise<unknown>;
+    const parent = b.root.parent;
+    const jobs: Promise<unknown>[] = [];
+    const outside: THREE.Light[] = [];
     try {
-      // oculto: sus luces no cuentan y las de fuera sí, como quedarán dentro
       b.root.visible = false;
-      job = r.compileAsync(b.root, g.camera, g.scene);
+      this.hideOutsideLights(outside);
+      for (const l of b.pads) l.visible = false;
+      if (this.ownLights(b).length <= outside.length) {
+        // oculto: sus luces no cuentan y las de fuera sí, como quedarán dentro
+        for (const l of outside) l.visible = true;
+        outside.length = 0;
+        jobs.push(r.compileAsync(b.root, g.camera, g.scene));
+      } else {
+        // luces de dentro. Con el interior visible en la escena: el personaje y lo de fuera que se
+        // dibuja siempre, también desde dentro (cielo, nubes, mar, ruedas: sin recorte por cámara).
+        // Luego el interior, fuera de la escena (si no, three contaría sus luces dos veces).
+        const always: THREE.Object3D[] = [];
+        g.scene.traverseVisible((o) => {
+          if (!o.frustumCulled && (o as THREE.Mesh).material) always.push(o);
+        });
+        b.root.visible = true;
+        const pr = g.mod.player?.root as THREE.Object3D | undefined;
+        if (pr) jobs.push(r.compileAsync(pr, g.camera, g.scene));
+        for (const o of always) jobs.push(r.compileAsync(o, g.camera, g.scene));
+        b.root.removeFromParent();
+        jobs.push(r.compileAsync(b.root, g.camera, g.scene));
+      }
     } catch (e) {
       console.warn('[interiores] No se pudieron precompilar los shaders de', b.def.id, e);
-      job = Promise.resolve();
     } finally {
+      if (parent && !b.root.parent) parent.add(b.root);
       b.root.visible = vis;
+      for (const l of outside) l.visible = true;
     }
     const timeout = new Promise((res) => setTimeout(res, 8000));
-    return (b.warming = Promise.race([job, timeout]).then(done, done));
+    return (b.warming = Promise.race([Promise.all(jobs), timeout]).then(done, done));
   }
 
   exit() {
