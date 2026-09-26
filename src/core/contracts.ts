@@ -229,7 +229,8 @@ export interface HudState {
   fame: number; // puntos de fama
   fameLevel: number;
   weapon: { name: string; icon: string; clip: number; reserve: number; infinite?: boolean } | null;
-  vehicle: { name: string; speedKmh: number; health: number; packages?: number; capacity?: number } | null;
+  /** boost: turbo que queda (0..1); si no viene, el HUD lo lee del vehículo del jugador. */
+  vehicle: { name: string; speedKmh: number; health: number; packages?: number; capacity?: number; boost?: number } | null;
   radio: { station: string; show?: string } | null;
   /** Encargos activos (lista lateral). timeLeft en segundos o null; integrity 0..100 o null. */
   jobs: { id: string; title: string; timeLeft: number | null; integrity: number | null; color?: string }[];

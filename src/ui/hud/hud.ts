@@ -103,7 +103,7 @@ export class HudImpl implements Hud {
       'efectivo', 'banco', 'dinero', 'famaNivel', 'famaBarra', 'reloj', 'relojIco', 'sirenas',
       'vida', 'vidaBarra', 'chaleco', 'chalecoBarra', 'aguante', 'aguanteBarra',
       'encargos', 'encargosLista', 'arma', 'armaIco', 'armaNombre', 'armaCargador', 'armaReserva',
-      'vehiculo', 'vehNombre', 'vehVel', 'vehArco', 'vehSalud', 'vehSaludBarra', 'vehPaquetes', 'vehRadio',
+      'vehiculo', 'vehNombre', 'vehVel', 'vehArco', 'vehSalud', 'vehSaludBarra', 'vehTurbo', 'vehTurboBarra', 'vehPaquetes', 'vehRadio',
       'radio', 'radioNombre', 'radioPrograma', 'reticula', 'pista', 'bl', 'tr', 'br', 'dano', 'critico',
     ];
     for (const id of ids) this.$[id] = q(`[data-id="${id}"]`);
@@ -492,6 +492,13 @@ export class HudImpl implements Hud {
         $.vehSaludBarra.style.backgroundColor = healthColor(hf);
         $.vehSalud.classList.toggle('hud-barra--critica', hf < 0.25);
       }
+      // turbo que queda: lo trae hud.vehicle o, si no, se lee del vehículo del jugador
+      const boost = clamp01(v.boost ?? (this.game.mod.vehicles?.current?.boost as number | undefined) ?? 1);
+      if (this.changed('vTurbo', Math.round(boost * 100))) {
+        $.vehTurboBarra.style.transform = `scaleX(${boost.toFixed(2)})`;
+        $.vehTurbo.classList.toggle('hud-barra--turbo-lleno', boost > 0.98);
+        $.vehTurbo.classList.toggle('hud-barra--vacia', boost < 0.05);
+      }
       const pk = v.capacity ? `${v.packages ?? 0}/${v.capacity}` : '';
       if (this.changed('vPk', pk)) {
         $.vehPaquetes.hidden = !pk;
@@ -618,6 +625,7 @@ const TEMPLATE = `
     <div class="hud-vehiculo__info">
       <div class="hud-vehiculo__nombre" data-id="vehNombre"></div>
       <div class="hud-barra hud-barra--veh" data-id="vehSalud"><span class="hud-barra__ico hud-barra__ico--llave cr-emoji">🔧</span><div class="hud-barra__pista"><i data-id="vehSaludBarra"></i></div></div>
+      <div class="hud-barra hud-barra--veh hud-barra--turbo" data-id="vehTurbo" title="Turbo (Shift)"><span class="hud-barra__ico hud-barra__ico--turbo cr-emoji">🔥</span><div class="hud-barra__pista"><i data-id="vehTurboBarra" class="hud-barra--turquesa"></i></div></div>
       <div class="hud-vehiculo__fila">
         <span class="hud-vehiculo__paquetes cr-num" data-id="vehPaquetes" hidden></span>
         <span class="hud-vehiculo__radio" data-id="vehRadio" hidden></span>
