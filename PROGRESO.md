@@ -4,7 +4,17 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 5 — Tiendas y progreso (integrando)
+## Fase actual: 6 — La vida de lujo (integrando)
+
+## Fase 5 — Tiendas y progreso ✅ (26/09, 07:25, publicada)
+- Menú principal con la isla de fondo (Continuar / Nueva partida / Opciones / Controles), creación del repartidor (nombre, piel, peinado, color de pelo, uniforme, gorra) con vista previa girando, pausa (Esc) y opciones (sensibilidad, invertir eje, volúmenes, calidad baja/media/alta, campo de visión).
+- Tiendas físicas (E en la puerta): Talleres Manolo (concesionario de 6 vehículos, mejoras de motor/frenos/blindaje/neumáticos/maletero/nitro, reparación y pintura), Armería El Gatillo Alegre (armas, munición, chaleco, botiquín), Moda Paquetona (uniformes, gorras, gafas, cadena, zapatillas, chándal: se ve en el personaje).
+- Tu empresa (E en la oficina): ampliar la oficina por niveles (se ve fuera: cartel luminoso, estanterías, furgonetas aparcadas), comprar furgonetas para la flota, contratar repartidores que ingresan dinero cada día (y a veces piden ayuda por el móvil porque los asalta la banda), lujos de oficina.
+- FAMA por niveles: sube con entregas perfectas, compras y lujos; desbloquea tiendas, vehículos y la historia.
+- Garaje en el móvil: tus vehículos comprados te los traen a la calle más cercana.
+- Guardado automático cada 45 s y al salir (dinero, banco, fama, armas, vehículos y mejoras, ropa, empresa, historia, coleccionables).
+- Tutorial suave: Don Remigio te guía por el móvil (moverse, subir a la furgoneta, aceptar el primer encargo, recoger, entregar, ingresar en el cajero).
+- Pruebas: + menú y creación, + las cuatro tiendas (`capturas/fase-5/`), + guardar y continuar (`herramientas/prueba-guardado.mjs`).
 
 ## Fase 4 — Encargos y dinero ✅ (26/09, 07:10, publicada)
 - Móvil «Pomelo» (Tab) con la app de mensajería inventada «PaqueChat»: van llegando encargos de clientes con qué quieren, dónde, cuánto pagan y el tiempo; se aceptan con un botón o Enter. Apps de Banco, Fama y Ayuda.

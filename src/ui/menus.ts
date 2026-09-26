@@ -55,7 +55,7 @@ const CSS = `
 .cr-tabla{border-collapse:collapse;width:100%;font:700 15px system-ui}
 .cr-tabla td{padding:7px 10px;border-bottom:2px dashed rgba(27,16,48,.2)}
 .cr-tabla td:first-child{white-space:nowrap}
-.cr-tecla{display:inline-block;min-width:26px;text-align:center;background:#1b1030;color:#ffd23f;border-radius:8px;padding:3px 8px;font:900 14px system-ui;margin:1px}
+.cr-tecla-menu{display:inline-block;min-width:26px;text-align:center;background:#1b1030;color:#ffd23f;border-radius:8px;padding:3px 8px;font:900 14px system-ui;margin:1px}
 .cr-cerrar{position:absolute;top:12px;right:14px;border:3px solid #1b1030;border-radius:12px;background:#ff4f81;color:#fff;font:900 18px system-ui;width:40px;height:40px;cursor:pointer}
 .cr-creacion{position:absolute;right:clamp(16px,5vw,80px);top:50%;transform:translateY(-50%);width:min(430px,calc(100vw - 32px))}
 .cr-nombre{font:800 20px system-ui;border:3px solid #1b1030;border-radius:12px;padding:8px 12px;width:100%;box-sizing:border-box}
@@ -405,7 +405,7 @@ export class Menus implements System {
     this.back = onBack;
     const panel = document.createElement('div');
     panel.className = 'cr-panel';
-    const k = (t: string) => t.split(' ').map((x) => `<span class="cr-tecla">${x}</span>`).join(' ');
+    const k = (t: string) => t.split(' ').map((x) => `<span class="cr-tecla-menu">${x}</span>`).join(' ');
     const rows: [string, string][] = [
       ['W A S D', 'Moverse / conducir'], ['Ratón', 'Cámara (haz clic para capturarlo)'], ['Shift', 'Correr / turbo del vehículo'],
       ['Espacio', 'Saltar / freno de mano (derrape)'], ['Clic izq.', 'Disparar'], ['Clic der.', 'Apuntar (cámara al hombro)'],

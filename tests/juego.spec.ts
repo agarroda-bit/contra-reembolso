@@ -129,6 +129,37 @@ test('abrir el móvil y aceptar un encargo', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test('menú principal y creación del repartidor', async ({ page }) => {
+  test.skip(FASE < 5, 'los menús llegan en la fase 5');
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`./?calidad=baja&fase=${FASE}`);
+  await page.waitForFunction(() => (window as any).__ready === true, null, { timeout: 120_000 });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${DIR}/07-menu.png` });
+  await page.getByText('Nueva partida').click();
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${DIR}/08-creacion.png` });
+  await page.getByText('¡A repartir!').click();
+  await page.waitForFunction(() => (window as any).__cr.mod.menus.mode === 'play', null, { timeout: 20_000 });
+  expect(errors).toEqual([]);
+});
+
+test('tiendas: armería, ropa, taller y empresa', async ({ page }) => {
+  test.skip(FASE < 5, 'las tiendas llegan en la fase 5');
+  const errors = await arrancar(page);
+  for (const [kind, file] of [['gunshop', '09-armeria'], ['clothes', '10-ropa'], ['garage', '11-taller'], ['office', '12-empresa']]) {
+    await g(page, `__cr.mod.player.teleport(__cr.world.pois.find(p => p.kind === '${kind}').door.clone())`);
+    await page.waitForFunction(() => !!(window as any).__cr.mod.interaction.current, null, { timeout: 15_000 });
+    await page.keyboard.press('KeyE');
+    await page.waitForFunction(() => (window as any).__cr.mod.shopUI.isOpen, null, { timeout: 15_000 });
+    await page.screenshot({ path: `${DIR}/${file}.png` });
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !(window as any).__cr.mod.shopUI.isOpen, null, { timeout: 15_000 });
+  }
+  expect(errors).toEqual([]);
+});
+
 test('fps con ?debug=1', async ({ page }) => {
   const errors = await arrancar(page);
   await page.waitForTimeout(4000);

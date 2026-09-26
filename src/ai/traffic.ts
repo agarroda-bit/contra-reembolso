@@ -77,10 +77,13 @@ export class Traffic implements System {
   /** Coche aparcado sin conductor. */
   spawnParked(): void {
     const w = this.game.world;
-    const cam = this.game.camera.position;
+    // alrededor del jugador (no de la cámara: en el menú la cámara está lejos), nunca pegado a él
+    const focus = this.game.mod.player?.position ?? this.game.camera.position;
+    const office = w.pois.find((p) => p.kind === 'office');
     const spots = w.parkingSpots.filter((s) => {
-      const d = s.pos.distanceTo(cam);
-      return d > 50 && d < 140;
+      const d = s.pos.distanceTo(focus);
+      if (office && s.pos.distanceTo(office.door) < 18) return false;
+      return d > 45 && d < 140;
     });
     if (!spots.length) return;
     const s = spots[Math.floor(rnd.next() * spots.length)];

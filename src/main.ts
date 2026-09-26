@@ -15,7 +15,7 @@ import { registerSaveSections } from './gameplay/saveSections';
 import type { WorldData } from './core/contracts';
 
 /** Fase publicada: los sistemas de fases posteriores no se activan todavía. */
-export const FASE = 4;
+export const FASE = 5;
 
 async function boot() {
   const loading = new LoadingScreen();
@@ -78,6 +78,9 @@ async function boot() {
   if (fase >= 5 && !prueba) {
     const menus = new Menus(game);
     game.addSystem(menus);
+    // en el menú no llegan encargos ni persecuciones
+    if (game.mod.jobs) game.mod.jobs.autoOffers = false;
+    if (game.mod.gang) game.mod.gang.calm = true;
     menus.onNewGame = (p) => {
       SaveSystem.wipe();
       setProfile(p);
@@ -89,6 +92,8 @@ async function boot() {
     menus.onContinue = () => {
       game.mod.save?.readFromStorage();
       menus.play();
+      if (game.mod.jobs) game.mod.jobs.autoOffers = true;
+      if (game.mod.gang) game.mod.gang.calm = false;
       game.events.emit('toast', { text: `¡Hola otra vez, ${profile.name}!`, color: '#ffd23f', time: 2.5 });
     };
     menus.showMain();
