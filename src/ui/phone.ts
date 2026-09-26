@@ -322,6 +322,9 @@ export class Phone implements System {
           <b>Cómo va esto</b><br>1. Te llegan encargos aquí. Acepta con el botón (o Enter).<br>2. Recoge el paquete donde diga (📦 en el mapa).<br>
           3. Llévalo sin romperlo a la casa (🏠) y pulsa E en la puerta.<br>4. Cobras en efectivo: ingrésalo en un cajero 🏧 antes de que te lo quiten.<br>
           5. Los encargos grandes, en el tablón de la oficina.</div>
+          <div class="cr-tarjeta" style="font:600 13.5px/1.55 system-ui"><b>Y además…</b><br>📰 De vez en cuando pasan cosas por la isla (bodas sin tarta, gallinas a la fuga, atracos…): si ayudas, cobras.<br>
+          🎯 Cada día hay un reto con premio y 🏆 un montón de logros (algunos, secretos).<br>
+          Algunos clientes tienen manías: fíjate en lo que te piden en la puerta (E y Q para contestar).</div>
           <div class="cr-tarjeta" style="font:600 13.5px/1.55 system-ui"><b>Teclas</b><br>WASD mover · Ratón mirar · Shift correr/turbo · Espacio saltar/freno de mano · F subir/bajar/robar · E interactuar · Clic disparar · Clic derecho apuntar · R recargar · 1-5 armas · M mapa · H claxon · Q/E radio${photo} · Esc pausa<br><br>
           <b>Con mando</b><br>A aceptar · X rechazar · B atrás. Todos los controles, en Pausa → Controles.</div>`;
         break;

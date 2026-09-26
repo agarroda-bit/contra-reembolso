@@ -148,6 +148,17 @@ const TOURIST_YELP = [
 const TOURIST_AIR = ['¡Estamos volando! ¡Como en las postales!', '¡En mi país esto es ilegal! ¡Y aquí, supongo, también!', '¡Wiiii! Bueno, digo… ¡socorro!'];
 const HEN_CLUCKS = ['¡Cloc!', '¡Cloc, cloc!', '¡COCOCÓ!', '¡Clooooc!', '¡Pío! Digo… ¡cloc!'];
 
+/** Los sucesos, para la app «Sucesos» del móvil (los que aún no te han pasado salen como «???»). */
+const EVENT_INFO: { kind: EventKind; icon: string; name: string; desc: string }[] = [
+  { kind: 'thief', icon: '👜', name: 'Ladrón de bolsos', desc: 'Tíralo al suelo y devuélvele el bolso a la señora.' },
+  { kind: 'truck', icon: '🚚', name: 'Furgón que pierde paquetes', desc: 'Ve recogiendo lo que se le cae. Nadie lo va a reclamar. Creo.' },
+  { kind: 'race', icon: '🏁', name: 'Carrera callejera', desc: 'El Niño Nitro te reta: 500 € si ganas, 200 si pierdes.' },
+  { kind: 'boda', icon: '🎂', name: 'Boda sin tarta', desc: 'Lleva la tarta a la plaza a tiempo y sin romperla. Es de nata.' },
+  { kind: 'gallina', icon: '🐔', name: 'La gallina fugitiva', desc: 'Atrápala a pie (se cansa si la persigues) y devuélvesela a su dueño.' },
+  { kind: 'turista', icon: '🗺️', name: 'La turista despistada', desc: 'Recógela en coche y llévala al faro sin darle muchos sustos.' },
+  { kind: 'atraco', icon: '🚨', name: 'Atraco de Los Devueltos', desc: 'Derriba a los atracadores antes de que se escapen con la caja.' },
+];
+
 /** Busca un cliente del móvil por su id (Paquita la de las bodas, Ingrid la turista...). */
 function client(id: string) {
   return CLIENTS.find((c) => c.id === id);
@@ -272,6 +283,8 @@ export class RandomEvents implements System {
   private readonly wp = { x: 0, z: 0, label: '', color: '', auto: true };
   /** Tarta en las manos del jugador (a pie). */
   private cakeHeld: THREE.Mesh | null = null;
+  /** Cuántos sucesos de cada tipo te han pasado y cuántos has resuelto (se guarda). */
+  readonly stats: Partial<Record<EventKind, { seen: number; ok: number }>> = {};
 
   constructor(private game: Game) {
     game.mod.randomEvents = this;
@@ -283,6 +296,46 @@ export class RandomEvents implements System {
     ev.on('player:died', () => this.abort());
     ev.on('player:busted' as any, () => this.abort());
     ev.on('interior:enter' as any, () => this.abort());
+    ev.on('event:done' as any, (e: any) => {
+      const st = (this.stats[e.kind as EventKind] ??= { seen: 0, ok: 0 });
+      st.seen++;
+      if (e.ok) st.ok++;
+    });
+    game.mod.phone?.extraApps.push({ id: 'sucesos', icon: '📰', name: 'Sucesos', color: '#ff7b54', open: (body: HTMLDivElement) => this.render(body) });
+    game.mod.save?.register({
+      key: 'sucesos',
+      save: () => this.stats,
+      load: (d: any) => {
+        for (const info of EVENT_INFO) {
+          const x = d?.[info.kind];
+          if (x && typeof x.seen === 'number') this.stats[info.kind] = { seen: x.seen, ok: x.ok ?? 0 };
+        }
+      },
+    });
+  }
+
+  /** App «Sucesos» del móvil: lo que puede pasar por la isla y cuántos has resuelto. */
+  private render(body: HTMLDivElement) {
+    let seen = 0, ok = 0;
+    for (const info of EVENT_INFO) {
+      seen += this.stats[info.kind]?.seen ?? 0;
+      ok += this.stats[info.kind]?.ok ?? 0;
+    }
+    body.innerHTML = `<div class="cr-tarjeta"><h3>SUCESOS DE PUERTO PAQUETE</h3><div class="gordo">${ok}<small style="font:900 16px system-ui;opacity:.6"> resueltos</small></div>
+      <p style="font:600 12.5px/1.45 system-ui;margin:6px 0 0">Cada pocos minutos pasa algo por la isla. Te enteras por el móvil o porque alguien grita. ¡Ayuda y cobra! (${seen} vividos)</p></div>`;
+    for (const info of EVENT_INFO) {
+      const st = this.stats[info.kind];
+      const known = !!st && st.seen > 0;
+      const d = document.createElement('div');
+      d.className = 'cr-tarjeta';
+      d.style.cssText = `display:flex;gap:10px;align-items:center;padding:10px 12px;margin:8px 0;${known ? '' : 'opacity:.6;border-style:dashed'}`;
+      d.innerHTML = `<div style="font-size:28px;width:34px;text-align:center">${known ? info.icon : '❔'}</div>
+        <div style="flex:1;min-width:0"><b style="display:block;font:900 13.5px system-ui"></b><span style="display:block;font:600 11.5px/1.3 system-ui;opacity:.8"></span></div>
+        <div style="font:900 12px system-ui;text-align:right;white-space:nowrap">${known ? `✅ ${st!.ok}<br><span style="opacity:.6">de ${st!.seen}</span>` : ''}</div>`;
+      (d.querySelector('b') as HTMLElement).textContent = known ? info.name : '???';
+      (d.querySelector('span') as HTMLElement).textContent = known ? info.desc : 'Aún no te ha pasado. Date una vuelta por la isla.';
+      body.appendChild(d);
+    }
   }
 
   private get roads(): Roads {
@@ -1086,6 +1139,8 @@ export class RandomEvents implements System {
     }
     if (ev.stage === 'party') {
       ev.partyT += dt;
+      // (a alguno lo habrá atropellado el propio repartidor al llegar: en cuanto se levanta, a bailar)
+      for (const n of ev.guests) if (!n.busy && n.state !== 'dance' && !n.removed) n.setState('dance');
       // fiesta: confeti a ratos y los novios bailando
       if (Math.floor(ev.partyT * 2) !== Math.floor((ev.partyT - dt) * 2) && ev.partyT < 5) {
         const c = tmpP.copy(ev.plaza).setY(ev.plaza.y + 2);
@@ -1126,7 +1181,7 @@ export class RandomEvents implements System {
     this.gps(pl.x, pl.z, 'Boda', '#ff9ecf');
     this.showCard('🎂 Tarta nupcial · a la plaza de la fuente', ev.left, ev.cake, '#ff9ecf');
     if (!ev.guests.length && pp.distanceTo(pl) < 110) this.spawnWedding(ev);
-    if (pp.distanceTo(pl) < (inCar ? 11 : 5.5)) this.celebrate(ev);
+    if (pp.distanceTo(pl) < (inCar ? 14 : 5.5)) this.celebrate(ev);
   }
 
   private celebrate(ev: Extract<Ev, { kind: 'boda' }>) {
@@ -1149,6 +1204,7 @@ export class RandomEvents implements System {
     g.scene.add(table);
     this.linger(null, table, 30);
     for (const n of ev.guests) {
+      if (n.busy) continue;
       n.setState('dance');
       n.face(table.position);
     }
