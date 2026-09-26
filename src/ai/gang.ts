@@ -143,7 +143,9 @@ export class Gang implements System {
     const refY = this.game.world.heightAt(pos.x, pos.z);
     // si el jugador está lejos (p. ej. la misión de la guarida empieza en la oficina), esperan apostados
     // en su sitio hasta que llegues; si no, cruzarían media isla (o se borrarían por estar lejos)
-    const posted = this.game.mod.player.position.distanceTo(pos) > 90;
+    const cur = this.vm.current;
+    const ppos = cur ? cur.getPosition(tmpV2) : this.game.mod.player.position;
+    const posted = ppos.distanceTo(pos) > 120;
     for (let i = 0; i < count; i++) {
       // un sitio a 7-14 m, fuera de los edificios y, si se puede, donde no se vea aparecer
       let p: THREE.Vector3 | null = null;
