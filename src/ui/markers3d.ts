@@ -86,9 +86,13 @@ export class Markers3D implements System {
       (s.ring.material as THREE.MeshBasicMaterial).color.set(c);
       s.arrow.position.y = 3 + Math.sin(t * 3 + i) * 0.35;
       s.arrow.rotation.y = t * 2;
-      // de cerca, la columna se encoge para no molestar
-      const k = THREE.MathUtils.clamp((d - 4) / 30, 0.25, 1);
-      s.column.scale.set(1, k, 1);
+      // de cerca, la columna se encoge para no molestar (y desaparece si estás encima)
+      const pp = g.mod.player?.position;
+      const dp = pp ? Math.hypot(m.x - pp.x, m.z - pp.z) : 99;
+      const k = THREE.MathUtils.clamp((dp - 3) / 25, 0, 1);
+      s.column.visible = k > 0.02;
+      s.column.scale.set(1, Math.max(0.05, k), 1);
+      s.arrow.visible = dp > 1.5;
       s.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.08);
     }
   }

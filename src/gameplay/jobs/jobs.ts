@@ -116,7 +116,9 @@ export class Jobs implements System {
     const info = TYPE_INFO[type];
     const districtK = dest.district === 'colina' ? 1.5 : dest.district === 'poligono' ? 1.2 : 1;
     const pay = opts.pay ?? Math.round((25 + dist * 0.28) * info.mult * districtK * (1 + (fameLvl - 1) * 0.12) / 5) * 5;
-    const time = opts.time ?? Math.round((35 + dist / 7.5) * info.timeK);
+    // tiempo: ir a recoger + llevarlo, a unos 6 m/s de media, con margen
+    const toPickup = this.game.mod.player ? this.game.mod.player.position.distanceTo(pickup.door) : 100;
+    const time = opts.time ?? Math.round((50 + (toPickup + dist) / 6) * info.timeK);
     const item = client.items[Math.floor(this.rng.next() * client.items.length)];
     const ask = client.ask[Math.floor(this.rng.next() * client.ask.length)];
     const mm = Math.floor(time / 60), ss = time % 60;
