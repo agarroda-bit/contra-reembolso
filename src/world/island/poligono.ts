@@ -452,11 +452,11 @@ function buildPaint(ctx: Ctx, out: Out, lot: Lot) {
   }
   // suelo del túnel
   const tc = lotPoint(lot, 0, (z0 + z1) / 2);
-  ctx.pave.rect(ctx.pave.asphalt, tc.x, tc.z, tw / 2, len / 2, lot.rot, '#4d525e', 2);
+  ctx.pave.rect(ctx.pave.asphalt, tc.x, tc.z, tw / 2, len / 2, lot.rot, '#5b6070', 2);
   ctx.pave.rect(ctx.pave.paint, tc.x, tc.z, 0.12, len / 2 - 1, lot.rot, '#ffd23f', 2);
   // patio de maniobras detrás
   const bk = lotPoint(lot, 0, -hd - 12);
-  ctx.pave.rect(ctx.pave.asphalt, bk.x, bk.z, 14, 11, lot.rot, '#5a5f6a', 3);
+  ctx.pave.rect(ctx.pave.asphalt, bk.x, bk.z, 14, 11, lot.rot, '#646872', 3);
   ctx.paved.push({ x: bk.x, z: bk.z, hw: 14, hd: 11, rot: lot.rot, color: '#6a6f7a' });
   jumpRamp(ctx, lotPoint(lot, -8, -hd - 14).x, lotPoint(lot, -8, -hd - 14).z, lot.rot + Math.PI, 8, 4.5, 1.5);
   const poi = makePoi(ctx, 'paint', 'paint', 'Pintamóvil Exprés', lot, 0, false, 1.2);
@@ -616,16 +616,19 @@ function buildStairNave(ctx: Ctx, out: Out, lot: Lot) {
 function buildWasteland(ctx: Ctx, out: Out) {
   const cx = 208, cz = -20;
   ctx.paved.push({ x: cx, z: cz, hw: 27, hd: 15, rot: 0, color: '#b3a58a' });
-  jumpRamp(ctx, cx - 14, cz, Math.PI / 2, 9, 5, 2.0);
-  jumpRamp(ctx, cx + 14, cz + 3, -Math.PI / 2, 9, 5, 1.6);
-  collectible(ctx, cx - 14 + 3.8, ctx.heightAt(cx - 10, cz) + 1.6, cz);
+  // dos rampas en carriles paralelos (una hacia el este y otra hacia el oeste): nadie aterriza contra la otra
+  jumpRamp(ctx, cx - 14, cz - 6, Math.PI / 2, 9, 5, 2.0);
+  jumpRamp(ctx, cx + 14, cz + 6, -Math.PI / 2, 9, 5, 1.6);
+  // paquete en lo alto de la rampa grande (su tapa está a ~1,85 m a 3,8 m del centro)
+  collectible(ctx, cx - 14 + 3.8, ctx.heightAt(cx - 14, cz - 6) + 1.85, cz - 6);
   const rng = ctx.rng;
   for (let i = 0; i < 6; i++) {
-    const x = cx + rng.range(-24, 24), z = cz + rng.range(-12, 12);
-    if (Math.abs(z - cz) < 5) continue;
+    // neumáticos y matorrales solo en los bordes, fuera de los carriles de salto
+    const x = cx + rng.range(-24, 24), z = cz + (i % 2 ? 1 : -1) * rng.range(12, 13.5);
     ctx.props.add(i % 2 ? 'tyres' : 'bush', x, ctx.heightAt(x, z), z, rng.range(0, 6), 1);
   }
-  for (let i = 0; i < 6; i++) ctx.breakables.push({ kind: i % 2 ? 'cone' : 'fence', pos: ground(ctx, cx - 6 + i * 2.4, cz - 12), rotY: 0 });
+  // fila de conos y vallas entre los dos carriles de salto
+  for (let i = 0; i < 6; i++) ctx.breakables.push({ kind: i % 2 ? 'cone' : 'fence', pos: ground(ctx, cx - 6 + i * 2.4, cz), rotY: 0 });
   void out;
 }
 

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
-import { PlanCtx, Special, Out, collectible, makePoi, poiAt, ground, doorPoint, curbParking } from './special';
+import { PlanCtx, Special, Out, collectible, makePoi, poiAt, ground, doorPoint, curbParking, curbGap, plazaPad } from './special';
 import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, flatRoof, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, shopSign, FONT_IMPACT, FONT, FONT_SCRIPT, FONT_SERIF, FONT_FUN } from './signs';
@@ -16,6 +16,8 @@ export function planCentro(p: PlanCtx): Special[] {
   const { layout, occ } = p;
   // la plaza: toda la manzana entre z 5..60 y x -50..50
   for (let z = 5; z < 60; z++) for (let x = -50; x < 50; x++) if (occ.get(x + 0.5, z + 0.5) === OCC.FREE) occ.set(x + 0.5, z + 0.5, OCC.RESERVED);
+  // el suelo de la plaza es un plano que empalma con las cuatro calles (sin aristas bajo el pavimento)
+  p.pads.push(plazaPad(p, -50, 5, 50, 60, 0, 32.5, 41, 21));
   const L = (x: number, z: number, W: number, D: number, id: string, road: string) => {
     const l = layout.lotNear(x, z, W, D, { kind: 'special' }, id, road);
     if (!l) console.warn('[isla] no cabe', id);
@@ -50,10 +52,10 @@ export function planCentro(p: PlanCtx): Special[] {
 function buildPlaza(ctx: Ctx, out: Out) {
   const cx = 0, cz = 32.5;
   const pave = ctx.pave;
-  pave.rect(pave.walk, cx, cz, 41, 21, 0, '#e9dfcb', 3);
+  pave.rect(pave.walk, cx, cz, 41, 21, 0, '#e9dfcb', 1.6);
   // dibujo del pavimento: cruz y anillos
-  pave.rect(pave.paint, cx, cz, 41, 1.2, 0, '#d4c3a3', 3);
-  pave.rect(pave.paint, cx, cz, 1.2, 21, 0, '#d4c3a3', 3);
+  pave.rect(pave.paint, cx, cz, 41, 1.2, 0, '#d4c3a3', 1.6);
+  pave.rect(pave.paint, cx, cz, 1.2, 21, 0, '#d4c3a3', 1.6);
   pave.disc(pave.paint, cx, cz, 10.5, '#d9c9aa', 28);
   ctx.paved.push({ x: cx, z: cz, hw: 41, hd: 21, rot: 0, color: '#e9dfcb' });
   const y = ctx.heightAt(cx, cz);
@@ -127,7 +129,8 @@ function buildPlaza(ctx: Ctx, out: Out) {
   for (let i = 0; i < 2; i++) ctx.breakables.push({ kind: 'bench', pos: ground(ctx, -12 + i * 24, cz + 17), rotY: Math.PI });
   // carrito de golf del casino, al borde de la plaza frente al casino
   ctx.specials.push({ kind: 'golf', pos: ground(ctx, 30, 15.5), heading: -Math.PI / 2 });
-  collectible(ctx, cx + 3.6, y + 0.35, cz);
+  // dentro de la fuente, sobre el agua (el colisor del vaso llega a y + 0,75)
+  collectible(ctx, cx + 3.6, y + 0.75, cz);
 }
 
 // ───────────────────────── Casino La Suerte Loca ─────────────────────────
@@ -153,17 +156,23 @@ function buildCasino(ctx: Ctx, out: Out, lot: Lot) {
       for (let x = -half + 2; x < half - 1; x += 3.2) glass(w, x, 8.5, 0.05, 1.6, 3.2, [1, 0.5, 0.7, 0.1]);
       continue;
     }
-    // columnas doradas y puertas
-    for (const x of [-9, -3, 3, 9]) b.cyl(x, 0, 4.2, 0.35, 0.35, 4.3, 8, GOLD, false);
+    // columnas doradas y puertas (la marquesina no pasa del bordillo)
+    const gap = curbGap(lot);
+    const colZ = Math.min(4.2, gap - 0.5), md = colZ + 0.3;
+    for (const x of [-9, -3, 3, 9]) {
+      b.cyl(x, 0, colZ, 0.35, 0.35, 4.3, 8, GOLD, false);
+      const cp = lotPoint(lot, x, hd + colZ);
+      ctx.cyl(cp.x, lot.h + 2.15, cp.z, 2.15, 0.35);
+    }
     glass(w, 0, 1.6, 0.05, 7, 3.2, [1, 0.8, 0.5, 0.02], lin('#3a1020').clone(), lin('#8a4060').clone());
     for (const x of [-3.5, -1.2, 1.2, 3.5]) b.panelZ(x, 1.6, 0.07, 0.12, 3.2, GOLD);
     for (const x of [-12, -7.5, 7.5, 12]) glass(w, x, 2.2, 0.05, 3, 2.6, [1, 0.6, 0.3, 0.02], lin('#3a1020').clone(), lin('#7a3050').clone());
     // marquesina con bombillas
-    b.box(0, 4.45, 2.2, 20, 0.5, 4.4, dark, 0);
-    b.box(0, 4.75, 2.2, 20.2, 0.12, 4.6, GOLD);
+    b.box(0, 4.45, md / 2, 20, 0.5, md, dark, 0);
+    b.box(0, 4.75, md / 2, 20.2, 0.12, md + 0.2, GOLD);
     for (let x = -9.5; x <= 9.5; x += 0.8) {
-      b.box(x, 4.15, 4.35, 0.2, 0.2, 0.12, '#fff3c4', SKIP.NZ, [1.2, 0.9, 0.4, 2 + (Math.round(x / 0.8) % 2 ? 0.5 : 0)]);
-      for (let z = 0.6; z < 4.2; z += 1.2) b.box(x, 4.18, z, 0.15, 0.06, 0.15, '#fff3c4', SKIP.PY, [1.2, 0.9, 0.4, 0.3]);
+      b.box(x, 4.15, md - 0.05, 0.2, 0.2, 0.12, '#fff3c4', SKIP.NZ, [1.2, 0.9, 0.4, 2 + (Math.round(x / 0.8) % 2 ? 0.5 : 0)]);
+      for (let z = 0.6; z < md - 0.3; z += 1.2) b.box(x, 4.18, z, 0.15, 0.06, 0.15, '#fff3c4', SKIP.PY, [1.2, 0.9, 0.4, 0.3]);
     }
     // gran cartel de neón con marco de bombillas
     ctx.signs.define('casino', 18, 4, (g, W, Hh) => {
@@ -190,9 +199,9 @@ function buildCasino(ctx: Ctx, out: Out, lot: Lot) {
       const x = -9.3 + (18.6 * i) / 24;
       for (const yy of [6.2, 10.6]) b.box(x, yy, 0.25, 0.22, 0.22, 0.14, '#fff3c4', SKIP.NZ, [1.2, 0.95, 0.5, 2 + ((i + (yy > 8 ? 1 : 0)) % 2) * 0.5]);
     }
-    // alfombra roja
-    const rp = lotPoint(lot, 0, hd + 3.5);
-    ctx.pave.rect(ctx.pave.paint, rp.x, rp.z, 1.8, 3.4, lot.rot, '#b0102a', 2);
+    // alfombra roja hasta el bordillo
+    const rp = lotPoint(lot, 0, hd + gap / 2);
+    ctx.pave.rect(ctx.pave.paint, rp.x, rp.z, 1.8, gap / 2 - 0.08, lot.rot, '#b0102a', 2);
   }
   // dado gigante y naipe en la azotea
   b.frame(lot.x, lot.h, lot.z, lot.rot);
@@ -222,7 +231,7 @@ function buildCasino(ctx: Ctx, out: Out, lot: Lot) {
   b.frame(lotPoint(lot, 6, -1).x, lot.h + H, lotPoint(lot, 6, -1).z, lot.rot + 0.3);
   b.box(0, 2.4, -0.12, 3.4, 5, 0.2, '#ffffff', SKIP.PZ);
   ctx.signs.place(b, 'naipe', 0, 2.4, 0.0, 3.2, 4.8, 0.5);
-  out.pois.push(makePoi(ctx, 'casino', 'casino', 'Casino La Suerte Loca', lot, 0, true, 5));
+  out.pois.push(makePoi(ctx, 'casino', 'casino', 'Casino La Suerte Loca', lot, 0, true, Math.min(1.8, curbGap(lot) - 0.7)));
   // focos que barren el cielo por la noche
   searchlights(ctx, out, lotPoint(lot, -12, -6), lot.h + H + 0.8, '#fff2c0');
   ctx.foot.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: red, height: H });
@@ -293,21 +302,24 @@ function buildClub(ctx: Ctx, out: Out, lot: Lot) {
   b.panelZ(0, 1.6, 0.05, 3.6, 3.2, '#0d0812');
   b.panelZ(0, 1.5, 0.07, 2.8, 2.9, '#241634');
   b.panelZ(0, 1.5, 0.09, 0.08, 2.9, GOLD);
-  b.box(0, 3.6, 1.6, 6, 0.3, 3.2, black);
-  b.box(0, 3.45, 3.15, 6, 0.08, 0.1, '#ff5fb8', 0, pink);
+  const gap = curbGap(lot);
+  const md = Math.min(3.2, gap - 0.2);
+  b.box(0, 3.6, md / 2, 6, 0.3, md, black);
+  b.box(0, 3.45, md - 0.05, 6, 0.08, 0.1, '#ff5fb8', 0, pink);
   ctx.signs.define('club', 14, 3, neonSign('Club Reembolso', '#ff4fb0', 'V I P · solo gente importante (y tú)', '#c68bff', '#12091c'));
   ctx.signs.place(b, 'club', 0, 7.5, 0.2, 13, 2.8, 1);
-  // alfombra roja con cordón
-  const rp = lotPoint(lot, 0, hd + 3.2);
-  ctx.pave.rect(ctx.pave.paint, rp.x, rp.z, 1.3, 3.0, lot.rot, '#b0102a', 2);
+  // alfombra roja con cordón (de la puerta al bordillo, sin invadir la calzada)
+  const rp = lotPoint(lot, 0, hd + gap / 2);
+  ctx.pave.rect(ctx.pave.paint, rp.x, rp.z, 1.3, gap / 2 - 0.08, lot.rot, '#b0102a', 2);
   b.frame(lot.x, lot.h, lot.z, lot.rot);
+  const posts = 3, step = (gap - 0.9) / (posts - 1);
   for (const s of [-1, 1]) {
-    for (let i = 0; i < 4; i++) {
-      const z = hd + 0.8 + i * 1.6;
+    for (let i = 0; i < posts; i++) {
+      const z = hd + 0.5 + i * step;
       b.cyl(s * 1.9, 0, z, 0.06, 0.06, 1.0, 6, GOLD, true);
       b.cyl(s * 1.9, 0, z, 0.2, 0.2, 0.06, 8, GOLD, true);
       b.blob(s * 1.9, 1.05, z, 0.09, 0.09, 0.09, GOLD);
-      if (i < 3) b.beam(b.wx(s * 1.9, z), lot.h + 0.92, b.wz(s * 1.9, z), b.wx(s * 1.9, z + 1.6), lot.h + 0.92, b.wz(s * 1.9, z + 1.6), 0.07, '#c0102a');
+      if (i < posts - 1) b.beam(b.wx(s * 1.9, z), lot.h + 0.92, b.wz(s * 1.9, z), b.wx(s * 1.9, z + step), lot.h + 0.92, b.wz(s * 1.9, z + step), 0.07, '#c0102a');
     }
   }
   // estrella VIP en la azotea
@@ -329,7 +341,7 @@ function buildClub(ctx: Ctx, out: Out, lot: Lot) {
   });
   b.box(0, 2.2, -hd + 3, 0.2, 4.4, 0.2, '#333');
   ctx.signs.place(b, 'club-star', 0, 4.2, -hd + 3.12, 4, 4, 1);
-  out.pois.push(makePoi(ctx, 'club', 'club', 'Club Reembolso VIP', lot, 0, true, 5));
+  out.pois.push(makePoi(ctx, 'club', 'club', 'Club Reembolso VIP', lot, 0, true, Math.min(1.8, gap - 0.7)));
   searchlights(ctx, out, lotPoint(lot, 10, -4), lot.h + H + 0.8, '#e0a0ff');
   ctx.foot.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: black, height: H });
 }

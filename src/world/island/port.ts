@@ -29,6 +29,8 @@ export function planPort(p: PlanCtx): Special[] {
 }
 
 function buildPort(ctx: Ctx, out: Out, office: Lot, lonja: Lot) {
+  // explanada del muelle (va primero en el mapa: lo demás se pinta encima)
+  ctx.paved.push({ x: 15, z: 218, hw: 170, hd: 44, rot: 0, color: '#c9c3b6' });
   buildOffice(ctx, out, office);
   buildLonja(ctx, out, lonja);
   buildPier(ctx, out);
@@ -70,7 +72,6 @@ function buildPort(ctx: Ctx, out: Out, office: Lot, lonja: Lot) {
   for (const x of [-86, -74, 14, 26]) ctx.props.add('bin', x, QUAY_H, QUAY_Z - 3.2, 0, 1);
   // bancos mirando al mar
   for (const x of [-92, -80, 8, 20, 32]) ctx.props.add('bench', x, QUAY_H, QUAY_Z - 3, Math.PI, 1);
-  ctx.paved.push({ x: 15, z: 218, hw: 170, hd: 44, rot: 0, color: '#c9c3b6' });
 }
 
 // ───────────────────────── Oficina de reparto ─────────────────────────
@@ -225,7 +226,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   // explanada: asfalto, acera del porche y plazas de furgoneta
   const zf = lot.z - hd; // fachada (mira al norte)
   const pave = ctx.pave;
-  pave.rect(pave.asphalt, lot.x, (173 + zf - 3.5) / 2, hw + 2, (zf - 3.5 - 173) / 2, 0, '#4a4f5c');
+  pave.rect(pave.asphalt, lot.x, (173 + zf - 3.5) / 2, hw + 2, (zf - 3.5 - 173) / 2, 0, '#585d69');
   pave.rect(pave.walk, lot.x, zf - 1.75, hw + 2, 1.75, 0, '#e2d7c3');
   const bays = 8, bw = 5;
   for (let i = 0; i <= bays; i++) {
@@ -252,6 +253,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   out.pois.push(atm);
   const sp = doorPoint(ctx, lot, -2.5, 2.2);
   out.spawn = { pos: sp, heading: lot.rot };
+  ctx.foot.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: YELLOW, height: H });
 }
 
 // ───────────────────────── Bandera animada ─────────────────────────
@@ -368,6 +370,7 @@ function buildLonja(ctx: Ctx, out: Out, lot: Lot) {
   collectible(ctx, lot.x, lot.h + H, lot.z);
   out.extra.lonjaRoof = new THREE.Vector3(lot.x, lot.h + H, lot.z);
   out.delivery.push({ id: 'lonja', district: 'puerto', door: doorPoint(ctx, lot, 5, 1.4), facing: lot.rot, label: 'Lonja de Pescado, puesto 3' });
+  ctx.foot.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: '#f4f1ea', height: H });
 }
 
 // ───────────────────────── Muelle de pescadores y barcas ─────────────────────────

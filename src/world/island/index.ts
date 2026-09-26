@@ -154,11 +154,6 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   // ── mobiliario urbano y vegetación ──
   streetFurniture(ctx, out);
 
-  // ── datos: portales de entrega, aparcamientos, tiendas ──
-  deliverySpots(ctx, layout.lots, out);
-  bayParking(ctx, out);
-  shopPois(ctx, layout.lots, out);
-
   // ── terreno (al final: se omiten los triángulos que quedan tapados bajo edificios macizos) ──
   const N = HALF * 2;
   const covered = new Uint8Array(N * N);
@@ -223,6 +218,17 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   game.scene.add(signs.build(u, game.renderer.capabilities.getMaxAnisotropy()));
   props.build(game, solidMat);
   const sea = buildSea(game, u, heightAt, solidMat);
+
+  // ── datos: portales de entrega, aparcamientos y tiendas (con todos los colisores ya creados, se descartan
+  // los sitios tapados por una farola, un árbol o una marquesina) ──
+  game.physics.world.step(); // actualiza el índice de consultas de Rapier (aún no hay cuerpos dinámicos)
+  const probe = new THREE.Vector3();
+  const free = (x: number, y: number, z: number, r: number) => game.physics.overlapSphere(probe.set(x, y, z), r, G.STATIC).length === 0;
+  deliverySpots(ctx, layout.lots, out, free);
+  bayParking(ctx, out, free);
+  shopPois(ctx, layout.lots, out, free);
+  // rompibles: fuera los que han caído encima de un bolardo, una farola o dentro de algo
+  ctx.breakables = ctx.breakables.filter((b) => free(b.pos.x, b.pos.y + 0.5, b.pos.z, 0.3));
 
   // ── charcos de luz falsos bajo las farolas (se ven de noche) ──
   const bulbs = props.bulbs();

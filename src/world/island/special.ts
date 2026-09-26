@@ -59,6 +59,13 @@ export function curbParking(ctx: Ctx, lot: Lot, lx = 0): { pos: THREE.Vector3; h
   return { pos: new THREE.Vector3(x, ctx.heightAt(x, z), z), heading };
 }
 
+/** Metros de acera entre la fachada del solar y el bordillo (para no sacar cosas a la calzada). */
+export function curbGap(lot: Lot): number {
+  const fx = Math.sin(lot.rot), fz = Math.cos(lot.rot);
+  const d = (lot.rx - lot.fx) * fx + (lot.rz - lot.fz) * fz;
+  return Math.max(1.2, d - lot.roadW / 2);
+}
+
 export function makePoi(ctx: Ctx, id: string, kind: PoiKind, name: string, lot: Lot, lx = 0, parking = true, out = 1.4): Poi {
   const door = doorPoint(ctx, lot, lx, out);
   return {
@@ -74,6 +81,19 @@ export function makePoi(ctx: Ctx, id: string, kind: PoiKind, name: string, lot: 
 
 export function poiAt(ctx: Ctx, id: string, kind: PoiKind, name: string, x: number, z: number, facing: number, parking?: THREE.Vector3, district?: DistrictId): Poi {
   return { id, kind, name, district: district ?? districtRaw(x, z), door: new THREE.Vector3(x, ctx.heightAt(x, z), z), facing, parking };
+}
+
+/**
+ * Explanada plana (en rampa suave si hace falta) entre cuatro esquinas de calle: ajusta un plano a las alturas
+ * de las calles en las esquinas para que el suelo no haga aristas bajo el pavimento (plazas).
+ */
+export function plazaPad(p: PlanCtx, x0: number, z0: number, x1: number, z1: number, cx: number, cz: number, hw: number, hd: number): Pad {
+  const h00 = p.roadH(x0, z0), h10 = p.roadH(x1, z0), h01 = p.roadH(x0, z1), h11 = p.roadH(x1, z1);
+  const gx = (h10 + h11 - h00 - h01) / (2 * (x1 - x0));
+  const gz = (h01 + h11 - h00 - h10) / (2 * (z1 - z0));
+  const hm = (h00 + h10 + h01 + h11) / 4;
+  const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+  return { x: cx, z: cz, hw, hd, rot: 0, h: hm + gx * (cx - mx) + gz * (cz - mz), blend: 4, gx, gz };
 }
 
 /** Solar fabricado a mano (rectángulo girado). */
