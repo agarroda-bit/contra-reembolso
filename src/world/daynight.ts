@@ -39,6 +39,8 @@ const MOON_TILT = 0.45;
 // ── Sombras ──
 const SHADOW_HALF = 60; // la cámara de sombras cubre ±60 m
 const SHADOW_DIST = 160; // distancia de la luz al objetivo
+// el recuadro de sombras se adelanta hacia donde mira la cámara (detrás del jugador no se ve nada)
+const SHADOW_AHEAD = 18;
 
 // ── Farolas ──
 const LAMP_COLOR = '#ffbf73';
@@ -46,6 +48,8 @@ const LAMP_INTENSITY = 38;
 const LAMP_DISTANCE = 24;
 const LAMP_DECAY = 1.5;
 const LAMP_REASSIGN = 0.5; // s
+const MAX_LAMP_LIGHTS = 8;
+const STALE = -3; // la luz sigue donde estaba pero su índice ya no vale: se apaga y se recoloca
 
 /** Ángulo del sol en su órbita (0 = sale, π = se pone, 2π = vuelve a salir). */
 function sunAngle(h: number): number {
@@ -71,7 +75,7 @@ function wrapHour(h: number): number {
 /** Hueco del grupo de farolas: una luz real que se mueve a la farola más cercana. */
 interface LampSlot {
   light: THREE.PointLight;
-  lamp: number; // índice actual en lampPositions (-1 = ninguno)
+  lamp: number; // índice actual en lampPositions (-1 = ninguno, STALE = índice caducado)
   target: number; // índice al que tiene que ir
   level: number; // 0..1 (fundido al cambiar de farola)
 }
@@ -110,8 +114,11 @@ export function installDayNight(game: Game): DayNight {
   scene.add(lampGroup);
   let slots: LampSlot[] = [];
   let lampTimer = 0;
-  const bestIdx = [-1, -1, -1, -1, -1, -1, -1, -1];
-  const bestD = [0, 0, 0, 0, 0, 0, 0, 0];
+  let lastLamps: THREE.Vector3[] | null = null;
+  let lastLampCount = -1;
+  const bestIdx = new Array<number>(MAX_LAMP_LIGHTS).fill(-1);
+  const bestD = new Array<number>(MAX_LAMP_LIGHTS).fill(0);
+  const lampCount = (n: number) => Math.max(0, Math.min(MAX_LAMP_LIGHTS, n | 0));
 
   function buildLampPool(n: number) {
     for (const s of slots) {
@@ -119,7 +126,7 @@ export function installDayNight(game: Game): DayNight {
       s.light.dispose();
     }
     slots = [];
-    n = Math.max(0, Math.min(8, n | 0));
+    n = lampCount(n);
     for (let i = 0; i < n; i++) {
       const l = new THREE.PointLight(LAMP_COLOR, 0, LAMP_DISTANCE, LAMP_DECAY);
       l.castShadow = false;
@@ -152,7 +159,7 @@ export function installDayNight(game: Game): DayNight {
     dome.setFar(game.camera.far);
     const fog = scene.fog as THREE.Fog | null;
     clouds.setRange(fog?.far ?? game.camera.far * 0.75, game.camera.far);
-    if (slots.length !== q.maxLights) buildLampPool(q.maxLights);
+    if (slots.length !== lampCount(q.maxLights)) buildLampPool(q.maxLights);
   }
   applyQuality();
   const offSettings = game.events.on('settings', () => applyQuality());
@@ -163,6 +170,7 @@ export function installDayNight(game: Game): DayNight {
   let lastHourInt = -1;
   const tmp = new THREE.Vector3();
   const fallbackTarget = new THREE.Vector3();
+  const aheadTarget = new THREE.Vector3();
   const snapped = new THREE.Vector3();
   const shadowDir = new THREE.Vector3(0, 1, 0);
   const ax = new THREE.Vector3();
@@ -247,8 +255,9 @@ export function installDayNight(game: Game): DayNight {
     // el resplandor se apaga cuando el sol se hunde mucho
     U.uGlowK.value = S[OFF.glowK] * smoothstep(-0.28, -0.02, sunDir.y);
     U.uSunDir.value.copy(sunDir);
+    // disco naranja cerca del horizonte, blanco cálido arriba (el shader lo sube si el halo brilla más)
     const low = 1 - smoothstep(0.0, 0.4, sunDir.y);
-    mixV(sunCol, 0xfffbe8, 0xffa75a, low);
+    mixV(sunCol, 0xfffdf4, 0xffa050, low);
     mixV(sunHalo, 0xfff0c8, 0xff7a30, low);
     U.uSunCol.value.copy(sunCol);
     U.uSunHalo.value.copy(sunHalo);
@@ -294,12 +303,16 @@ export function installDayNight(game: Game): DayNight {
 
     // ── Sombras que siguen al jugador, ajustadas a la rejilla de texels ──
     const cam = game.camera;
-    let target = api.followTarget ?? (game.mod.player?.position as THREE.Vector3 | undefined) ?? null;
-    if (!target) {
-      cam.getWorldDirection(tmp);
-      tmp.y = 0;
-      if (tmp.lengthSq() < 1e-6) tmp.set(0, 0, -1);
-      tmp.normalize();
+    cam.getWorldDirection(tmp);
+    tmp.y = 0;
+    if (tmp.lengthSq() < 1e-6) tmp.set(0, 0, -1);
+    tmp.normalize();
+    let target: THREE.Vector3;
+    const follow = api.followTarget ?? (game.mod.player?.position as THREE.Vector3 | undefined);
+    if (follow && Number.isFinite(follow.x) && Number.isFinite(follow.z)) {
+      // (se lee x, y, z: vale cualquier {x, y, z}, no solo un Vector3)
+      target = aheadTarget.set(follow.x, follow.y || 0, follow.z).addScaledVector(tmp, SHADOW_AHEAD);
+    } else {
       fallbackTarget.copy(cam.position).addScaledVector(tmp, 35);
       fallbackTarget.y = game.world ? game.world.heightAt(fallbackTarget.x, fallbackTarget.z) : 0;
       target = fallbackTarget;
@@ -345,9 +358,27 @@ export function installDayNight(game: Game): DayNight {
   function updateLamps(dt: number, night: number, force: boolean) {
     if (!slots.length) return;
     const lamps = game.world?.lampPositions;
+    // si cambia el mundo o la lista de farolas (se rompe una, se carga la isla...), los índices
+    // guardados ya no valen: cada luz se apaga suavemente donde está y se reparte de nuevo
+    const count = lamps ? lamps.length : 0;
+    if (lamps !== lastLamps || count !== lastLampCount) {
+      lastLamps = lamps ?? null;
+      lastLampCount = count;
+      for (const s of slots) {
+        if (s.lamp >= 0) s.lamp = STALE;
+        s.target = -1;
+      }
+      lampTimer = 0;
+    }
     const on = smoothstep(0.25, 0.7, night);
     if (!lamps || !lamps.length || on <= 0) {
-      for (const s of slots) s.light.intensity = 0;
+      for (const s of slots) {
+        s.light.intensity = 0;
+        if (s.lamp === STALE) {
+          s.lamp = -1;
+          s.level = 0;
+        }
+      }
       lampTimer = 0; // al encenderse, reparte enseguida
       return;
     }
@@ -409,13 +440,13 @@ export function installDayNight(game: Game): DayNight {
       if (s.lamp !== s.target) {
         s.level = Math.max(0, s.level - step);
         if (s.level <= 0) {
-          s.lamp = s.target;
+          s.lamp = s.target < lamps.length ? s.target : -1;
           if (s.lamp >= 0) s.light.position.copy(lamps[s.lamp]);
         }
       } else if (s.lamp >= 0) {
         s.level = Math.min(1, s.level + step);
       }
-      s.light.intensity = s.lamp >= 0 ? LAMP_INTENSITY * on * s.level : 0;
+      s.light.intensity = s.lamp !== -1 ? LAMP_INTENSITY * on * s.level : 0;
     }
   }
 

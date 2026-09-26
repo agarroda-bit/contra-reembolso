@@ -55,11 +55,12 @@ void main() {
 
   // halo y disco del sol
   float sdp = max(sd, 0.0);
-  col += uSunHalo * (pow(sdp, 220.0) * 0.5 + pow(sdp, 1600.0) * 0.5) * uSunVis;
+  col += uSunHalo * (pow(sdp, 220.0) * 0.45 + pow(sdp, 1600.0) * 0.35) * uSunVis;
   float cosR = cos(uSunSize);
   float aa = max(fwidth(sd) * 1.5, 1e-5);
   float disc = smoothstep(cosR - aa, cosR + aa, sd);
-  col = mix(col, uSunCol, disc * uSunVis);
+  // el disco nunca más oscuro que el halo que lo rodea (si no, parece un agujero)
+  col = mix(col, max(uSunCol, min(col, vec3(1.0))), disc * uSunVis);
 
   // halo de la luna (antes del disco para no tapar los cráteres)
   float md = dot(d, uMoonDir);
@@ -173,10 +174,12 @@ export class SkyDome {
     this.mesh.matrixAutoUpdate = false;
     // sigue a la cámara justo antes de pintarse (después de cámara y temblores)
     this.mesh.onBeforeRender = (_r, _s, cam) => followCamera(this.mesh, cam);
+    this.mesh.raycast = noRaycast; // que ningún rayo "choque" con el cielo
     scene.add(this.mesh);
 
     this.stars = makeStars(this.starUniforms);
     this.stars.onBeforeRender = (_r, _s, cam) => followCamera(this.stars, cam);
+    this.stars.raycast = noRaycast;
     scene.add(this.stars);
   }
 
@@ -195,6 +198,9 @@ export class SkyDome {
     (this.stars.material as THREE.Material).dispose();
   }
 }
+
+/** Para que los Raycaster de three ignoren cielo, estrellas y nubes. */
+export function noRaycast(): void {}
 
 const _camPos = new THREE.Vector3();
 function followCamera(obj: THREE.Object3D, cam: THREE.Camera) {
