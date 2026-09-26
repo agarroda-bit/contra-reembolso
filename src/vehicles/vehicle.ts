@@ -310,17 +310,18 @@ export class Vehicle {
       this.body.applyTorqueImpulse({ x: tq.x * dt, y: 0, z: tq.z * dt }, true);
     }
     if (s.twoWheels) {
-      // la moto no vuelca: amortigua el balanceo
-      this.body.setAngvel({ x: av.x * 0.9, y: av.y, z: av.z * 0.8 }, true);
+      // la moto no vuelca: amortigua el balanceo (con el giro ya corregido arriba)
+      const w = this.body.angvel();
+      this.body.setAngvel({ x: w.x * 0.9, y: w.y, z: w.z * 0.8 }, true);
     }
 
     // Volcado (o de lado contra una pared): se endereza solo a los 2,5 s si va despacio
-    if ((bodyUp.y < 0.35 || (contacts <= 1 && bodyUp.y < 0.7)) && absSpeed < 3) {
+    if ((bodyUp.y < 0.35 || (contacts <= 1 && bodyUp.y < 0.7)) && absSpeed < 3 && !this.sinking) {
       this.flipTimer += dt;
       if (this.flipTimer > 2.5) this.flipUpright();
     } else this.flipTimer = 0;
     // Encallado encima de algo (sin ruedas en el suelo y quieto): también se recoloca
-    if (contacts === 0 && absSpeed < 1 && Math.abs(lv.y) < 0.5) {
+    if (contacts === 0 && absSpeed < 1 && Math.abs(lv.y) < 0.5 && !this.sinking) {
       this.beachedTimer += dt;
       if (this.beachedTimer > 3) {
         this.beachedTimer = 0;
