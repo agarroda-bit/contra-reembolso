@@ -156,7 +156,10 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     switch (lot.kind) {
       case 'urban':
         if (lot.district === 'puerto') urban(ctx, lot, { floors: r.int(2, 4), shop: r.chance(0.7) });
-        else urban(ctx, lot, { floors: r.int(3, 6), shop: r.chance(0.8) });
+        else {
+          const floors = r.int(3, 6);
+          urban(ctx, lot, { floors, shop: r.chance(0.8), roofAd: floors >= 5 && r.chance(0.3) ? r.int(0, 20) : undefined });
+        }
         break;
       case 'house':
         house(ctx, lot, { floors: r.chance(0.2) ? 3 : r.chance(0.2) ? 1 : 2 });
