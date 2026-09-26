@@ -655,6 +655,11 @@ export class Animator {
     return true;
   }
 
+  /** El gesto en curso dura hasta que alguien lo pare (huir, enfadarse...). */
+  get gestLoop(): boolean {
+    return this.gest !== null && this.gestDur === Infinity;
+  }
+
   /** Termina el gesto en curso (se deshace suave en `fade` segundos). */
   stopGesture(fade = 0.25) {
     if (this.gest && this.gestDur - this.gestT > fade) this.gestDur = this.gestT + fade;
@@ -1794,22 +1799,46 @@ export class Animator {
     o[CH.angry] = -0.3;
   }
 
+  /** Sacado del coche de un tirón: sale volando pataleando y cae de culo, cabreado. */
   private posePulled(o: Float32Array) {
     const t = this.t;
     neutral(o);
-    o[CH.hy] = 0.86 + HIPJ;
+    // en el aire (0-0,35 s): echado hacia atrás, pataleando
+    const u = clamp01(this.poseT / 0.35);
+    o[CH.hy] = 0.86 + HIPJ + 0.14 * Math.sin(PI * u);
     o[CH.hz] = 0.04;
-    R(o, B.hips, -0.25, 0, Math.sin(t * 6) * 0.08);
-    legs(o, 0.05, 0.22 + Math.sin(t * 8) * 0.12, Math.max(0, Math.sin(t * 8)) * 0.1, -0.05, 0.12 - Math.sin(t * 8) * 0.12, Math.max(0, -Math.sin(t * 8)) * 0.1);
-    R(o, B.spine, -0.2, 0, 0);
-    R(o, B.head, 0.1, Math.sin(t * 5) * 0.3, 0);
-    arm(o, 1, -1.6 + Math.sin(t * 9) * 0.55, 0, 0.3 + Math.sin(t * 7) * 0.3, -0.3);
-    arm(o, -1, -1.5 + Math.sin(t * 8 + 1) * 0.55, 0, 0.3 + Math.sin(t * 6 + 2) * 0.3, -0.3);
-    o[CH.mouth] = 1.1;
+    R(o, B.hips, -0.55, 0, Math.sin(t * 6) * 0.1);
+    legs(o, 0.05, 0.3 + Math.sin(t * 13) * 0.14, 0.12 + Math.max(0, Math.sin(t * 13)) * 0.12, -0.05, 0.2 - Math.sin(t * 13) * 0.14, 0.12 + Math.max(0, -Math.sin(t * 13)) * 0.12);
+    R(o, B.spine, -0.25, 0, 0);
+    R(o, B.head, 0.15, Math.sin(t * 5) * 0.3, 0);
+    arm(o, 1, -1.9 + Math.sin(t * 14) * 0.6, 0, 0.5 + Math.sin(t * 11) * 0.3, -0.3);
+    arm(o, -1, -1.8 + Math.sin(t * 13 + 1) * 0.6, 0, 0.5 + Math.sin(t * 10 + 2) * 0.3, -0.3);
+    o[CH.mouth] = 1.2;
     o[CH.mouthW] = 0.75;
     o[CH.brow] = 1;
     o[CH.angry] = -0.9;
-    o[CH.eye] = 1.3;
+    o[CH.eye] = 1.35;
+    // de culo en el suelo: patalea y agita los puños
+    const k = smooth((this.poseT - 0.3) / 0.12);
+    if (k > 0) {
+      const a = this.tmpB;
+      a.set(KF_SITUP);
+      const kick = Math.sin(t * 16);
+      AR(a, B.thighL, -0.35 * Math.max(0, kick), 0, 0);
+      AR(a, B.shinL, -0.4 * Math.max(0, kick), 0, 0);
+      AR(a, B.thighR, -0.35 * Math.max(0, -kick), 0, 0);
+      AR(a, B.shinR, -0.4 * Math.max(0, -kick), 0, 0);
+      arm(a, 1, -1.9 + Math.sin(t * 15) * 0.25, 0, 0.35, -1.3);
+      arm(a, -1, -1.9 + Math.sin(t * 15 + 1.5) * 0.25, 0, 0.35, -1.3);
+      R(a, B.spine, 0.35, 0, 0);
+      R(a, B.head, -0.2, Math.sin(t * 4) * 0.2, 0);
+      a[CH.angry] = 1;
+      a[CH.mouth] = 0.8 + Math.sin(t * 12) * 0.2;
+      a[CH.mouthW] = 0.9;
+      a[CH.brow] = -0.2;
+      a[CH.eye] = 1.1;
+      lerpInto(o, o, a, k);
+    }
   }
 
   private poseTaped(o: Float32Array) {

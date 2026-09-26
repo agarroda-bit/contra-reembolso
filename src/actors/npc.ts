@@ -9,16 +9,30 @@ import type { Vehicle } from '../vehicles/vehicle';
 import { seatTransform } from '../vehicles/types';
 import type { NpcDriver } from '../vehicles/manager';
 import { fx as rnd } from '../core/rng';
+import type { Animator, Gesture } from './character/animator';
 
 export type NpcRole = 'civil' | 'driver' | 'devuelto' | 'policia' | 'cliente' | 'repartidor' | 'bailarin' | 'vendedor' | 'jefe';
 export type NpcState =
   | 'idle' | 'walk' | 'run' | 'flee' | 'knocked' | 'down' | 'getup' | 'dead'
-  | 'driving' | 'taped' | 'stunned' | 'pulled' | 'dance' | 'custom' | 'angry';
+  | 'driving' | 'taped' | 'stunned' | 'pulled' | 'dance' | 'custom' | 'angry'
+  | 'react'; // se para a mirar algo raro (señala, graba con el móvil, manos arriba...)
+
+/** Qué hace al reaccionar. */
+export type NpcReaction = 'point' | 'film' | 'hands_up' | 'cheer' | 'wave' | 'shrug';
+/** Segundos que se queda sentado en el coche (mientras llegas a la puerta) antes de salir de un tirón. */
+const PULL_WAIT = 0.5;
+/** Segundos por el aire y de culo en el suelo tras el tirón. */
+const PULL_FLY = 0.35;
+const PULL_SIT = 0.6;
+/** Enfadado tras un atropello o un robo: se va a la acera a paso ligero agitando el puño. */
+const ANGRY_WALK = 2.6;
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpO = new THREE.Vector3();
 const tmpD = new THREE.Vector3();
+const tmpQ = new THREE.Quaternion();
+const tmpS = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
 /** Parámetros de animación, reutilizados por todos (rig.update no se los guarda): nada de objetos nuevos por frame. */
 const ANIM: CharacterAnimParams = { speed: 0, grounded: true, vy: 0, pose: 'normal', aiming: false, weapon: 'none', shot: false };
@@ -70,6 +84,18 @@ export class Npc implements NpcDriver {
   /** Segundos seguidos que lleva queriendo andar sin poder (contra una pared). La IA lo usa para cambiar de plan. */
   blockedTime = 0;
   onDeath: ((npc: Npc) => void) | null = null;
+  /** Reacción en curso (estado 'react'). */
+  private reactKind: NpcReaction = 'point';
+  private reactFor = 0;
+  private reactThen: 'walk' | 'flee' = 'walk';
+  private readonly reactAt = new THREE.Vector3();
+  /** Hasta cuándo (tiempo de juego) se tapa la cabeza al huir (ha oído tiros). */
+  coverUntil = -1;
+  /** No vuelve a reaccionar a lo loco hasta este momento (tiempo de juego). */
+  reactCool = 0;
+  /** Coche del que le han sacado (para quedarse sentado dentro hasta el tirón). */
+  private pulledFrom: Vehicle | null = null;
+  private getupFor = 1;
 
   constructor(
     private game: Game,
@@ -114,7 +140,31 @@ export class Npc implements NpcDriver {
   goTo(p: THREE.Vector3, run = false) {
     if (!this.target) this.target = new THREE.Vector3();
     this.target.copy(p);
-    if (!this.busy && this.state !== 'driving') this.setState(run ? 'run' : 'walk');
+    if (!this.busy && this.state !== 'driving' && this.state !== 'react') this.setState(run ? 'run' : 'walk');
+  }
+
+  /** El animador del muñeco (gestos, bailes...). */
+  get anim(): Animator | null {
+    const r = this.rig as { anim?: Animator };
+    return r.anim ?? null;
+  }
+
+  /**
+   * Se para, mira hacia `at` y reacciona (señalar y gritar, grabarlo con el móvil, manos arriba...).
+   * Después vuelve a pasear ('walk') o sale corriendo ('flee'). false = ahora no puede.
+   */
+  react(kind: NpcReaction, at: THREE.Vector3, seconds = 1.8, then: 'walk' | 'flee' = 'walk'): boolean {
+    if (!this.alive || this.busy || this.vehicle || this.state === 'driving' || this.state === 'angry') return false;
+    this.reactKind = kind;
+    this.reactFor = seconds;
+    this.reactThen = then;
+    this.reactAt.copy(at);
+    // (si estaba parado mirando el móvil, deja la pausa: si no, el cerebro de peatón le volvería a parar)
+    const b = this.brain as { pause?: number } | null;
+    if (b && typeof b.pause === 'number') b.pause = 0;
+    this.setState('react');
+    if (kind !== 'hands_up') this.anim?.gesture(kind, seconds);
+    return true;
   }
 
   stop() {
@@ -247,6 +297,7 @@ export class Npc implements NpcDriver {
   pulledOut(v: Vehicle, exitPos: THREE.Vector3) {
     this.leaveVehicle(exitPos);
     this.setState('pulled');
+    this.pulledFrom = v;
     this.heading = v.heading + Math.PI / 2;
     this.velocity.set(0, 0, 0);
     this.game.events.emit('npc:carjacked' as any, { npc: this, vehicle: v } as any);
@@ -313,13 +364,49 @@ export class Npc implements NpcDriver {
         break;
       case 'getup':
         pose = 'getup';
-        if (this.stateTime > 1.0) this.setState(this.hostile ? 'idle' : 'angry');
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (this.stateTime > this.getupFor) {
+          this.getupFor = 1;
+          if (this.hostile) this.setState('idle');
+          else this.enterAngry();
+        }
         break;
-      case 'angry':
+      case 'angry': {
+        // se levanta cabreado y se quita de en medio: a la acera a paso ligero, agitando el puño
         pose = 'normal';
-        if (this.stateTime < 0.1) this.game.mod.audio?.say(this.position, 5, this.voice, 0.7);
-        if (this.stateTime > 1.8) this.setState('flee');
+        if (this.target) {
+          const to = tmpV.copy(this.target).sub(this.position).setY(0);
+          if (to.length() < 0.5) this.target = null;
+          else {
+            let d = Math.atan2(to.x, to.z) - this.heading;
+            d = Math.atan2(Math.sin(d), Math.cos(d));
+            this.heading += d * Math.min(1, dt * 8);
+            speed = ANGRY_WALK;
+            const mx = Math.sin(this.heading) * speed * dt, mz = Math.cos(this.heading) * speed * dt;
+            if (!far) this.slideMove(mx, mz, dt);
+            else {
+              this.position.x += mx;
+              this.position.z += mz;
+            }
+          }
+        }
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (this.stateTime > (this.target ? 4 : 1.3)) {
+          this.target = null;
+          this.setState('flee');
+        }
         break;
+      }
+      case 'react': {
+        pose = this.reactKind === 'hands_up' ? 'hands_up' : 'normal';
+        // mira hacia lo que pasa
+        let d = Math.atan2(this.reactAt.x - this.position.x, this.reactAt.z - this.position.z) - this.heading;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        this.heading += d * Math.min(1, dt * 6);
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (this.stateTime > this.reactFor) this.endReaction();
+        break;
+      }
       case 'dead':
         pose = 'dead';
         if (this.poofTimer >= 0) {
@@ -347,15 +434,56 @@ export class Npc implements NpcDriver {
         if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
         if (this.stateTime > (this.holdFor || 2.5)) this.setState(this.hostile ? 'idle' : 'flee');
         break;
-      case 'pulled':
+      case 'pulled': {
+        const v = this.pulledFrom;
+        const st = this.stateTime;
+        if (st < PULL_WAIT && v && !v.disposed) {
+          // aún dentro, agarrado al volante, mientras llegas a la puerta
+          pose = 'drive';
+          const seat = seatTransform(v.spec);
+          v.localToWorld(tmpS.set(seat.x, seat.y, seat.z), this.position);
+          this.rig.root.position.copy(this.position);
+          this.rig.root.quaternion.copy(v.getQuaternion(tmpQ));
+          this.rig.root.scale.setScalar(seat.scale);
+          break;
+        }
+        if (this.rig.root.scale.x !== 1) {
+          // ¡fuera! aparece en la puerta y sale despedido
+          this.rig.root.scale.setScalar(1);
+          if (v && !v.disposed) this.game.mod.vehicles?.doorPoint(v, this.position);
+          this.game.mod.npcs?.shout?.(this, 'carjack');
+          this.game.mod.audio?.say(this.position, 4, this.voice * 1.1, 0.8);
+        }
         pose = 'pulled';
-        if (this.stateTime > 0.9) this.setState(this.hostile || this.police ? 'idle' : 'angry');
+        if (st < PULL_WAIT + PULL_FLY) {
+          // sale volando hacia atrás (hacia fuera del coche)
+          const k = 3.6 * dt;
+          const mx = Math.sin(this.heading) * k, mz = Math.cos(this.heading) * k;
+          if (!far) this.slideMove(mx, mz, dt);
+          else {
+            this.position.x += mx;
+            this.position.z += mz;
+          }
+        }
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (st > PULL_WAIT + PULL_FLY + PULL_SIT) {
+          this.pulledFrom = null;
+          if (this.hostile || this.police) this.setState('idle');
+          else {
+            // se levanta desde el suelo (sentado: sin la parte de estar tumbado)
+            this.getupFor = 0.7;
+            this.setState('getup');
+          }
+        }
         break;
+      }
       case 'dance':
         pose = 'dance';
         break;
       case 'custom':
         pose = this.customPose;
+        // los fiesteros, cuando se paran por la calle, se marcan un baile
+        if (pose === 'normal' && this.streetDancer) pose = 'dance';
         break;
       case 'walk':
       case 'run':
@@ -400,7 +528,23 @@ export class Npc implements NpcDriver {
       }
     }
 
-    if (this.state !== 'driving') {
+    // gestos que duran lo que dura el estado (huir con los brazos en alto, agitar el puño...)
+    const an = this.anim;
+    if (an && !this.removed) {
+      let want: Gesture | null = null;
+      if (this.state === 'angry') want = 'fist';
+      else if (this.state === 'flee' && this.role === 'civil' && !this.hostile && !this.police) {
+        want = this.game.time.elapsed < this.coverUntil ? 'cover' : this.id % 3 === 0 ? 'lookback' : 'flail';
+      }
+      if (want) {
+        if (an.gest !== want || !an.gestLoop) an.gesture(want, Infinity);
+      } else if (an.gest && an.gestLoop) an.stopGesture();
+    }
+
+    if (this.state === 'pulled' && this.stateTime < PULL_WAIT && this.pulledFrom && !this.pulledFrom.disposed) {
+      // (sigue sentado en el coche: el muñeco ya está colocado en el asiento)
+      this.body.setNextKinematicTranslation({ x: this.position.x, y: this.position.y + 0.85, z: this.position.z });
+    } else if (this.state !== 'driving') {
       this.syncRoot();
       // colisor
       this.body.setNextKinematicTranslation({ x: this.position.x, y: this.position.y + 0.85, z: this.position.z });
@@ -461,6 +605,59 @@ export class Npc implements NpcDriver {
   private syncRoot() {
     this.rig.root.position.copy(this.position);
     this.rig.root.rotation.set(0, this.heading, 0);
+  }
+
+  /** Fin de una reacción: vuelve a pasear o sale corriendo de lo que ha visto. */
+  private endReaction() {
+    this.reactCool = this.game.time.elapsed + 6;
+    if (this.reactThen === 'flee') {
+      // los peatones huyen con su cerebro de pánico (el de la población)
+      const b = this.brain as { panic?: number; from?: THREE.Vector3 | null } | null;
+      if (b && typeof b.panic === 'number') {
+        b.panic = 4 + rnd.next() * 3;
+        b.from = this.reactAt.clone();
+      }
+      const away = tmpV.copy(this.position).sub(this.reactAt).setY(0);
+      if (away.lengthSq() < 0.01) away.set(rnd.next() - 0.5, 0, rnd.next() - 0.5);
+      away.normalize().multiplyScalar(12).add(this.position);
+      this.setState('idle');
+      this.goTo(away, true);
+      this.setState('flee');
+    } else if (this.target) {
+      this.setState('idle');
+      this.goTo(this.target, false);
+    } else this.setState('idle');
+  }
+
+  /** Bailarín callejero: los fiesteros bailan cuando se paran por la calle. */
+  private get streetDancer(): boolean {
+    if (this.role !== 'civil' || !this.transient) return false;
+    return (this.rig.look as { kind?: string }).kind === 'fiestero';
+  }
+
+  /**
+   * Tras un atropello o un robo: se enfada y se va a la acera más cercana (si está en la calzada)
+   * agitando el puño. Si ya está en la acera, lo agita un momento y sigue a lo suyo.
+   */
+  private enterAngry() {
+    this.setState('angry');
+    this.target = null;
+    this.game.mod.audio?.say(this.position, 5, this.voice, 0.7);
+    this.game.mod.npcs?.shout?.(this, 'angry');
+    const roads = this.game.mod.traffic?.roads;
+    if (!roads) return;
+    const ne = roads.nearestEdge(this.position, false);
+    if (!ne) return;
+    const e = roads.g.edges[ne.edge];
+    const a = roads.g.nodes[e.a].pos, b = roads.g.nodes[e.b].pos;
+    const abx = b.x - a.x, abz = b.z - a.z;
+    const len = Math.hypot(abx, abz) || 1;
+    // distancia (con signo) al eje de la calle
+    const lat = ((this.position.x - a.x) * abz - (this.position.z - a.z) * abx) / len;
+    if (Math.abs(lat) > e.width / 2 + 0.5) return; // ya está en la acera
+    const side = lat >= 0 ? 1 : -1;
+    const off = side * (e.width / 2 + 1.4) - lat;
+    this.target = new THREE.Vector3(this.position.x + (abz / len) * off, this.position.y, this.position.z - (abx / len) * off);
   }
 
   /** Mirar hacia un punto. */
