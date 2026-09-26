@@ -32,7 +32,7 @@ const PARAMS: Record<DistrictId, FillParams> = {
   centro: { kind: 'urban', wMin: 9, wMax: 15, dMin: 9, dMax: 14 },
   puerto: { kind: 'urban', wMin: 10, wMax: 16, dMin: 9, dMax: 14 },
   viejo: { kind: 'house', wMin: 5.5, wMax: 9, dMin: 6, dMax: 11.2 },
-  colina: { kind: 'chalet', wMin: 19, wMax: 28, dMin: 18, dMax: 26, setback: 1.2, push: true, yard: true, tol: 4 },
+  colina: { kind: 'chalet', wMin: 19, wMax: 28, dMin: 18, dMax: 26, setback: 1.2, push: true, yard: true, tol: 4, maxStep: 4.5 },
   poligono: { kind: 'nave', wMin: 20, wMax: 34, dMin: 16, dMax: 28, gap: 4 },
 };
 

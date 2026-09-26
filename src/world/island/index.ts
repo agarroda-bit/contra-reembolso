@@ -56,12 +56,17 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   maskWater(occ, shape);
   const near = { id: -1, d: 0, t: 0, h: 0 };
   const roadH = (x: number, z: number) => net.nearest(x, z, near).h;
-  const layout = new Layout(net, occ, rng.fork('lotes'), roadH);
+  const layout = new Layout(net, occ, rng.fork('lotes'), roadH, (x, z) => shape.base(x, z));
   const extraPads: Pad[] = [];
   const pc: PlanCtx = { layout, occ, net, rng: rng.fork('especiales'), shape, pads: extraPads, roadH };
   const specials: Special[] = [...planPort(pc), ...planCentro(pc), ...planPoligono(pc), ...planColina(pc), ...planViejo(pc)];
   fillGeneric(layout, net, rng);
 
+  if ((globalThis as any).__debugLots) {
+    const d = layout.lots.map((l) => ({ id: l.special ?? l.kind, x: Math.round(l.x), z: Math.round(l.z), diff: +(shape.base(l.x, l.z) - l.h).toFixed(1) }));
+    d.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+    console.log('[isla] solares con más desnivel', JSON.stringify(d.slice(0, 8)));
+  }
   const pads: Pad[] = layout.lots.map((l) => ({ x: l.x, z: l.z, hw: l.hw + 0.5, hd: l.hd + 0.5, rot: l.rot, h: l.h, blend: l.kind === 'chalet' ? 10 : 3 }));
   pads.push(...extraPads);
   const terrain = new Terrain(shape, net, pads);
@@ -69,46 +74,6 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const u = createUniforms();
   const t1 = performance.now();
 
-  // ── terreno ──
-  const ground = new ChunkSet(HALF, 128);
-  const C = {
-    sand: lin('#ecd9a4').clone(),
-    wet: lin('#d8c28c').clone(),
-    grass: lin('#8fbf5a').clone(),
-    grassColina: lin('#84bd55').clone(),
-    garden: lin('#7cc35a').clone(),
-    rock: lin('#a89a86').clone(),
-    dirt: lin('#b89f74').clone(),
-    centro: lin('#cdbd9c').clone(),
-    viejo: lin('#d6c29c').clone(),
-    concrete: lin('#c4bfb4').clone(),
-    poligono: lin('#b7ae95').clone(),
-  };
-  const tmp = new THREE.Color();
-  terrain.buildMesh(ground, (x, z, h, slope) => {
-    if (h < 0.6) return tmp.copy(C.wet);
-    if (h < 1.25) return tmp.copy(C.sand);
-    if (slope > 1.6) return tmp.copy(C.rock);
-    const v = occ.get(x, z);
-    const d = districtRaw(x, z);
-    // casco urbano: dentro del anillo de calles (y lejos de la costa) el suelo libre va pavimentado
-    const urbanCore = Math.abs(x) < 250 && z > -100 && z < 172;
-    let c: THREE.Color;
-    let natural = false;
-    if (v === OCC.YARD) c = C.garden;
-    else if (x > -160 && x < 192 && z > 172.8 && z < 262.4) c = C.concrete;
-    else if (urbanCore && (d === 'centro' || d === 'viejo' || d === 'puerto')) c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : C.concrete;
-    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) {
-      c = d === 'colina' ? C.grassColina : d === 'poligono' && urbanCore ? C.poligono : C.grass;
-      natural = true;
-    } else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
-    tmp.copy(c);
-    if (natural && slope > 0.8) tmp.lerp(C.dirt, smoothstep(0.8, 1.6, slope) * 0.8);
-    if (shape.coastDist(x, z) < 26) tmp.lerp(C.sand, smoothstep(2.4, 1.25, h));
-    return tmp;
-  }, (x, z) => occ.get(x, z) === OCC.BUILDING);
-  const groundMat = makeGroundMaterial();
-  for (const m of ground.toMeshes(groundMat, 'terreno', false, true)) game.scene.add(m);
   const col = terrain.colliderData();
   const terrainCollider = game.physics.addStaticTrimesh(col.vertices, col.indices, G.GROUND);
 
@@ -180,6 +145,63 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   deliverySpots(ctx, layout.lots, out);
   bayParking(ctx, out);
   shopPois(ctx, layout.lots, out);
+
+  // ── terreno (al final: se omiten los triángulos que quedan tapados bajo edificios macizos) ──
+  const N = HALF * 2;
+  const covered = new Uint8Array(N * N);
+  for (const f of ctx.foot) {
+    if (f.open || f.height < 2.5) continue;
+    const c = Math.cos(f.rot), sn = Math.sin(f.rot);
+    const hw = f.hw - 0.4, hd = f.hd - 0.4;
+    if (hw <= 0 || hd <= 0) continue;
+    const r = Math.hypot(hw, hd);
+    for (let j = Math.max(0, Math.floor(f.z - r + HALF)); j <= Math.min(N - 1, Math.ceil(f.z + r + HALF)); j++) {
+      for (let i = Math.max(0, Math.floor(f.x - r + HALF)); i <= Math.min(N - 1, Math.ceil(f.x + r + HALF)); i++) {
+        const wx = i - HALF + 0.5 - f.x, wz = j - HALF + 0.5 - f.z;
+        const lx = wx * c - wz * sn, lz = wx * sn + wz * c;
+        if (Math.abs(lx) <= hw && Math.abs(lz) <= hd) covered[j * N + i] = 1;
+      }
+    }
+  }
+  const ground = new ChunkSet(HALF, 128);
+  const C = {
+    sand: lin('#ecd9a4').clone(),
+    wet: lin('#d8c28c').clone(),
+    grass: lin('#8fbf5a').clone(),
+    grassColina: lin('#84bd55').clone(),
+    garden: lin('#7cc35a').clone(),
+    rock: lin('#a89a86').clone(),
+    dirt: lin('#b89f74').clone(),
+    centro: lin('#cdbd9c').clone(),
+    viejo: lin('#d6c29c').clone(),
+    concrete: lin('#c4bfb4').clone(),
+    poligono: lin('#b7ae95').clone(),
+  };
+  const tmp = new THREE.Color();
+  terrain.buildMesh(ground, (x, z, h, slope) => {
+    if (h < 0.6) return tmp.copy(C.wet);
+    if (h < 1.25) return tmp.copy(C.sand);
+    if (slope > 1.6) return tmp.copy(C.rock);
+    const v = occ.get(x, z);
+    const d = districtRaw(x, z);
+    // casco urbano: dentro del anillo de calles (y lejos de la costa) el suelo libre va pavimentado
+    const urbanCore = Math.abs(x) < 250 && z > -100 && z < 172;
+    let c: THREE.Color;
+    let natural = false;
+    if (v === OCC.YARD) c = C.garden;
+    else if (x > -160 && x < 192 && z > 172.8 && z < 262.4) c = C.concrete;
+    else if (urbanCore && (d === 'centro' || d === 'viejo' || d === 'puerto')) c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : C.concrete;
+    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) {
+      c = d === 'colina' ? C.grassColina : d === 'poligono' && urbanCore ? C.poligono : C.grass;
+      natural = true;
+    } else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
+    tmp.copy(c);
+    if (natural && slope > 0.8) tmp.lerp(C.dirt, smoothstep(0.8, 1.6, slope) * 0.8);
+    if (shape.coastDist(x, z) < 26) tmp.lerp(C.sand, smoothstep(2.4, 1.25, h));
+    return tmp;
+  }, (x, z) => covered[Math.floor(z + HALF) * N + Math.floor(x + HALF)] === 1);
+  const groundMat = makeGroundMaterial();
+  for (const m of ground.toMeshes(groundMat, 'terreno', false, true)) game.scene.add(m);
 
   // ── mallas ──
   for (const m of pave.meshes()) game.scene.add(m);

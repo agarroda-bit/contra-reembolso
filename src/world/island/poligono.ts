@@ -464,7 +464,7 @@ function buildPaint(ctx: Ctx, out: Out, lot: Lot) {
   poi.parking = ground(ctx, inside.x, inside.z);
   out.pois.push(poi);
   out.extra.paintBooth = { x: inside.x, z: inside.z, hw: tw / 2, hd: len / 2, rot: lot.rot };
-  ctx.foot.push({ x: rc.x, z: rc.z, hw: tw / 2 + 0.8, hd: len / 2, rot: lot.rot, color: '#ff6fb5', height: H });
+  ctx.foot.push({ x: rc.x, z: rc.z, hw: tw / 2 + 0.8, hd: len / 2, rot: lot.rot, color: '#ff6fb5', height: H, open: true });
 }
 
 // ───────────────────────── Armería El Gatillo Alegre ─────────────────────────

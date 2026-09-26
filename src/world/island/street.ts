@@ -292,7 +292,7 @@ function busStop(ctx: Ctx, x: number, z: number, rot: number, i: number) {
   b.box(-1.9, 2.9, -0.6, 0.06, 0.7, 0.06, c);
   ctx.signs.placeDouble(b, 'bus', -1.9, 3.3, -0.6, 0.6, 0.6, 0.3);
   ctx.box(x, y + 1.3, z, 2.0, 1.3, 0.2, rot);
-  ctx.foot.push({ x, z, hw: 2.1, hd: 0.8, rot, color: c, height: 2.6 });
+  ctx.foot.push({ x, z, hw: 2.1, hd: 0.8, rot, color: c, height: 2.6, open: true });
 }
 
 function billboard(ctx: Ctx, x: number, z: number, rot: number, i: number) {
@@ -310,7 +310,7 @@ function billboard(ctx: Ctx, x: number, z: number, rot: number, i: number) {
   b.frame(x, y, z, rot);
   for (const px of [-3, 0, 3]) b.box(px, 5.85, 0.9, 0.4, 0.2, 0.3, '#333', 0, [1, 0.9, 0.6, 0.0]);
   ctx.box(x, y + 3, z, 2.8, 3, 0.2, rot);
-  ctx.foot.push({ x, z, hw: 4.5, hd: 0.3, rot, color: '#e8e8e8', height: 9 });
+  ctx.foot.push({ x, z, hw: 4.5, hd: 0.3, rot, color: '#e8e8e8', height: 9, open: true });
 }
 
 function scatterVegetation(ctx: Ctx, trees: Spacing) {
@@ -412,7 +412,7 @@ function chiringuito(ctx: Ctx, x: number, z: number, rot: number) {
   });
   ctx.signs.place(b, 'chiringuito', 0, 2.3, 2.02, 3.2, 0.9, 0.5);
   ctx.box(x, y + 0.7, z, 2.6, 0.7, 2.1, rot);
-  ctx.foot.push({ x, z, hw: 2.9, hd: 2.4, rot, color: straw, height: 3 });
+  ctx.foot.push({ x, z, hw: 2.9, hd: 2.4, rot, color: straw, height: 3, open: true });
   const pp = { x: x + Math.cos(rot) * 3.6, z: z - Math.sin(rot) * 3.6 };
   ctx.props.add('palm', pp.x, ctx.heightAt(pp.x, pp.z) - 0.1, pp.z, rot, 1.05);
   ctx.props.add('barTable', x + Math.sin(rot) * 4.2, y, z + Math.cos(rot) * 4.2, rot, 1);

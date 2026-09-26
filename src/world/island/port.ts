@@ -625,7 +625,7 @@ function buildCranes(ctx: Ctx, out: Out) {
     out.animated.push((_dt, t) => {
       m.rotation.y = base + Math.sin(t * 0.06 + i * 2.1) * 1.4;
     });
-    ctx.foot.push({ x, z: zc, hw: 5.5, hd: 4.7, rot: 0, color: '#f2b233', height: 16 });
+    ctx.foot.push({ x, z: zc, hw: 5.5, hd: 4.7, rot: 0, color: '#f2b233', height: 16, open: true });
   });
 }
 

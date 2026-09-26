@@ -24,6 +24,8 @@ export interface Footprint {
   color: string;
   /** Altura (para sombrear en el mapa). */
   height: number;
+  /** Estructura abierta (grúa, túnel, marquesina...): no tapa el suelo. */
+  open?: boolean;
 }
 
 export interface Ctx {
