@@ -111,7 +111,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   const y0 = baseDepth(ctx, lot);
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   // el amarillo corporativo brilla un poco (la fachada mira al norte y casi siempre está en sombra)
-  const glowY = [0.42, 0.3, 0.02, 0.45];
+  const glowY = [0.2, 0.14, 0.01, 1.0]; // nivel 1: el mismo brillo de día y de noche
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, YELLOW, SKIP.NY | SKIP.PY, glowY);
   b.quadL(-hw, H, hd, hw, H, hd, hw, H, -hd, -hw, H, -hd, '#cfc6b4');
   // peto azul marino
@@ -354,6 +354,7 @@ function buildLonja(ctx: Ctx, out: Out, lot: Lot) {
   // escalera exterior (pegada a la fachada este)
   const sx = lot.x + hw + 0.68;
   const st = stairs(ctx, b, sx, lot.h, 188.6, 0, H, 1.3, '#e6dfd2', '#2f6fb0');
+  ctx.climbs.push({ name: 'lonja', a: new THREE.Vector3(sx, lot.h, 187.8), b: new THREE.Vector3(sx, lot.h + H, st.topZ + 0.8), c: new THREE.Vector3(lot.x, lot.h + H, lot.z) });
   // rellano arriba
   b.frame(0, 0, 0, 0);
   b.box(sx, lot.h + H - 0.1, st.topZ + 0.8, 1.3, 0.2, 1.6, '#e6dfd2');
@@ -625,7 +626,7 @@ function buildCranes(ctx: Ctx, out: Out) {
     out.animated.push((_dt, t) => {
       m.rotation.y = base + Math.sin(t * 0.06 + i * 2.1) * 1.4;
     });
-    ctx.foot.push({ x, z: zc, hw: 5.5, hd: 4.7, rot: 0, color: '#f2b233', height: 16 });
+    ctx.foot.push({ x, z: zc, hw: 5.5, hd: 4.7, rot: 0, color: '#f2b233', height: 16, open: true });
   });
 }
 
@@ -681,7 +682,9 @@ function buildShip(ctx: Ctx, out: Out) {
     b.beam(sx, yd + 0.4, zA - 0.2, qx, QUAY_H + 0.55, QUAY_Z - 0.9, 0.07, '#d9c9a0');
   }
   // pasarela desde el muelle hasta la cubierta
-  gangway(ctx, 100, QUAY_H, QUAY_Z - 3.5, 100, yd, zA + 1.6, 1.4);
+  // la pasarela llega a la altura de la cubierta justo en el borde del casco
+  gangway(ctx, 100, QUAY_H, QUAY_Z - 5.5, 100, yd + 0.02, zA + 0.05, 1.4);
+  ctx.climbs.push({ name: 'carguero', a: new THREE.Vector3(100, QUAY_H, QUAY_Z - 6.5), b: new THREE.Vector3(100, yd, zA + 1.5), c: new THREE.Vector3(146, yd, zA + 1.4) });
   collectible(ctx, 158, yd, zc);
   out.delivery.push({ id: 'carguero', district: 'puerto', door: ground(ctx, 100, QUAY_Z - 5), facing: 0, label: 'Carguero Bulto Veloz (pasarela)' });
   ctx.foot.push({ x: (x0 + x1) / 2, z: zc, hw: (x1 - x0) / 2, hd: 11, rot: 0, color: '#1f3f6f', height: 6 });

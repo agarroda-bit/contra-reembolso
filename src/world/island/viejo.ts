@@ -197,6 +197,10 @@ function buildRoofHouse(ctx: Ctx, out: Out, lot: Lot) {
   const dir = lot.rot + Math.PI / 2;
   stairs(ctx, b, start.x, lot.h, start.z, dir, H, 1.3, '#f4efe6', '#2a2c31', -1, false);
   const top = lotPoint(lot, sx + run + 0.9, hd + 0.7);
+  {
+    const a = lotPoint(lot, sx - 0.8, hd + 0.7), roof = lotPoint(lot, 0, 0);
+    ctx.climbs.push({ name: 'casa-azotea', a: new THREE.Vector3(a.x, lot.h, a.z), b: new THREE.Vector3(top.x, lot.h + H, top.z), c: new THREE.Vector3(roof.x, lot.h + H, roof.z) });
+  }
   b.frame(0, 0, 0, 0);
   b.box(top.x, lot.h + H - 0.1, top.z, 1.8, 0.2, 1.8, '#f4efe6');
   ctx.box(top.x, lot.h + H - 0.1, top.z, 0.9, 0.1, 0.9);

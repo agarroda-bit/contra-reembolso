@@ -53,7 +53,8 @@ export function drawMap(ctx: Ctx, districts: District[], props: { x: number; z: 
         const dname = districtRaw(x, z);
         const c = LAND[dname];
         const v = ctx.occ.get(x, z);
-        const green = v === OCC.FREE || v === OCC.WATER || v === OCC.PROP || v === OCC.YARD;
+        const urbanCore = Math.abs(x) < 250 && z > -100 && z < 172 && (dname === 'centro' || dname === 'viejo');
+        const green = !urbanCore && (v === OCC.FREE || v === OCC.WATER || v === OCC.PROP || v === OCC.YARD);
         const shade = 1 + Math.min(0.12, (h - 3) * 0.005);
         if (green && dname !== 'puerto') {
           r = 150 * shade;

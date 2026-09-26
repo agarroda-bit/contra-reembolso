@@ -9,7 +9,7 @@ import { SIDEWALK, pathAt, pathLength } from './network';
 import { PropType } from './props';
 import { SKIP, lin } from './geo';
 import { clothesline, glass } from './buildings';
-import { ADS } from './names';
+import { adSign, mupiSign } from './ads';
 import { fitText, roundRect, FONT_IMPACT, FONT } from './signs';
 import { districtRaw } from './plan';
 import { findFree } from './colina';
@@ -37,97 +37,6 @@ class Spacing {
     if (!arr) this.cells.set(k, (arr = []));
     arr.push({ x, z });
   }
-}
-
-export function adSign(ctx: Ctx, i: number): string {
-  const ad = ADS[i % ADS.length];
-  const key = 'ad:' + ad.title;
-  ctx.signs.define(key, 8, 3, (g, W, H) => {
-    g.fillStyle = ad.bg;
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = ad.accent;
-    g.beginPath();
-    g.arc(W * 0.14, H * 0.5, H * 0.34, 0, Math.PI * 2);
-    g.fill();
-    drawIcon(g, ad.icon, W * 0.14, H * 0.5, H * 0.28, ad.bg, ad.fg);
-    fitText(g, ad.title, W * 0.6, H * 0.36, W * 0.72, H * 0.34, FONT_IMPACT, '400', ad.fg);
-    fitText(g, ad.sub, W * 0.6, H * 0.72, W * 0.72, H * 0.16, FONT, '800', ad.fg);
-    g.strokeStyle = 'rgba(0,0,0,0.25)';
-    g.lineWidth = H * 0.04;
-    g.strokeRect(0, 0, W, H);
-  });
-  return key;
-}
-
-function drawIcon(g: CanvasRenderingContext2D, icon: string, x: number, y: number, r: number, bg: string, fg: string) {
-  g.save();
-  g.translate(x, y);
-  g.fillStyle = bg;
-  g.strokeStyle = bg;
-  g.lineWidth = r * 0.18;
-  switch (icon) {
-    case 'coche':
-      g.fillRect(-r, -r * 0.1, r * 2, r * 0.6);
-      g.fillRect(-r * 0.55, -r * 0.55, r * 1.1, r * 0.5);
-      g.fillStyle = fg;
-      g.beginPath();
-      g.arc(-r * 0.55, r * 0.55, r * 0.25, 0, 7);
-      g.arc(r * 0.55, r * 0.55, r * 0.25, 0, 7);
-      g.fill();
-      break;
-    case 'pizza':
-      g.beginPath();
-      g.moveTo(0, -r);
-      g.lineTo(r * 0.9, r * 0.7);
-      g.lineTo(-r * 0.9, r * 0.7);
-      g.closePath();
-      g.fill();
-      g.fillStyle = fg;
-      for (const [a, b] of [[0, 0], [-0.3, 0.4], [0.35, 0.35]]) {
-        g.beginPath();
-        g.arc(a * r, b * r, r * 0.14, 0, 7);
-        g.fill();
-      }
-      break;
-    case 'pesa':
-      g.fillRect(-r, -r * 0.1, r * 2, r * 0.2);
-      g.fillRect(-r, -r * 0.5, r * 0.3, r);
-      g.fillRect(r * 0.7, -r * 0.5, r * 0.3, r);
-      break;
-    case 'caja':
-      g.fillStyle = '#c9955a';
-      g.fillRect(-r * 0.8, -r * 0.7, r * 1.6, r * 1.4);
-      g.fillStyle = '#ecdcae';
-      g.fillRect(-r * 0.15, -r * 0.7, r * 0.3, r * 1.4);
-      break;
-    case 'sol':
-      g.beginPath();
-      g.arc(0, 0, r * 0.5, 0, 7);
-      g.fill();
-      for (let i = 0; i < 8; i++) {
-        g.beginPath();
-        g.moveTo(Math.cos((i * Math.PI) / 4) * r * 0.65, Math.sin((i * Math.PI) / 4) * r * 0.65);
-        g.lineTo(Math.cos((i * Math.PI) / 4) * r, Math.sin((i * Math.PI) / 4) * r);
-        g.stroke();
-      }
-      break;
-    case 'luna':
-      g.beginPath();
-      g.arc(0, 0, r * 0.8, 0, 7);
-      g.fill();
-      g.fillStyle = fg;
-      g.beginPath();
-      g.arc(r * 0.35, -r * 0.2, r * 0.7, 0, 7);
-      g.fill();
-      break;
-    default:
-      g.beginPath();
-      g.arc(0, 0, r * 0.7, 0, 7);
-      g.fill();
-      g.fillStyle = fg;
-      fitText(g, '!', 0, 0, r, r * 1.2, FONT_IMPACT, '400', fg);
-  }
-  g.restore();
 }
 
 export function streetFurniture(ctx: Ctx, out: Out) {
@@ -337,6 +246,9 @@ export function streetFurniture(ctx: Ctx, out: Out) {
     ctx.occ.markRect(spot.x, spot.z, 6, 1, 0, OCC.PROP);
   }
 
+  // ── playas con sombrillas y chiringuitos ──
+  beaches(ctx);
+
   // ── vegetación suelta: pinos, olivos, palmeras y arbustos donde hay campo libre ──
   scatterVegetation(ctx, trees);
   void out;
@@ -353,27 +265,6 @@ function probeFacade(ctx: Ctx, x: number, z: number, nx: number, nz: number, w: 
     d += 0.25;
   }
   return -1;
-}
-
-/** Anuncio vertical (mupi) de marquesina. */
-export function mupiSign(ctx: Ctx, i: number): string {
-  const ad = ADS[i % ADS.length];
-  const key = 'mupi:' + ad.title;
-  ctx.signs.define(key, 1.2, 1.8, (g, W, H) => {
-    g.fillStyle = ad.bg;
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = ad.accent;
-    g.beginPath();
-    g.arc(W / 2, H * 0.3, W * 0.3, 0, Math.PI * 2);
-    g.fill();
-    drawIcon(g, ad.icon, W / 2, H * 0.3, W * 0.24, ad.bg, ad.fg);
-    const words = ad.title.split(' ');
-    const mid = Math.ceil(words.length / 2);
-    fitText(g, words.slice(0, mid).join(' '), W / 2, H * 0.6, W * 0.9, H * 0.1, FONT_IMPACT, '400', ad.fg);
-    fitText(g, words.slice(mid).join(' '), W / 2, H * 0.7, W * 0.9, H * 0.1, FONT_IMPACT, '400', ad.fg);
-    fitText(g, ad.sub, W / 2, H * 0.85, W * 0.92, H * 0.06, FONT, '800', ad.fg);
-  });
-  return key;
 }
 
 function busStop(ctx: Ctx, x: number, z: number, rot: number, i: number) {
@@ -401,7 +292,7 @@ function busStop(ctx: Ctx, x: number, z: number, rot: number, i: number) {
   b.box(-1.9, 2.9, -0.6, 0.06, 0.7, 0.06, c);
   ctx.signs.placeDouble(b, 'bus', -1.9, 3.3, -0.6, 0.6, 0.6, 0.3);
   ctx.box(x, y + 1.3, z, 2.0, 1.3, 0.2, rot);
-  ctx.foot.push({ x, z, hw: 2.1, hd: 0.8, rot, color: c, height: 2.6 });
+  ctx.foot.push({ x, z, hw: 2.1, hd: 0.8, rot, color: c, height: 2.6, open: true });
 }
 
 function billboard(ctx: Ctx, x: number, z: number, rot: number, i: number) {
@@ -418,8 +309,10 @@ function billboard(ctx: Ctx, x: number, z: number, rot: number, i: number) {
   // focos
   b.frame(x, y, z, rot);
   for (const px of [-3, 0, 3]) b.box(px, 5.85, 0.9, 0.4, 0.2, 0.3, '#333', 0, [1, 0.9, 0.6, 0.0]);
-  ctx.box(x, y + 3, z, 2.8, 3, 0.2, rot);
-  ctx.foot.push({ x, z, hw: 4.5, hd: 0.3, rot, color: '#e8e8e8', height: 9 });
+  // dos postes (se puede pasar por debajo del cartel)
+  for (const px of [-2.6, 2.6]) ctx.cyl(x + Math.cos(rot) * px, y + 3, z - Math.sin(rot) * px, 3, 0.25);
+  ctx.box(x, y + 7.6, z, 4.5, 1.8, 0.2, rot);
+  ctx.foot.push({ x, z, hw: 4.5, hd: 0.3, rot, color: '#e8e8e8', height: 9, open: true });
 }
 
 function scatterVegetation(ctx: Ctx, trees: Spacing) {
@@ -457,3 +350,72 @@ function scatterVegetation(ctx: Ctx, trees: Spacing) {
 }
 
 export { lin, SKIP, glass };
+
+/** Sombrillas y tumbonas en la arena, mirando al mar, y un par de chiringuitos. */
+function beaches(ctx: Ctx) {
+  const rng = ctx.rng;
+  const placed = new Spacing(6);
+  const n = new THREE.Vector3();
+  let clusters = 0;
+  for (let tries = 0; tries < 6000 && clusters < 34; tries++) {
+    const a = rng.range(0, Math.PI * 2), r = rng.range(240, 318);
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (x > -168 && x < 205 && z > 168) continue; // el puerto
+    if (z < -150) continue; // acantilados del norte
+    const h = ctx.heightAt(x, z);
+    if (h < 0.75 || h > 1.2 || ctx.terrain.slopeAt(x, z) > 0.28) continue;
+    if (placed.near(x, z, 13)) continue;
+    ctx.terrain.normalAt(x, z, n);
+    const toSea = Math.atan2(n.x, n.z); // la pendiente baja hacia el mar
+    const cols = ['#e8394d', '#2f7fcf', '#f2a93b', '#3f9a5a', '#7c4dbb'];
+    ctx.props.add('umbrella', x, h - 0.05, z, rng.range(0, 6), 1, new THREE.Color(cols[clusters % cols.length]).lerp(new THREE.Color(1, 1, 1), 0.35));
+    for (const s of [-1, 1]) {
+      const lx = x + Math.cos(toSea) * s * 1.0, lz = z - Math.sin(toSea) * s * 1.0;
+      ctx.props.add('lounger', lx, ctx.heightAt(lx, lz) - 0.05, lz, toSea, 1);
+    }
+    placed.add(x, z);
+    clusters++;
+  }
+  // chiringuitos
+  const bars: [number, number][] = [[-286, 95], [-190, 250], [282, 110]];
+  for (const [bx, bz] of bars) {
+    let best: { x: number; z: number } | null = null;
+    for (let t = 0; t < 400 && !best; t++) {
+      const x = bx + rng.range(-25, 25), z = bz + rng.range(-25, 25);
+      const h = ctx.heightAt(x, z);
+      if (h > 1.1 && h < 2.2 && ctx.terrain.slopeAt(x, z) < 0.2 && !placed.near(x, z, 6) && ctx.occ.get(x, z) !== OCC.BUILDING) best = { x, z };
+    }
+    if (!best) continue;
+    chiringuito(ctx, best.x, best.z, rng.range(0, Math.PI * 2));
+    placed.add(best.x, best.z);
+  }
+}
+
+function chiringuito(ctx: Ctx, x: number, z: number, rot: number) {
+  const y = ctx.heightAt(x, z);
+  const b = ctx.solid.at(x, z);
+  b.frame(x, y, z, rot);
+  const wood = '#a8784a', straw = '#d9b56a';
+  b.box(0, 0.1, 0, 5.2, 0.2, 4.2, '#8a6a4a');
+  b.box(0, 0.6, 1.6, 4.4, 1.1, 0.5, wood);
+  b.box(0, 1.2, 1.7, 4.8, 0.1, 0.8, '#6b4a2a');
+  b.box(0, 1.2, -1.6, 4.4, 2.2, 0.3, wood);
+  for (const [px, pz] of [[-2.3, -1.9], [2.3, -1.9], [-2.3, 1.9], [2.3, 1.9]]) b.box(px, 1.4, pz, 0.2, 2.8, 0.2, '#6b4a2a');
+  b.roof(0, 2.8, 0, 5.8, 4.8, 1.6, straw, straw, false);
+  for (let i = 0; i < 3; i++) b.cyl(-1.4 + i * 1.4, 0, 2.6, 0.18, 0.18, 0.75, 6, '#c0392b', true);
+  // guirnalda de bombillas
+  for (let i = 0; i <= 8; i++) b.box(-2.6 + i * 0.65, 2.55 - Math.sin((i / 8) * Math.PI) * 0.25, 2.4, 0.14, 0.14, 0.14, '#fff3c4', 0, [1.2, 0.8, 0.4, 2 + (i % 2) * 0.5]);
+  ctx.signs.define('chiringuito', 3.2, 0.9, (g, W, H) => {
+    g.fillStyle = '#2f7fcf';
+    roundRect(g, 0, 0, W, H, H * 0.25);
+    g.fill();
+    fitText(g, 'Chiringuito El Espeto Loco', W / 2, H * 0.42, W * 0.9, H * 0.46, FONT_IMPACT, '400', '#fff45a');
+    fitText(g, 'Sardinas, cañas y siesta', W / 2, H * 0.78, W * 0.8, H * 0.18, FONT, '800', '#ffffff');
+  });
+  ctx.signs.place(b, 'chiringuito', 0, 2.3, 2.02, 3.2, 0.9, 0.5);
+  ctx.box(x, y + 0.7, z, 2.6, 0.7, 2.1, rot);
+  ctx.foot.push({ x, z, hw: 2.9, hd: 2.4, rot, color: straw, height: 3, open: true });
+  const pp = { x: x + Math.cos(rot) * 3.6, z: z - Math.sin(rot) * 3.6 };
+  ctx.props.add('palm', pp.x, ctx.heightAt(pp.x, pp.z) - 0.1, pp.z, rot, 1.05);
+  ctx.props.add('barTable', x + Math.sin(rot) * 4.2, y, z + Math.cos(rot) * 4.2, rot, 1);
+}

@@ -61,6 +61,8 @@ export interface FillParams {
   yard?: boolean;
   /** Variación de fachada permitida dentro de un tramo (curvas). */
   tol?: number;
+  /** Desnivel máximo entre la calle y el terreno natural del solar (evita tajos en la ladera). */
+  maxStep?: number;
 }
 
 const FREEISH = [OCC.FREE] as const;
@@ -74,6 +76,7 @@ export class Layout {
     readonly occ: Occupancy,
     readonly rng: Rng,
     readonly roadH: (x: number, z: number) => number,
+    readonly natH?: (x: number, z: number) => number,
   ) {}
 
   /** Distancia desde el eje hasta el primer punto que no es calzada ni acera, en la normal n. */
@@ -195,6 +198,16 @@ export class Layout {
       for (const D of depths) {
         const cx = mx + nx * (f + D / 2), cz = mz + nz * (f + D / 2);
         if (!this.occ.rectFree(cx, cz, hw, D / 2, rot, 0, allowed)) continue;
+        if (p.maxStep !== undefined && this.natH) {
+          const rh = this.roadH(mx, mz);
+          const c = Math.cos(rot), sn = Math.sin(rot);
+          let worst = 0;
+          for (const [lx, lz] of [[0, 0], [-hw, -D / 2], [hw, -D / 2], [0, -D / 2], [-hw, 0], [hw, 0]]) {
+            const x = cx + lx * c + lz * sn, z = cz - lx * sn + lz * c;
+            worst = Math.max(worst, Math.abs(this.natH(x, z) - rh));
+          }
+          if (worst > p.maxStep) continue;
+        }
         const fx = mx + nx * f, fz = mz + nz * f;
         const street = def.name;
         const lot: Lot = {

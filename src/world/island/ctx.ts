@@ -24,6 +24,8 @@ export interface Footprint {
   color: string;
   /** Altura (para sombrear en el mapa). */
   height: number;
+  /** Estructura abierta (grúa, túnel, marquesina...): no tapa el suelo. */
+  open?: boolean;
 }
 
 export interface Ctx {
@@ -50,6 +52,8 @@ export interface Ctx {
   ramps: WorldData['ramps'];
   breakables: WorldData['breakableSpots'];
   specials: WorldData['specialVehicleSpots'];
+  /** Recorridos para subir a azoteas y cubiertas (para pruebas y para otros sistemas): a = abajo, b = arriba, c = azotea. */
+  climbs: { name: string; a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3 }[];
   /** Añade un colisor de caja estático (rotación en Y). */
   box(cx: number, cy: number, cz: number, hx: number, hy: number, hz: number, rot?: number, group?: number): void;
   /** Caja con giro completo (rampas, escaleras): cuaternión. */

@@ -556,13 +556,15 @@ function buildParking(ctx: Ctx, out: Out, lot: Lot) {
   }
   // rampa: sube desde la fachada (+z local) hacia el fondo (-z) por el lado -x
   const rx = -hw + rampW / 2;
-  const L = hd * 2 - 2;
+  const land = 6.5; // rellano arriba (para girar el coche hacia la azotea)
+  const L = hd * 2 - land;
   const z0 = hd, z1 = z0 - L;
   const ang = Math.atan2(H, L);
   b.quadL(rx - rampW / 2, 0.03, z0, rx + rampW / 2, 0.03, z0, rx + rampW / 2, H, z1, rx - rampW / 2, H, z1, '#5d6068');
   b.quadL(rx - rampW / 2, 0.03, z0 + 0.01, rx - rampW / 2, H, z1, rx - rampW / 2, 0.03, z1, rx - rampW / 2, 0.03, z0, '#a9a59c');
   b.box(rx - rampW / 2 + 0.1, H * 0.5 + 0.5, (z0 + z1) / 2, 0.2, H + 1, L, '#d8d4cc');
-  b.box(rx, H - 0.1, z1 - 1, rampW, 0.2, 2, '#6f737a');
+  b.box(rx, H - 0.1, z1 - land / 2, rampW, 0.2, land, '#6f737a');
+  b.box(rx, H + 0.55, -hd + 0.15, rampW, 1.1, 0.3, '#d8d4cc');
   for (let i = 0; i < 6; i++) {
     const t = (i + 0.5) / 6;
     b.quadL(rx - 0.1, 0.05 + H * t, z0 - L * t + 0.8, rx + 0.1, 0.05 + H * t, z0 - L * t + 0.8, rx + 0.1, 0.05 + H * t + 0.1, z0 - L * t - 0.4, rx - 0.1, 0.05 + H * t + 0.1, z0 - L * t - 0.4, '#f4f1ea');
@@ -570,8 +572,10 @@ function buildParking(ctx: Ctx, out: Out, lot: Lot) {
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(ang, lot.rot, 0, 'YXZ'));
   const rc = lotPoint(lot, rx, (z0 + z1) / 2 - 0.12 * Math.sin(ang));
   ctx.boxQ(rc.x, lot.h + H / 2 - 0.12 * Math.cos(ang), rc.z, rampW / 2, 0.12, Math.hypot(L, H) / 2, q);
-  const lc = lotPoint(lot, rx, z1 - 1);
-  ctx.box(lc.x, lot.h + H - 0.1, lc.z, rampW / 2, 0.1, 1, lot.rot);
+  const lc = lotPoint(lot, rx, z1 - land / 2);
+  ctx.box(lc.x, lot.h + H - 0.1, lc.z, rampW / 2, 0.1, land / 2, lot.rot);
+  const bwc = lotPoint(lot, rx, -hd + 0.15);
+  ctx.box(bwc.x, lot.h + H + 0.55, bwc.z, rampW / 2, 0.55, 0.15, lot.rot);
   const wc = lotPoint(lot, rx - rampW / 2 + 0.1, (z0 + z1) / 2);
   ctx.box(wc.x, lot.h + H * 0.5 + 0.5, wc.z, 0.1, H / 2 + 0.5, L / 2, lot.rot);
   // fachada
@@ -592,6 +596,10 @@ function buildParking(ctx: Ctx, out: Out, lot: Lot) {
   });
   ctx.signs.place(b, 'parking', bcx, H - 1.0, hd + 0.08, 6, 1.6, 0.5);
   collectible(ctx, lotPoint(lot, hw - 3, -hd + 3).x, lot.h + H, lotPoint(lot, hw - 3, -hd + 3).z);
+  {
+    const a = lotPoint(lot, rx, hd + 1.5), top = lotPoint(lot, rx, z1 - land / 2), roof = lotPoint(lot, bx0 + 4, z1 - land / 2);
+    ctx.climbs.push({ name: 'parking', a: new THREE.Vector3(a.x, lot.h, a.z), b: new THREE.Vector3(top.x, lot.h + H, top.z), c: new THREE.Vector3(roof.x, lot.h + H, roof.z) });
+  }
   out.extra.parkingRoof = ground(ctx, lot.x, lot.z, H);
   ctx.foot.push({ x: bc.x, z: bc.z, hw: bw / 2, hd, rot: lot.rot, color: grey, height: H });
   ctx.foot.push({ x: lotPoint(lot, rx, 0).x, z: lotPoint(lot, rx, 0).z, hw: rampW / 2, hd, rot: lot.rot, color: '#5d6068', height: 2 });

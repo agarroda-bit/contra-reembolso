@@ -8,6 +8,7 @@ import { OCC } from './occ';
 import { Rng } from '../../core/rng';
 import { shopSign, FONT_FUN, FONT, FONT_SERIF, FONT_IMPACT, fitText, roundRect } from './signs';
 import { SHOPS, CHALET_NAMES, NAVE_COMPANIES } from './names';
+import { adSign } from './ads';
 
 export const PAL = {
   facade: ['#e07a4f', '#e8b448', '#f4a582', '#f3ede2', '#8fc9e3', '#9fd9b9', '#f2b4bd', '#dca45f', '#bfa8e0', '#f5e1b3', '#e9967a', '#b5d86f'],
@@ -191,6 +192,8 @@ export interface UrbanOpts {
   shopName?: string;
   roof?: boolean;
   tiled?: boolean;
+  /** Índice de anuncio para una valla en la azotea. */
+  roofAd?: number;
 }
 
 export function urban(ctx: Ctx, lot: Lot, o: UrbanOpts) {
@@ -208,7 +211,17 @@ export function urban(ctx: Ctx, lot: Lot, o: UrbanOpts) {
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   const tiled = o.tiled ?? false;
   if (tiled) tiledRoof(b, hw, hd, H, rng, col);
-  else flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), trim, rng);
+  else flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), trim, rng, o.roofAd === undefined);
+  if (o.roofAd !== undefined && !tiled) {
+    // valla publicitaria en la azotea, mirando a la calle
+    const key = adSign(ctx, o.roofAd);
+    const bw = Math.min(hw * 2 - 1.5, 9), bh = (bw * 3) / 8;
+    const zc = hd - 2.2;
+    b.frame(lot.x, lot.h, lot.z, lot.rot);
+    for (const px of [-bw / 2 + 0.6, bw / 2 - 0.6]) b.box(px, H + 1.4, zc - 0.25, 0.25, 2.8, 0.25, '#5a5f66');
+    b.box(0, H + 2.5 + bh / 2, zc - 0.32, bw + 0.3, bh + 0.3, 0.2, '#e8e8e8');
+    ctx.signs.place(b, key, 0, H + 2.5 + bh / 2, zc - 0.21, bw, bh, 0.3);
+  }
   const style = rng.pick(['balcon', 'balcon', 'ventana', 'mixto']);
   const shutter = rng.pick(PAL.shutter);
   const blind = rng.chance(0.5);
