@@ -9,6 +9,8 @@ import { Player } from './actors/player';
 import { CameraRig } from './actors/cameraRig';
 import { VehicleManager } from './vehicles/manager';
 import { AudioEngine } from './audio/audio';
+import { Particles } from './fx/particles';
+import { VehicleDamageFx } from './vehicles/damageFx';
 
 async function boot() {
   const loading = new LoadingScreen();
@@ -30,6 +32,8 @@ async function boot() {
   const vehicles = new VehicleManager(game);
   game.addSystem(player);
   game.addSystem(vehicles);
+  game.addSystem(new VehicleDamageFx(game));
+  game.addSystem(new Particles(game));
   game.addSystem(cam);
   game.addSystem(audio);
   player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);

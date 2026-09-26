@@ -8,6 +8,8 @@ import { VehicleManager } from '../vehicles/manager';
 import { VEHICLES, type VehicleKind } from '../vehicles/types';
 import { Player } from '../actors/player';
 import { CameraRig } from '../actors/cameraRig';
+import { Particles } from '../fx/particles';
+import { VehicleDamageFx } from '../vehicles/damageFx';
 
 async function main() {
   await RAPIER.init();
@@ -25,6 +27,8 @@ async function main() {
   const vm = new VehicleManager(game);
   game.addSystem(player);
   game.addSystem(vm);
+  game.addSystem(new VehicleDamageFx(game));
+  game.addSystem(new Particles(game));
   game.addSystem(cam);
   const params = new URLSearchParams(location.search);
   const kinds = Object.keys(VEHICLES) as VehicleKind[];

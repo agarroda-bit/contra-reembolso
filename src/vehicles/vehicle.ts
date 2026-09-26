@@ -97,7 +97,7 @@ export class Vehicle {
         .setMassProperties(s.mass, { x: 0, y: -hy * 0.55, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 })
         .setFriction(0.4)
         .setRestitution(0.1)
-        .setCollisionGroups(groups(G.VEHICLE, G.ALL & ~G.TRIGGER))
+        .setCollisionGroups(groups(G.VEHICLE, G.ALL & ~G.TRIGGER & ~G.PROP))
         .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS),
       this.body,
     );
@@ -226,7 +226,7 @@ export class Vehicle {
       c.setWheelFrictionSlip(1, grip);
     }
 
-    c.updateVehicle(dt, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE | G.PROP), (col) => col.handle !== this.collider.handle);
+    c.updateVehicle(dt, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE), (col) => col.handle !== this.collider.handle);
 
     // Ayudas arcade
     let contacts = 0;
