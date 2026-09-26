@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import { Vehicle } from './vehicle';
+import { setHeadlightsNight } from './meshes';
 import type { VehicleKind } from './types';
 import type { Player } from '../actors/player';
 import type { CameraRig } from '../actors/cameraRig';
@@ -97,6 +98,7 @@ export class VehicleManager implements System {
     const g = this.game;
     const player = this.player;
     for (const v of this.list) v.syncVisual(dt);
+    if (g.time.frame % 30 === 0) setHeadlightsNight(g.night);
     this.hornCooldown -= dt;
     this.updateAudio();
 
