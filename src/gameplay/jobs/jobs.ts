@@ -177,6 +177,11 @@ export class Jobs implements System {
     return offer;
   }
 
+  /** Adelanta la siguiente oferta automática (p. ej. al acabar el tutorial). */
+  nextOfferIn(seconds: number) {
+    this.offerTimer = Math.min(this.offerTimer, seconds);
+  }
+
   accept(id: number): boolean {
     const i = this.offers.findIndex((o) => o.id === id);
     if (i < 0) return false;
