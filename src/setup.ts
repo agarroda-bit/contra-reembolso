@@ -29,6 +29,8 @@ import { Phone } from './ui/phone';
 import { Bubbles } from './ui/bubbles';
 import { Markers3D } from './ui/markers3d';
 import { CombatHud } from './ui/combatHud';
+import { RandomEvents } from './gameplay/randomEvents';
+import { PhotoMode } from './ui/photoMode';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -97,6 +99,10 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
     add(new Particles(game));
   }
   if (fase >= 6) add(new CrazyVehicles(game));
+  if (fase >= 9) {
+    add(new RandomEvents(game));
+    add(new PhotoMode(game));
+  }
 
   installDayNight(game);
   add(cam);
