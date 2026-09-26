@@ -1,5 +1,7 @@
 // Pensamientos profundísimos que flotan por la pantalla mientras dura el efecto.
 // Letras de colores que ondulan y cambian de color en ola (animaciones CSS: nada de JS por frame).
+// Solo se animan transform y filter, que los mueve la tarjeta gráfica: animar el color letra a letra
+// costaba ~2,5 ms de CPU por frame con dos frases en pantalla.
 
 export const FRASES: readonly string[] = [
   '¿Y si los paquetes nos entregan a nosotros?',
@@ -58,19 +60,29 @@ const CSS = `
 .hb-frase{position:absolute;width:min(700px,72vw);margin-left:calc(min(700px,72vw) / -2);text-align:center;
   font:900 clamp(24px,2.9vw,42px)/1.18 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.5px;
   transform:rotate(var(--rot));animation:hb-entra .7s cubic-bezier(.2,1.5,.4,1) both,hb-sale .9s ease-in var(--fuera) forwards}
-.hb-flota{animation:hb-flota 5.5s ease-in-out forwards}
+.hb-flota{animation:hb-flota 5.5s ease-in-out forwards,hb-arcoiris 2.4s linear infinite;animation-delay:0s,var(--c0)}
 .hb-pal{display:inline-block;white-space:nowrap}
-.hb-letra{display:inline-block;color:#ffd23f;animation:hb-ola 1.3s ease-in-out infinite,hb-color 2.4s linear infinite;
-  animation-delay:calc(var(--i) * -0.09s),calc(var(--i) * -0.12s + var(--c0));
+.hb-letra{display:inline-block;color:#ffd23f;animation:hb-ola 1.3s ease-in-out infinite;animation-delay:calc(var(--i) * -0.09s);
   text-shadow:3px 3px 0 #1b1030,-2px -2px 0 #1b1030,2px -2px 0 #1b1030,-2px 2px 0 #1b1030,0 3px 0 #1b1030,0 -2px 0 #1b1030}
 @keyframes hb-entra{0%{opacity:0;transform:scale(.2) rotate(calc(var(--rot) * -3))}100%{opacity:1;transform:scale(1) rotate(var(--rot))}}
 @keyframes hb-sale{to{opacity:0;transform:scale(1.35) rotate(calc(var(--rot) * 2));filter:blur(3px)}}
 @keyframes hb-flota{0%{transform:translate(0,0)}50%{transform:translate(12px,-14px)}100%{transform:translate(-8px,-30px)}}
 @keyframes hb-ola{0%,100%{transform:translateY(0) rotate(0)}25%{transform:translateY(-7px) rotate(-5deg)}75%{transform:translateY(5px) rotate(4deg)}}
-@keyframes hb-color{0%,100%{color:#ffd23f}17%{color:#ff7b54}33%{color:#ff4f81}50%{color:#b18cff}67%{color:#2ec4b6}83%{color:#06d6a0}}
+@keyframes hb-arcoiris{from{filter:hue-rotate(0deg) saturate(1.5) brightness(1.18)}to{filter:hue-rotate(360deg) saturate(1.5) brightness(1.18)}}
 `;
 
 let cssDone = false;
+
+// arcoíris de la casa: cada letra toma un color de la ola y el filtro los hace girar
+const PALETA = ['#ffd23f', '#ff7b54', '#ff4f81', '#b18cff', '#2ec4b6', '#06d6a0'].map((h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16)));
+function colorOla(pos: number): string {
+  const x = (((pos % 1) + 1) % 1) * PALETA.length;
+  const i = Math.floor(x);
+  const f = x - i;
+  const a = PALETA[i];
+  const b = PALETA[(i + 1) % PALETA.length];
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)},${Math.round(a[1] + (b[1] - a[1]) * f)},${Math.round(a[2] + (b[2] - a[2]) * f)})`;
+}
 
 export class Thoughts {
   private layer: HTMLDivElement | null = null;
@@ -180,6 +192,7 @@ export class Thoughts {
     flota.className = 'hb-flota';
     flota.setAttribute('aria-hidden', 'true'); // letra a letra no se lee bien: se lee la frase entera
     let i = 0;
+    const ola = Math.random();
     const words = text.split(' ');
     words.forEach((word, wi) => {
       const w = document.createElement('span');
@@ -189,6 +202,7 @@ export class Thoughts {
         s.className = 'hb-letra';
         s.textContent = ch;
         s.style.setProperty('--i', String(i));
+        s.style.color = colorOla(ola + i * 0.05);
         w.appendChild(s);
         i++;
       }
