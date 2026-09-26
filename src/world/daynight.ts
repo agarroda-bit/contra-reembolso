@@ -11,7 +11,11 @@ export interface DayNight {
   setHour(h: number): void;
   /** Luz principal: el sol de día, la luna (azulada y débil) de noche. Proyecta las sombras. */
   readonly sun: THREE.DirectionalLight;
-  /** Punto al que siguen las sombras. null = jugador (game.mod.player.position) o delante de la cámara. */
+  /**
+   * Punto al que siguen las sombras (un vehículo, una cinemática...). null = el jugador
+   * (game.mod.player.position) o, si no hay, 35 m delante de la cámara. El recuadro de ±60 m se
+   * centra 18 m por delante del objetivo, hacia donde mira la cámara.
+   */
   followTarget: THREE.Vector3 | null;
   /** Multiplicador de la exposición para efectos (flash, hierbas...). 1 = normal. */
   exposureScale: number;
@@ -200,6 +204,7 @@ export function installDayNight(game: Game): DayNight {
     horizonColor,
     zenithColor,
     setHour(h: number) {
+      if (!Number.isFinite(h)) return; // (una hora rota dejaría todo en NaN: pantalla negra)
       game.clock.hour = wrapHour(h);
       update(0, true);
     },
@@ -220,6 +225,8 @@ export function installDayNight(game: Game): DayNight {
   };
 
   function update(dt: number, force = false) {
+    // si alguien escribe una hora no válida (partida corrupta, NaN...), se vuelve al mediodía
+    if (!Number.isFinite(game.clock.hour)) game.clock.hour = 12;
     const hour = wrapHour(game.clock.hour);
     const theta = sunAngle(hour);
     orbit(theta, TILT, sunDir);
