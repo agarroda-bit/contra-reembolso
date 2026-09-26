@@ -84,6 +84,40 @@ export class Tutorial implements System {
     this.finish(false);
   }
 
+  /**
+   * Sigue el tutorial de una partida guardada a medias. Los encargos no se guardan, así que si iba
+   * por el encargo de Doña Puri (pasos 3 a 5) se le manda otro. Si no se sabe el paso (partidas
+   * antiguas, que solo guardaban si estaba hecho), se da por terminado con el regalo del jefe.
+   */
+  resume(step: number) {
+    if (this.done) return;
+    if (!(step >= 1 && step <= 6)) {
+      this.finish(true);
+      return;
+    }
+    this.step = step >= 3 && step <= 5 ? 3 : step;
+    this.t = 0;
+    this.waiting = false;
+    this.offerId = -1;
+    this.resendAt = -1;
+    this.tipAt = -1;
+    this.start.copy(this.game.mod.player.position);
+    if (this.jobs) this.jobs.autoOffers = false;
+    if (this.game.mod.gang) this.game.mod.gang.calm = true;
+    const s = this.step;
+    const lines: Record<number, string> = {
+      1: 'Seguimos donde lo dejamos, chaval. Muévete con WASD y mira con el ratón (haz clic en el juego para usarlo).',
+      2: 'Seguimos donde lo dejamos, chaval. Súbete a tu furgoneta amarilla con F. Está aparcada delante de la oficina.',
+      3: 'Seguimos donde lo dejamos, chaval. El encargo de antes se ha perdido: te mando otro. Tab y «Aceptar».',
+      6: 'Seguimos donde lo dejamos, chaval. Ingresa lo cobrado en un cajero 🏧 con E (hay uno en la puerta de la oficina).',
+    };
+    setTimeout(() => {
+      if (this.done || this.step !== s) return;
+      this.say(lines[s]);
+      if (s === 3) this.sendOffer();
+    }, 1800);
+  }
+
   /** Manda (o vuelve a mandar) el encargo del tutorial: Doña Puri, cerquita de la oficina. */
   private sendOffer() {
     const g = this.game;

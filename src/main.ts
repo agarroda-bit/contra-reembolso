@@ -71,18 +71,29 @@ async function boot() {
     if (game.mod.shops) game.mod.shops.profile = profile;
   }
 
+  // el menú principal se crea ya: así su vista de la isla también se prepara con la pantalla de carga
+  const menus = fase >= 5 && !prueba ? new Menus(game) : null;
+
+  // los shaders se compilan con la pantalla de carga puesta: si no, el primer frame se congela un momento
+  await loading.step(0.85, 'Calentando motores…');
+  await warmUp(game, menus);
   await loading.step(1, '¡A repartir!');
   loading.hide();
   game.start();
 
-  if (fase >= 5 && !prueba) {
-    const menus = new Menus(game);
+  if (menus) {
     game.addSystem(menus);
     // en el menú no llegan encargos ni persecuciones
     if (game.mod.jobs) game.mod.jobs.autoOffers = false;
     if (game.mod.gang) game.mod.gang.calm = true;
+    // ni se guarda nada: la partida guardada no se toca hasta pulsar «Continuar» o «¡A repartir!»
+    const save = game.mod.save as SaveSystem | undefined;
+    if (save) save.enabled = false;
     menus.onNewGame = (p) => {
       SaveSystem.wipe();
+      if (save) save.enabled = true;
+      // la ropa de serie de la tienda no debe tapar el uniforme y la gorra elegidos al crear el personaje
+      game.mod.shops?.resetOutfit(p.look);
       setProfile(p);
       player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);
       menus.play();
@@ -90,10 +101,12 @@ async function boot() {
       game.mod.save?.save();
     };
     menus.onContinue = () => {
-      game.mod.save?.readFromStorage();
-      menus.play();
+      // antes de cargar: si el tutorial se quedó a medias, al reanudarlo vuelve a parar los encargos
       if (game.mod.jobs) game.mod.jobs.autoOffers = true;
       if (game.mod.gang) game.mod.gang.calm = false;
+      save?.readFromStorage();
+      if (save) save.enabled = true;
+      menus.play();
       game.events.emit('toast', { text: `¡Hola otra vez, ${profile.name}!`, color: '#ffd23f', time: 2.5 });
     };
     menus.showMain();
@@ -102,6 +115,29 @@ async function boot() {
     if (game.mod.economy && prueba) game.mod.economy.cash = 500;
   }
   (window as any).__ready = true;
+}
+
+/**
+ * Compila en paralelo los shaders de todo lo que hay en la escena antes de quitar la pantalla de carga
+ * (si el navegador no sabe, o tarda demasiado, se sigue igual: se compilarán al usarlos).
+ */
+async function warmUp(game: Game, menus: Menus | null) {
+  try {
+    // sin compilación en paralelo (p. ej. WebGL por software) compilar todo de golpe congela el arranque
+    // decenas de segundos: entonces solo se prepara lo que se ve primero (como hace game.warmShaders)
+    const parallel = game.renderer.extensions.has('KHR_parallel_shader_compile');
+    if (parallel) await Promise.race([game.renderer.compileAsync(game.scene, game.camera), new Promise((r) => setTimeout(r, 10000))]);
+    // y un dibujado de prueba, tapado por la pantalla de carga: sube a la tarjeta gráfica las mallas y
+    // texturas que se ven al empezar (detrás del jugador y, si hay menú, la vista de la isla) y prepara las sombras
+    game.mod.cameraRig?.postUpdate?.(1 / 60);
+    if (parallel || !menus) game.render();
+    if (menus) {
+      menus.update(0);
+      game.render();
+    }
+  } catch {
+    /* nada: se hará en el primer frame */
+  }
 }
 
 /** Mueve el punto de inicio si la cámara (detrás del jugador) quedaría tapada por algo cercano. */

@@ -70,8 +70,11 @@ export class Company implements System {
     game.mod.company = this;
     this.office = game.world.pois.find((p) => p.kind === 'office');
     const it = game.mod.interaction as Interaction;
-    // la oficina: gestionar la empresa (el cajero y la recogida de paquetes tienen prioridad)
-    it.addPoi('office', 'Gestionar tu empresa (tablón, personal, flota)', () => this.open(), 3.2, 1);
+    // la oficina: gestionar la empresa (el cajero y la recogida de paquetes tienen prioridad).
+    // Desde la fase 6 la oficina tiene interior y la empresa se gestiona dentro, en el tablón: en la
+    // puerta solo queda «Entrar en la oficina». (game.mod.fase se fija después de crear este módulo,
+    // por eso se mira al usarlo y no aquí.)
+    it.addPoi((p) => p.kind === 'office' && (this.game.mod.fase ?? 9) < 6, 'Gestionar tu empresa (tablón, personal, flota)', () => this.open(), 3.2, 1);
     game.events.on('newday', () => this.payday());
     this.refreshDecor();
   }

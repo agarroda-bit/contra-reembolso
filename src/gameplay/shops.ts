@@ -44,11 +44,14 @@ interface ClothItem {
 }
 
 const CLOTHES: ClothItem[] = [
+  // lo elegido al crear el personaje (se queda tal cual: color del uniforme y de la gorra)
+  { id: 'uni-propio', icon: '👕', name: 'Tu uniforme de siempre', desc: 'El que elegiste el primer día. Lavado y planchado (más o menos).', price: 0, slot: 'uniforme', apply: () => {} },
   { id: 'uni-amarillo', icon: '🟨', name: 'Uniforme clásico', desc: 'El de toda la vida. Amarillo reparto.', price: 0, slot: 'uniforme', apply: (l) => { l.shirt = '#ffd23f'; l.pants = '#1d3557'; } },
   { id: 'uni-rosa', icon: '🩷', name: 'Uniforme rosa chicle', desc: 'Para repartir con alegría.', price: 150, slot: 'uniforme', apply: (l) => { l.shirt = '#ff4f81'; l.pants = '#1b1030'; } },
   { id: 'uni-turquesa', icon: '🟦', name: 'Uniforme turquesa', desc: 'Frescor mediterráneo.', price: 150, slot: 'uniforme', apply: (l) => { l.shirt = '#2ec4b6'; l.pants = '#264653'; } },
   { id: 'uni-negro', icon: '⬛', name: 'Uniforme negro élite', desc: 'Repartidor de noche. Misterioso.', price: 400, slot: 'uniforme', apply: (l) => { l.shirt = '#222230'; l.pants = '#111111'; }, fame: 2 },
   { id: 'uni-dorado', icon: '🥇', name: 'Uniforme dorado', desc: 'Para el repartidor del año.', price: 2500, slot: 'uniforme', apply: (l) => { l.shirt = '#d4af37'; l.pants = '#f1faee'; }, fame: 5 },
+  { id: 'gorra-propia', icon: '🧢', name: 'Tu gorra de siempre', desc: 'La del color que elegiste el primer día.', price: 0, slot: 'gorra', apply: (l, on) => { l.cap = on; } },
   { id: 'gorra-rosa', icon: '🧢', name: 'Gorra rosa', desc: 'La de la casa.', price: 0, slot: 'gorra', apply: (l, on) => { l.cap = on; l.capColor = '#ff4f81'; } },
   { id: 'gorra-negra', icon: '🧢', name: 'Gorra negra', desc: 'Discreta.', price: 60, slot: 'gorra', apply: (l, on) => { l.cap = on; l.capColor = '#1b1030'; } },
   { id: 'gorra-oro', icon: '👑', name: 'Gorra dorada', desc: 'No es una corona. Casi.', price: 800, slot: 'gorra', apply: (l, on) => { l.cap = on; l.capColor = '#d4af37'; }, fame: 3 },
@@ -75,8 +78,9 @@ function weaponFame(w: string): number {
 export class Shops implements System {
   name = 'shops';
   readonly owned: OwnedVehicle[] = [];
-  readonly clothesOwned = new Set<string>(['uni-amarillo', 'gorra-rosa']);
-  readonly equipped: Record<string, string | null> = { uniforme: 'uni-amarillo', gorra: 'gorra-rosa', gafas: null, cadena: null, zapatillas: null, chandal: null };
+  readonly clothesOwned = new Set<string>(['uni-propio', 'gorra-propia', 'uni-amarillo', 'gorra-rosa']);
+  /** Lo puesto de la tienda. «uni-propio» y «gorra-propia» son lo elegido al crear el personaje. */
+  readonly equipped: Record<string, string | null> = { uniforme: 'uni-propio', gorra: 'gorra-propia', gafas: null, cadena: null, zapatillas: null, chandal: null };
   profile: Profile | null = null;
   private deliveryTimer = -1;
   private pendingDelivery: OwnedVehicle | null = null;
@@ -256,14 +260,16 @@ export class Shops implements System {
           const d = WEAPONS[w];
           const has = combat.owned.has(w);
           const lock = weaponFame(w);
+          // lo que da de verdad una compra de munición: dos cargadores (tres paquetes FRÁGIL)
+          const refill = Math.max(1, d.clip || 1) * (d.mode === 'grenade' ? 3 : 2);
           return {
             id: w, icon: d.icon, name: d.name, desc: d.desc, price: has ? d.ammoPrice : d.price,
-            label: has ? `+${d.clip || 1} munición` : 'Comprar', owned: has,
+            label: has ? `+${refill} ${d.mode === 'grenade' ? 'paquetes' : 'munición'}` : 'Comprar', owned: has,
             locked: !has && this.fameLvl < lock ? `Fama ${lock}` : undefined,
             buy: () => {
               if (has) {
                 if (!this.eco.spend(d.ammoPrice, 'munición')) return false;
-                combat.ammo[w].reserve += Math.max(1, d.clip) * (d.mode === 'grenade' ? 3 : 2);
+                combat.ammo[w].reserve += refill;
               } else {
                 if (!this.eco.spend(d.price, 'arma')) return false;
                 combat.give(w);
@@ -319,9 +325,12 @@ export class Shops implements System {
           items: CLOTHES.filter((c) => c.slot === slot).map((c) => {
             const has = this.clothesOwned.has(c.id);
             const on = this.equipped[slot] === c.id;
+            // quitarse un uniforme de la tienda es volver al tuyo de siempre; el tuyo no se puede quitar
+            const removable = c.id !== 'uni-propio';
             return {
               id: c.id, icon: c.icon, name: c.name, desc: c.desc, price: has ? 0 : c.price, owned: has, equipped: on,
-              label: has ? (on ? 'Quitar' : 'Ponérmelo') : 'Comprar',
+              label: has ? (on ? (removable ? 'Quitar' : 'Puesto') : 'Ponérmelo') : 'Comprar',
+              disabled: has && on && !removable,
               locked: !has && c.fame && this.fameLvl < c.fame ? `Fama ${c.fame}` : undefined,
               buy: () => {
                 if (!has) {
@@ -329,7 +338,7 @@ export class Shops implements System {
                   this.clothesOwned.add(c.id);
                   this.eco.addFame(Math.round(c.price / 100), 'ropa');
                 }
-                if (on && (slot === 'gafas' || slot === 'cadena' || slot === 'chandal' || slot === 'gorra')) this.equipped[slot] = null;
+                if (on) this.equipped[slot] = slot === 'uniforme' ? 'uni-propio' : null;
                 else this.equipped[slot] = c.id;
                 this.applyClothes();
                 return true;
@@ -340,6 +349,22 @@ export class Shops implements System {
       },
     });
     void g;
+  }
+
+  /** Partida nueva: se lleva lo elegido al crear el personaje (su uniforme y, si la quiso, su gorra). */
+  resetOutfit(look: CharacterLook) {
+    for (const slot of Object.keys(this.equipped)) this.equipped[slot] = null;
+    this.equipped.uniforme = 'uni-propio';
+    this.equipped.gorra = look.cap ? 'gorra-propia' : null;
+  }
+
+  /**
+   * Partidas guardadas antes de «tu uniforme / tu gorra de siempre»: el uniforme amarillo y la gorra
+   * rosa de serie tapaban lo elegido al crear el personaje. Se cambian por lo elegido (con el perfil ya cargado).
+   */
+  upgradeOldOutfit() {
+    if (this.equipped.uniforme === 'uni-amarillo') this.equipped.uniforme = 'uni-propio';
+    if (this.equipped.gorra === 'gorra-rosa') this.equipped.gorra = this.profile?.look.cap === false ? null : 'gorra-propia';
   }
 
   /** Aplica la ropa equipada al aspecto del jugador. */
