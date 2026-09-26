@@ -50,6 +50,17 @@ export interface Step<S extends Song = Song> {
 
 const FULL = 18000;
 
+/** Congela un parámetro en su valor actual y borra lo programado (sin saltos = sin chasquidos). */
+export function holdAt(p: AudioParam, t: number) {
+  const q = p as AudioParam & { cancelAndHoldAtTime?: (t: number) => AudioParam };
+  if (q.cancelAndHoldAtTime) q.cancelAndHoldAtTime(t);
+  else {
+    const v = p.value;
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(v, t);
+  }
+}
+
 export abstract class Station<S extends Song = Song> {
   abstract readonly id: string;
   /** Volumen de la emisora (fundidos al cambiar). */
@@ -202,10 +213,12 @@ export abstract class Station<S extends Song = Song> {
     this.align(t);
     this.running = true;
     const ctx = this.rs.ctx;
+    const now = ctx.currentTime;
     for (const p of [this.out.gain, this.rev.gain]) {
-      p.cancelScheduledValues(ctx.currentTime);
-      p.setValueAtTime(0, t);
-      p.linearRampToValueAtTime(1, t + fadeIn);
+      // si aún se estaba apagando (bajar y volver a subir enseguida), bajar suave hasta `t`
+      holdAt(p, now);
+      p.linearRampToValueAtTime(0, Math.max(t, now + 0.01));
+      p.linearRampToValueAtTime(1, Math.max(t, now + 0.01) + fadeIn);
     }
     // filtro en su sitio para la posición actual
     const bar = Math.floor(this.stepPos / 16);
@@ -220,7 +233,7 @@ export abstract class Station<S extends Song = Song> {
     if (!this.running) return;
     this.running = false;
     for (const p of [this.out.gain, this.rev.gain]) {
-      p.cancelScheduledValues(t);
+      holdAt(p, t);
       p.setTargetAtTime(0, t, fade / 3);
     }
     const end = t + fade + 0.05;

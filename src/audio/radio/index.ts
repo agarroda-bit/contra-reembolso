@@ -7,7 +7,7 @@
 import type { Game, System } from '../../core/game';
 import type { AudioEngine } from '../audio';
 import { RadioSynth, type RadioStats } from './synth';
-import { Station } from './station';
+import { Station, holdAt } from './station';
 import { PerreoStation } from './stations/perreo';
 import { ElectroStation } from './stations/electro';
 import { RumbaStation } from './stations/rumba';
@@ -143,6 +143,8 @@ class RadioSystem implements System, Radio {
   private talk: (AudioBuffer | null)[] = [null, null, null];
   private adTalk: AudioBuffer | null = null;
   private talkPending = false;
+  /** Balbuceo del locutor que suena ahora (se corta al cambiar de emisora o bajar del coche). */
+  private talkVoice: { src: AudioScheduledSourceNode; g: GainNode } | null = null;
 
   constructor(private game: Game) {}
 
@@ -204,7 +206,8 @@ class RadioSystem implements System, Radio {
         this.onSelect();
       } else this.reason = 'exit';
     }
-    if (inV && g.input.enabled) {
+    // Q/E solo en el coche, con el control activo y sin una escena que use esas teclas (regateo…)
+    if (inV && g.input.enabled && !g.mod.interaction?.override) {
       if (g.input.pressed('radioNext')) this.next();
       if (g.input.pressed('radioPrev')) this.prev();
     }
@@ -282,6 +285,7 @@ class RadioSystem implements System, Radio {
     const reason = this.reason;
     const prev = this.playing;
     if (prev >= 0) this.st[prev].stop(now, reason === 'exit' ? 0.35 : 0.08);
+    this.shutUp(now);
     let delay = 0.02;
     if (want >= 0 && reason === 'tune') {
       this.tuning(now, 0.3, 0.2);
@@ -460,6 +464,17 @@ class RadioSystem implements System, Radio {
     }
   }
 
+  /** Corta al locutor si estaba hablando y devuelve la música a su volumen. */
+  private shutUp(now: number) {
+    const rs = this.rs, chain = this.chain;
+    if (!rs || !chain || !this.talkVoice) return;
+    rs.choke(this.talkVoice, now, 0.06);
+    this.talkVoice = null;
+    const d = chain.music.gain;
+    holdAt(d, now);
+    d.setTargetAtTime(1, now, 0.05);
+  }
+
   /** El locutor "habla" (balbuceo) un momento y la música se agacha. */
   private speak(ad: boolean) {
     const rs = this.rs, chain = this.chain;
@@ -471,7 +486,12 @@ class RadioSystem implements System, Radio {
     else this.talk[i] = null;
     const t = rs.ctx.currentTime + 0.05;
     rs.owner = null;
-    rs.play(chain.voice, t, buf, 0.5);
+    if (this.talkVoice) rs.choke(this.talkVoice, t, 0.05);
+    const v = rs.play(chain.voice, t, buf, 0.5);
+    this.talkVoice = v;
+    v.src.addEventListener('ended', () => {
+      if (this.talkVoice === v) this.talkVoice = null;
+    });
     const d = chain.music.gain;
     d.cancelScheduledValues(t);
     d.setTargetAtTime(0.45, t - 0.03, 0.06);

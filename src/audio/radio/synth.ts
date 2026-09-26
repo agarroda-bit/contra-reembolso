@@ -253,8 +253,11 @@ export class RadioSynth {
 
   // ─────────── seguimiento de nodos ───────────
 
-  /** Registra una fuente y su cadena: al acabar, se desconecta todo y se descuenta. */
-  track(src: Src, chain: AudioNode[]) {
+  /**
+   * Registra una fuente y su cadena: al acabar, se desconecta todo y se descuenta.
+   * `cleanup`: algo más que soltar al acabar (p. ej. un LFO compartido conectado a esta fuente).
+   */
+  track(src: Src, chain: AudioNode[], cleanup?: () => void) {
     const n = 1 + chain.length;
     const st = this.stats;
     st.live += n;
@@ -270,6 +273,7 @@ export class RadioSynth {
       try {
         src.disconnect();
         for (const c of chain) c.disconnect();
+        cleanup?.();
       } catch {
         /* ya desconectado */
       }
@@ -480,6 +484,9 @@ export class RadioSynth {
       oscs.push(osc);
       return osc;
     };
+    // el vibrato es un LFO compartido: si no se suelta al acabar la nota, retiene el oscilador muerto
+    const vib = o.vib;
+    const unvib = vib ? (osc: OscillatorNode) => () => { try { vib.disconnect(osc.detune); } catch { /* ya suelto */ } } : () => undefined;
     let chainTop: AudioNode = g;
     let filt: BiquadFilterNode | null = null;
     if (o.type === 'whistle') {
@@ -490,8 +497,8 @@ export class RadioSynth {
       h.connect(hg).connect(g);
       this.env(g.gain, t, vel, 0.025, 0.2, 0.85, t + dur - 0.03, 0.08);
       g.connect(dest);
-      this.track(oscs[0], [g]);
-      this.track(oscs[1], [hg]);
+      this.track(oscs[0], [g], unvib(oscs[0]));
+      this.track(oscs[1], [hg], unvib(oscs[1]));
     } else {
       filt = ctx.createBiquadFilter();
       filt.type = 'lowpass';
@@ -504,8 +511,8 @@ export class RadioSynth {
       mk(o.type === 'accordion' ? 'square' : 'sawtooth', o.type === 'accordion' ? 7 : 5).connect(filt);
       filt.connect(g).connect(dest);
       this.env(g.gain, t, vel * 0.7, o.type === 'accordion' ? 0.03 : 0.008, 0.25, 0.7, t + dur - 0.03, 0.07);
-      this.track(oscs[0], [filt, g]);
-      this.track(oscs[1], []);
+      this.track(oscs[0], [filt, g], unvib(oscs[0]));
+      this.track(oscs[1], [], unvib(oscs[1]));
       chainTop = filt;
     }
     void chainTop;
