@@ -188,6 +188,12 @@ export class Phone implements System {
 
   /** Enter/Retroceso: aceptar o rechazar la oferta de la conversación que se ve (ver quickTarget). */
   private quickAction(i: number) {
+    // en la pantalla de inicio, Enter no contesta nada a ciegas: abre la conversación pendiente para verla
+    if (this.screen === 'home' && i === 0) {
+      const latest = this.msgs?.latestActionable();
+      if (latest) this.show('chat', latest.chat.id);
+      return;
+    }
     const pending = this.quickTarget();
     if (!pending) return;
     const a = pending.msg.actions?.[i];
