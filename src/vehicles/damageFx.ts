@@ -115,7 +115,8 @@ export class VehicleDamageFx implements System {
     const big = v.spec.mass > 2500;
     this.particles?.explosion(pos, big);
     g.events.emit('explosion', { pos: pos.clone(), radius: big ? 9 : 7, big });
-    if (big || this.vm.current === v) g.slowMo(0.9, 0.35);
+    // cámara lenta si es la tuya o una grande que se ve de cerca (no por un camión que revienta a 200 m)
+    if (this.vm.current === v || (big && pos.distanceTo(g.camera.position) < 70)) g.slowMo(0.9, 0.35);
     // carrocería quemada
     v.mesh.body.material = burntMaterial;
     v.mesh.lights.visible = false;

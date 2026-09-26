@@ -355,7 +355,7 @@ export class Vehicle {
   private takeOff(rot: THREE.Quaternion, absSpeed: number, vy: number) {
     this.setAirborne(true);
     const fwd = tmpFwd.set(0, 0, 1).applyQuaternion(rot);
-    if (fwd.y > 0.12 && vy > 1.5 && absSpeed > 8 && this.speed > 0) {
+    if (fwd.y > 0.15 && vy > 1.5 && absSpeed > 8 && this.speed > 0) {
       this.body.applyImpulse({ x: 0, y: Math.min(3, absSpeed * 0.1) * this.spec.mass, z: 0 }, true);
     }
   }
