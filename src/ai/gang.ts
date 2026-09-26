@@ -439,5 +439,5 @@ export class Gang implements System {
 /** Arma con el daño rebajado para los enemigos. */
 function npcWeapon(id: WeaponId) {
   const d = WEAPONS[id];
-  return { ...d, damage: d.damage * 0.35 };
+  return { ...d, damage: d.damage * 0.3 };
 }

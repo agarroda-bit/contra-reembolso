@@ -53,7 +53,7 @@ const tmpB = new THREE.Vector3();
 
 /** Ayuda de apuntado: cono (radianes) alrededor del centro de la pantalla y fuerza del imán. */
 const ASSIST_CONE = 0.075;
-const ASSIST_PULL = 2.4;
+const ASSIST_PULL = 2;
 const ASSIST_RANGE = 45;
 
 const tracerGeo = new THREE.BoxGeometry(0.03, 0.03, 1);

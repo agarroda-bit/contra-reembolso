@@ -42,7 +42,7 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     desc: 'Gratis y siempre a mano.',
   },
   pistol: {
-    id: 'pistol', name: 'Pistola', icon: '🔫', slot: 2, mode: 'hitscan', damage: 26, rate: 4, auto: false, clip: 12, reload: 1.1,
+    id: 'pistol', name: 'Pistola', icon: '🔫', slot: 2, mode: 'hitscan', damage: 30, rate: 4, auto: false, clip: 12, reload: 1.1,
     spread: 0.012, pellets: 1, range: 70, recoil: 0.035, hold: 'pistol', sound: 'shot_pistol', driveBy: true, price: 400, ammoPrice: 40, startAmmo: 48,
     desc: 'Fiable, ligera y se puede usar conduciendo.',
   },

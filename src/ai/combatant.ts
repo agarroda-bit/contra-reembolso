@@ -48,8 +48,8 @@ const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos 
 const SHOUTS_GANG = ['¡Ese paquete es nuestro!', '¡Devuélvenos la mercancía!', '¡A por el repartidor!', '¡Te vamos a devolver al remitente!'];
 
 /** Daño de sus armas respecto al del jugador (los enemigos pegan bastante menos: justo). */
-const DMG_GANG = 0.3;
-const DMG_POLICE = 0.32;
+const DMG_GANG = 0.27;
+const DMG_POLICE = 0.29;
 /**
  * Puntería: probabilidad de que un disparo vaya a darte (de cerca y quieto). Luego baja con la
  * distancia y si te mueves. Los que fallan pasan silbando cerca (se ven las trazadoras), no a un metro de ti.
