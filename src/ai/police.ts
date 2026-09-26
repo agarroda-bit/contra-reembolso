@@ -567,7 +567,8 @@ export class Police implements System {
     const dist = carPos.distanceTo(target);
     // bajarse cerca si el jugador va a pie o está parado
     const playerSlow = p.state === 'foot' || (this.vm.current && Math.abs(this.vm.current.speed) < 3);
-    if (dist < 14 && playerSlow) {
+    // (o si se ha atascado ya cerca: mejor a pie que empujando una esquina)
+    if ((dist < 14 && playerSlow) || (dist < 30 && u.unstick.tries > 0)) {
       this.dismount(u);
       return false;
     }

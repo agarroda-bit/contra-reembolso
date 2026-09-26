@@ -46,6 +46,13 @@ const SHOUTS_GANG = ['¡Ese paquete es nuestro!', '¡Devuélvenos la mercancía!
 /** Daño de sus armas respecto al del jugador (los enemigos pegan bastante menos: justo). */
 const DMG_GANG = 0.3;
 const DMG_POLICE = 0.32;
+/**
+ * Puntería: probabilidad de que un disparo vaya a darte (de cerca y quieto). Luego baja con la
+ * distancia y si te mueves. Los que fallan pasan silbando cerca (se ven las trazadoras), no a un metro de ti.
+ */
+const ACC_GANG = 0.4;
+const ACC_POLICE = 0.46;
+const tmpSide = new THREE.Vector3();
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
@@ -282,15 +289,31 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   b.burst--;
   b.fireTimer = b.burst > 0 ? baseDelay : 1.5 + rnd.next() * 1.6;
   const muzzle = npc.rig.handWorldPosition(tmpMuzzle);
-  // dispersión: cuanto más lejos y si vas en coche rápido, más fallan
+  // ¿este disparo va a dar? Depende de la distancia y de si te mueves (corriendo o en coche fallan más)
+  const p = game.mod.player;
   const v = game.mod.vehicles?.current;
-  const moving = v ? Math.min(2, Math.abs(v.speed) / 12) : 0;
-  const spreadMul = 3 + dist / 6 + moving * 2;
-  // disparan a un punto algo desviado, no al centro exacto
+  let chance = (b.side === 'police' ? ACC_POLICE : ACC_GANG) * THREE.MathUtils.clamp(1.15 - dist / 40, 0.2, 1);
+  if (v) chance *= 1 - Math.min(0.65, Math.abs(v.speed) / 28);
+  else {
+    const sp = Math.hypot(p.velocity.x, p.velocity.z);
+    chance *= sp > 5 ? 0.55 : sp > 2 ? 0.75 : 1;
+  }
   const aim = tmpAim.copy(target);
-  aim.x += (rnd.next() - 0.5) * 0.8;
-  aim.y += (rnd.next() - 0.5) * 0.6;
-  aim.z += (rnd.next() - 0.5) * 0.8;
+  let spreadMul: number;
+  if (rnd.next() < chance) {
+    // a dar: al cuerpo, con un poco de temblor
+    aim.x += (rnd.next() - 0.5) * 0.3;
+    aim.y += (rnd.next() - 0.5) * 0.4;
+    aim.z += (rnd.next() - 0.5) * 0.3;
+    spreadMul = def.pellets > 1 ? 2.5 : 0.6;
+  } else {
+    // fallo: pasa cerca, por un lado o por encima
+    const fire = tmpDir.copy(target).sub(muzzle).setY(0).normalize();
+    const side = tmpSide.set(-fire.z, 0, fire.x).multiplyScalar((rnd.next() < 0.5 ? -1 : 1) * (0.9 + rnd.next() * 1.1));
+    aim.add(side);
+    aim.y += (rnd.next() - 0.25) * 1.2;
+    spreadMul = def.pellets > 1 ? 3 : 1.5;
+  }
   npc.shotPulse = true;
   // daño reducido para NPCs (justo)
   const npcDef = { ...def, damage: def.damage * (b.side === 'police' ? DMG_POLICE : DMG_GANG) * b.dmgMul };

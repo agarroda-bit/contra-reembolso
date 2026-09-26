@@ -41,6 +41,13 @@ const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const tmpO = new THREE.Vector3();
+const tmpA = new THREE.Vector3();
+const tmpB = new THREE.Vector3();
+
+/** Ayuda de apuntado: cono (radianes) alrededor del centro de la pantalla y fuerza del imán. */
+const ASSIST_CONE = 0.075;
+const ASSIST_PULL = 2.4;
+const ASSIST_RANGE = 45;
 
 const tracerGeo = new THREE.BoxGeometry(0.03, 0.03, 1);
 const tracerMat = new THREE.MeshBasicMaterial({ color: '#fff3b0', toneMapped: false });
@@ -50,6 +57,8 @@ const tapeGeo = new THREE.TorusGeometry(0.12, 0.05, 6, 10);
 const tapeMat = new THREE.MeshLambertMaterial({ color: '#d9b26f', flatShading: true });
 const fragileGeo = new THREE.BoxGeometry(0.4, 0.32, 0.4);
 const fragileMat = new THREE.MeshLambertMaterial({ color: '#d9a870', flatShading: true });
+const fragileBandGeo = new THREE.BoxGeometry(0.41, 0.08, 0.41);
+const fragileBandMat = new THREE.MeshLambertMaterial({ color: '#e63946' });
 
 export class Combat implements System {
   name = 'combat';
@@ -62,11 +71,26 @@ export class Combat implements System {
   private projectiles: Projectile[] = [];
   private tracers: { mesh: THREE.Mesh; t: number }[] = [];
   private wheelTimer = 0;
+  /** Segundos que le quedan al jugador con los pies precintados (cinta de la banda). */
+  private tapedPlayer = 0;
   /** Sin munición infinita salvo trucos. */
   infiniteAmmo = false;
+  /** Ayuda de apuntado suave (imán hacia el enemigo más cercano al centro al apuntar). */
+  aimAssist = true;
 
   constructor(private game: Game) {
     game.mod.combat = this;
+    // al recibir un golpe: la cámara tiembla y da un pequeño respingo (más cuanto más daño)
+    game.events.on('player:hurt', (e) => {
+      const a = e.amount || 0;
+      if (a < 1) return;
+      game.events.emit('camera:shake', { amount: Math.min(0.6, 0.18 + a / 30) });
+      const cam = this.cam;
+      if (cam && this.player?.state !== 'dead') {
+        cam.pitch += Math.min(0.03, 0.006 + a * 0.0012);
+        cam.yaw += (rnd.next() - 0.5) * Math.min(0.03, a * 0.0015);
+      }
+    });
   }
 
   private get player(): Player {
@@ -225,8 +249,60 @@ export class Combat implements System {
           };
     if (this.reloading > 0 && g.hud.weapon) g.hud.weapon.name = def.name + ' (recargando…)';
 
+    if (this.tapedPlayer > 0) {
+      this.tapedPlayer -= dt;
+      if (this.tapedPlayer <= 0) p.speedMul = 1;
+    }
+    if (aiming && this.aimAssist) this.assistAim(dt);
+
     this.updateProjectiles(dt);
     this.updateTracers(dt);
+  }
+
+  /**
+   * Imán leve: si al apuntar hay un enemigo cerca del centro de la pantalla (y se le ve),
+   * la mira se desliza un poco hacia él. Se nota, pero no apunta por ti.
+   */
+  private assistAim(dt: number) {
+    const g = this.game;
+    const npcs = g.mod.npcs?.list as Npc[] | undefined;
+    const cam = this.cam;
+    if (!npcs || !cam) return;
+    const p = this.player;
+    const camPos = g.camera.position;
+    const look = g.camera.getWorldDirection(tmpA);
+    let best: Npc | null = null;
+    let bestK = 1;
+    for (const n of npcs) {
+      if (!n.hostile || !n.alive || n.removed || n.vehicle) continue;
+      const dx = n.position.x - p.position.x, dz = n.position.z - p.position.z;
+      if (dx * dx + dz * dz > ASSIST_RANGE * ASSIST_RANGE) continue;
+      tmpB.set(n.position.x, n.position.y + (n.state === 'knocked' || n.state === 'taped' ? 0.4 : 1.15), n.position.z).sub(camPos);
+      const dist = tmpB.length();
+      if (dist < 1.5) continue;
+      const ang = Math.acos(Math.min(1, look.dot(tmpB) / dist));
+      // cono: unos grados más el tamaño del cuerpo a esa distancia
+      const cone = ASSIST_CONE + Math.atan(0.45 / dist);
+      const k = ang / cone;
+      if (k < bestK) {
+        bestK = k;
+        best = n;
+      }
+    }
+    if (!best) return;
+    tmpB.set(best.position.x, best.position.y + (best.state === 'knocked' || best.state === 'taped' ? 0.4 : 1.15), best.position.z);
+    const d = tmpB.sub(camPos);
+    const len = d.length();
+    if (g.physics.raycast(camPos, d, len - 0.5, SOLID)) return; // detrás de una pared: nada
+    d.divideScalar(len);
+    const wantYaw = Math.atan2(-d.x, -d.z);
+    const wantPitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+    let dy = wantYaw - cam.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    // más fuerte cuanto más centrado (así no «salta» de un enemigo a otro)
+    const pull = Math.min(1, dt * ASSIST_PULL * (1 - bestK * 0.6));
+    cam.yaw += dy * pull;
+    cam.pitch += (wantPitch - cam.pitch) * pull;
   }
 
   private startReload() {
@@ -357,8 +433,14 @@ export class Combat implements System {
         const knock = def.id === 'shotgun' ? 5 : def.id === 'rifle' ? 3 : 0;
         owner.hurt(def.damage, { cause: 'bala', shooter }, dir, knock);
       }
-      this.particles?.emit(def.mode === 'stamp' ? 'stamps' : 'cardboard', hit.point, { count: 3, dir: dir.clone().negate(), spread: 0.6, scale: 0.6 });
-      if (shooter.kind === 'player') g.events.emit('hitmarker' as any, { kill: !owner.alive } as any);
+      const back = tmpA.copy(dir).negate();
+      this.particles?.emit(def.mode === 'stamp' ? 'stamps' : 'cardboard', hit.point, { count: def.mode === 'stamp' ? 3 : 5, dir: back, spread: 0.6, scale: 0.6 });
+      if (def.mode !== 'stamp') this.particles?.emit('dust', hit.point, { count: 2, dir: back, scale: 0.45, life: 0.6 });
+      if (shooter.kind === 'player') {
+        g.events.emit('hitmarker' as any, { kill: !owner.alive } as any);
+        g.mod.audio?.play('wood', { pos: hit.point, volume: 0.3, pitch: 1.5 });
+        if (!owner.alive) this.particles?.emit('stars', hit.point, { count: 4 });
+      }
       return;
     }
     if (owner instanceof Vehicle) {
@@ -467,7 +549,7 @@ export class Combat implements System {
     );
     const mesh = new THREE.Mesh(fragileGeo, fragileMat);
     // cartel FRÁGIL (banda roja)
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.41, 0.08, 0.41), new THREE.MeshLambertMaterial({ color: '#e63946' }));
+    const band = new THREE.Mesh(fragileBandGeo, fragileBandMat);
     mesh.add(band);
     mesh.castShadow = true;
     this.game.scene.add(mesh);
@@ -511,7 +593,7 @@ export class Combat implements System {
         // el jugador también se lleva cajazos de la banda
         const p = this.player;
         if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && p.position.distanceTo(pr.pos) < 1.3 && !pr.hit.size) {
-          p.hurt(15, { cause: 'caja' });
+          p.hurt(15, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
           p.push.set(lv.x * 0.3, 3, lv.z * 0.3);
           pr.hit.add(null as any);
         }
@@ -532,7 +614,7 @@ export class Combat implements System {
             g.mod.audio?.play('shot_tape', { pos: hit.point, volume: 0.5, pitch: 0.7 });
           } else if (owner === this.player && pr.owner.kind === 'npc') {
             this.player.speedMul = 0.3;
-            setTimeout(() => (this.player.speedMul = 1), 2500);
+            this.tapedPlayer = 2.5;
             g.events.emit('toast', { text: '¡Te han precintado los pies!', time: 1.5 });
           } else {
             this.particles?.emit('tape', hit.point, { count: 4 });
@@ -568,12 +650,17 @@ export class Combat implements System {
     g.events.emit('weapon:shot' as any, { pos: pos.clone(), shooter: source, weapon: 'explosion' } as any);
     if (big) g.slowMo(0.8, 0.35);
     const npcs: Npc[] = g.mod.npcs?.within(pos, radius) ?? [];
+    let downed = 0;
     for (const n of [...npcs]) {
       const d = n.position.distanceTo(pos);
       const k = 1 - d / radius;
       const dir = n.position.clone().sub(pos).setY(0).normalize();
+      const was = n.alive && n.hostile;
       n.hurt(damage * k, { cause: 'explosión', shooter: source }, dir, 6 + k * 10);
+      if (was && !n.alive) downed++;
     }
+    // un paquete FRÁGIL que tumba a varios de golpe, cerca de ti: cámara lenta un instante
+    if (!big && downed >= 2 && this.player && this.player.position.distanceTo(pos) < 35) g.slowMo(0.55, 0.3);
     for (const v of g.mod.vehicles?.list ?? []) {
       const d = (v as Vehicle).getPosition(tmpV).distanceTo(pos);
       if (d < radius) {
@@ -594,7 +681,7 @@ export class Combat implements System {
           p.pose = 'knocked';
           p.poseTimer = 1;
         }
-        p.hurt(damage * 0.6 * k, { cause: 'explosión' });
+        p.hurt(damage * 0.6 * k, { cause: 'explosión', from: pos.clone() });
       }
     }
     g.mod.breakables?.explosion?.(pos, radius);

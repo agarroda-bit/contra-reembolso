@@ -370,7 +370,7 @@ export class Gang implements System {
     // si el jugador se para cerca, bajan a por él
     const pv = this.vm.current;
     const playerStopped = p.state === 'foot' || (pv && Math.abs(pv.speed) < 2);
-    if (dist < 12 && playerStopped) {
+    if ((dist < 12 && playerStopped) || (dist < 30 && c.unstick.tries > 0 && playerStopped)) {
       c.stopTimer += dt;
       if (c.stopTimer > 1.2) this.dismount(c);
     } else c.stopTimer = 0;
