@@ -20,6 +20,7 @@ export type PlayerState = 'foot' | 'vehicle' | 'dead' | 'busy';
 const tmpF = new THREE.Vector3();
 const tmpR = new THREE.Vector3();
 const tmpMove = new THREE.Vector3();
+const NO_MOVE = { x: 0, y: 0 } as const;
 
 export class Player implements System {
   name = 'player';
@@ -65,6 +66,8 @@ export class Player implements System {
   private lastGroundedTime = 0;
   private placeholder: THREE.Object3D | null = null;
   private landTimer = 0;
+  /** Parámetros de animación (se reutilizan: nada de objetos nuevos por frame). */
+  private readonly anim: CharacterAnimParams = { speed: 0, grounded: true, vy: 0, pose: 'normal', aiming: false, aimPitch: 0, weapon: 'none', shot: false, wobble: 0 };
 
   constructor(private game: Game, private makeRig?: (look: CharacterLook) => CharacterRig, look?: CharacterLook) {
     game.mod.player = this;
@@ -157,7 +160,7 @@ export class Player implements System {
       return;
     }
     // Entrada → dirección deseada relativa a la cámara
-    const ax = input.enabled ? input.moveAxis() : { x: 0, y: 0 };
+    const ax = input.enabled ? input.moveAxis() : NO_MOVE;
     const fwd = cam ? cam.forwardXZ(tmpF) : tmpF.set(0, 0, -1);
     const right = cam ? cam.rightXZ(tmpR) : tmpR.set(1, 0, 0);
     this.wantMove.set(0, 0, 0).addScaledVector(fwd, ax.y).addScaledVector(right, ax.x);
@@ -266,17 +269,17 @@ export class Player implements System {
     if (this.landTimer > 0) this.landTimer -= dt;
     if (this.rig && this.root.visible) {
       const hs = Math.hypot(this.velocity.x, this.velocity.z);
-      this.rig.update(dt, {
-        speed: this.state === 'foot' ? hs : 0,
-        grounded: this.grounded,
-        vy: this.vy,
-        pose: this.pose,
-        aiming: this.aiming,
-        aimPitch: this.aimPitch,
-        weapon: this.weaponKind,
-        shot: this.shotPulse,
-        wobble: this.wobble,
-      });
+      const a = this.anim;
+      a.speed = this.state === 'foot' ? hs : 0;
+      a.grounded = this.grounded;
+      a.vy = this.vy;
+      a.pose = this.pose;
+      a.aiming = this.aiming;
+      a.aimPitch = this.aimPitch;
+      a.weapon = this.weaponKind;
+      a.shot = this.shotPulse;
+      a.wobble = this.wobble;
+      this.rig.update(dt, a);
       this.shotPulse = false;
     }
     // HUD

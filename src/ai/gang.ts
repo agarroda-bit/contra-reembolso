@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import type { Npc } from '../actors/npc';
+import type { Poi } from '../core/contracts';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { VehicleManager } from '../vehicles/manager';
 import type { NpcManager } from '../actors/npcManager';
@@ -17,6 +18,8 @@ import { driveChaseCar, offscreen, type ChaseNav } from './police';
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+const tmpMuzzle = new THREE.Vector3();
+const tmpAim = new THREE.Vector3();
 /** Segundos de tregua tras reaparecer: las emboscadas que salgan cerca esperan apostadas sin atacar. */
 const TRUCE = 45;
 /** Radio de la tregua alrededor del punto de reaparición. */
@@ -97,8 +100,10 @@ export class Gang implements System {
   private get traffic(): Traffic | undefined {
     return this.game.mod.traffic;
   }
-  get hideout() {
-    return this.game.world.pois.find((p) => p.kind === 'hideout');
+  /** La guarida (se busca una vez: los sitios del mapa no cambian). */
+  private hideoutPoi: Poi | undefined;
+  get hideout(): Poi | undefined {
+    return (this.hideoutPoi ??= this.game.world.pois.find((p) => p.kind === 'hideout'));
   }
 
   /** Crea un miembro de la banda. */
@@ -341,7 +346,7 @@ export class Gang implements System {
       }
       if (!b.aggro && b.home && !m.busy && !m.vehicle) {
         // patrulla tranquila alrededor de su sitio
-        if (!m.target && rnd.next() < dt * 0.3) m.goTo(b.home.clone().add(new THREE.Vector3((rnd.next() - 0.5) * 8, 0, (rnd.next() - 0.5) * 8)));
+        if (!m.target && rnd.next() < dt * 0.3) m.goTo(tmpV.set(b.home.x + (rnd.next() - 0.5) * 8, b.home.y, b.home.z + (rnd.next() - 0.5) * 8));
       }
       updateCombatant(g, m, dt);
     }
@@ -354,7 +359,7 @@ export class Gang implements System {
       const c = chases[i];
       if (!c) continue;
       c.life += dt;
-      c.crew = c.crew.filter((n) => !n.removed);
+      dropRemoved(c.crew);
       if (c.van.disposed) {
         this.chases.splice(i, 1);
         continue;
@@ -367,7 +372,7 @@ export class Gang implements System {
         continue;
       }
       if (c.van.destroyed && !c.dismounted) this.dismount(c);
-      if (c.crew.every((n) => !n.alive) || c.life > 180 || c.van === this.vm.current) {
+      if (!anyAlive(c.crew) || c.life > 180 || c.van === this.vm.current) {
         // se acabó: la furgoneta se queda aparcada (te la puedes llevar) y los que queden van a pie
         if (!c.van.destroyed && c.van !== this.vm.current) {
           if (!c.dismounted) this.dismount(c);
@@ -435,19 +440,17 @@ export class Gang implements System {
 
     // disparos desde la ventanilla (el copiloto)
     c.fireTimer -= dt;
-    const shooter = c.crew.find((n) => n !== driver && n.alive);
+    let shooter: Npc | null = null;
+    for (const n of c.crew) if (n !== driver && n.alive) { shooter = n; break; }
     if (shooter && dist < 28 && c.fireTimer <= 0) {
       c.fireTimer = 1.3 + rnd.next() * 1.4;
       const combat = g.mod.combat;
-      const muzzle = van.localToWorld(new THREE.Vector3(-van.spec.half.x - 0.3, 0.5, 0.8), new THREE.Vector3());
-      const aim = target.clone();
+      const muzzle = van.localToWorld(tmpMuzzle.set(-van.spec.half.x - 0.3, 0.5, 0.8), tmpMuzzle);
+      const aim = tmpAim.copy(target);
       aim.y += 0.8;
       aim.x += (rnd.next() - 0.5) * 2;
       aim.z += (rnd.next() - 0.5) * 2;
-      if (combat) {
-        const def = npcWeapon('smg');
-        combat.fire({ kind: 'npc', npc: shooter, exclude: van.body }, def, muzzle, aim, 4 + dist / 6);
-      }
+      if (combat) combat.fire({ kind: 'npc', npc: shooter, exclude: van.body }, VAN_SMG, muzzle, aim, 4 + dist / 6);
     }
 
     // si el jugador se para cerca, bajan a por él
@@ -510,8 +513,18 @@ export class Gang implements System {
   }
 }
 
-/** Arma con el daño rebajado para los enemigos. */
-function npcWeapon(id: WeaponId) {
-  const d = WEAPONS[id];
-  return { ...d, damage: d.damage * 0.3 };
+/** Subfusil del copiloto de la furgoneta, con el daño rebajado para los enemigos (hecho una vez, no en cada ráfaga). */
+const VAN_SMG = { ...WEAPONS.smg, damage: WEAPONS.smg.damage * 0.3 };
+
+/** ¿Queda alguno en pie? (sin funciones nuevas en cada frame) */
+function anyAlive(list: Npc[]): boolean {
+  for (const n of list) if (n.alive) return true;
+  return false;
+}
+
+/** Quita de la lista los que ya no existen, sin crear una lista nueva. */
+function dropRemoved(list: Npc[]) {
+  let w = 0;
+  for (let i = 0; i < list.length; i++) if (!list[i].removed) list[w++] = list[i];
+  list.length = w;
 }

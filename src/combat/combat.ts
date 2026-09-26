@@ -51,6 +51,11 @@ const tmpO = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 
+/** Teclas 1-5 (cambio de arma por grupo). */
+const SLOT_ACTIONS = ['weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5'] as const;
+/** «Subfusil (recargando…)» ya hecho (no se pega el texto en cada frame). */
+const RELOAD_NAME = Object.fromEntries(WEAPON_ORDER.map((w) => [w, WEAPONS[w].name + ' (recargando…)'])) as Record<WeaponId, string>;
+
 /** Daño al jugador de cada caja del lanzapaquetes de un enemigo (antes 12: era el arma de casi todas las muertes). */
 const PACKAGE_HIT_PLAYER = 7;
 
@@ -83,6 +88,10 @@ export class Combat implements System {
   /** Trazadoras libres (se reutilizan: nada de mallas nuevas en cada disparo). */
   private tracerPool: THREE.Mesh[] = [];
   private wheelTimer = 0;
+  /** Armas que tienes, en orden (se rehace al girar la rueda). */
+  private readonly wheelList: WeaponId[] = [];
+  /** Datos del arma para el HUD (se reutilizan). */
+  private readonly hudWeapon = { name: '', icon: '', clip: 0, reserve: 0, infinite: false };
   /** Segundos que le quedan al jugador con los pies precintados (cinta de la banda). */
   private tapedPlayer = 0;
   /** Sin munición infinita salvo trucos. */
@@ -190,16 +199,17 @@ export class Combat implements System {
 
     // cambio de arma
     if (canAct) {
-      (['weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5'] as const).forEach((a, i) => {
-        if (input.pressed(a)) this.selectSlot(i + 1, inVehicle);
-      });
+      for (let i = 0; i < SLOT_ACTIONS.length; i++) if (input.pressed(SLOT_ACTIONS[i])) this.selectSlot(i + 1, inVehicle);
       if (input.wheel !== 0) {
         this.cycle(input.wheel > 0 ? 1 : -1, inVehicle);
         this.wheelTimer = 1.2;
+        // (la lista se hace al girar la rueda, no en cada frame)
+        this.wheelList.length = 0;
+        for (const w of WEAPON_ORDER) if (this.owned.has(w)) this.wheelList.push(w);
       }
     }
     if (this.wheelTimer > 0) this.wheelTimer -= dt;
-    (g.hud as any).weaponWheel = this.wheelTimer > 0 ? WEAPON_ORDER.filter((w) => this.owned.has(w)) : null;
+    (g.hud as any).weaponWheel = this.wheelTimer > 0 ? this.wheelList : null;
     if (inVehicle && !WEAPONS[this.current].driveBy && this.current !== 'fists') this.select('fists');
 
     const def = WEAPONS[this.current];
@@ -249,17 +259,17 @@ export class Combat implements System {
       }
     }
 
-    g.hud.weapon =
-      this.current === 'fists' && this.owned.size === 1
-        ? null
-        : {
-            name: def.name,
-            icon: def.icon,
-            clip: def.clip > 0 ? a.clip : 0,
-            reserve: def.clip > 0 ? a.reserve : 0,
-            infinite: def.clip === 0 || this.infiniteAmmo,
-          };
-    if (this.reloading > 0 && g.hud.weapon) g.hud.weapon.name = def.name + ' (recargando…)';
+    // (el mismo objeto cada frame: el HUD compara los valores, no el objeto)
+    if (this.current === 'fists' && this.owned.size === 1) g.hud.weapon = null;
+    else {
+      const hw = this.hudWeapon;
+      hw.name = this.reloading > 0 ? RELOAD_NAME[def.id] : def.name;
+      hw.icon = def.icon;
+      hw.clip = def.clip > 0 ? a.clip : 0;
+      hw.reserve = def.clip > 0 ? a.reserve : 0;
+      hw.infinite = def.clip === 0 || this.infiniteAmmo;
+      g.hud.weapon = hw;
+    }
 
     if (this.tapedPlayer > 0) {
       this.tapedPlayer -= dt;

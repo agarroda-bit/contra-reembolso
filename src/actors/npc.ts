@@ -20,6 +20,8 @@ const tmpV2 = new THREE.Vector3();
 const tmpO = new THREE.Vector3();
 const tmpD = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
+/** Parámetros de animación, reutilizados por todos (rig.update no se los guarda): nada de objetos nuevos por frame. */
+const ANIM: CharacterAnimParams = { speed: 0, grounded: true, vy: 0, pose: 'normal', aiming: false, weapon: 'none', shot: false };
 /** Contra qué no se puede andar (edificios, muros y coches). */
 const WALK_BLOCK = G.STATIC | G.VEHICLE;
 let nextId = 1;
@@ -406,15 +408,15 @@ export class Npc implements NpcDriver {
     // animación (lejos, a medio ritmo)
     this.animSkip++;
     if (!far || this.animSkip % 3 === 0) {
-      this.rig.update(far ? dt * 3 : dt, {
-        speed,
-        grounded,
-        vy: this.vy,
-        pose,
-        aiming: this.aiming,
-        weapon: this.weapon,
-        shot: this.shotPulse,
-      });
+      const a = ANIM;
+      a.speed = speed;
+      a.grounded = grounded;
+      a.vy = this.vy;
+      a.pose = pose;
+      a.aiming = this.aiming;
+      a.weapon = this.weapon;
+      a.shot = this.shotPulse;
+      this.rig.update(far ? dt * 3 : dt, a);
       this.shotPulse = false;
     }
   }

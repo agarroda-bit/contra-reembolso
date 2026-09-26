@@ -31,6 +31,18 @@ const KEYMAP: Record<string, Action[]> = {
 
 const PREVENT = new Set(['Tab', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
+/** Botones del mando (posición = número de botón estándar). */
+const GAMEPAD_MAP: Action[] = [
+  'jump', 'vehicle', 'interact', 'reload',
+  'radioPrev', 'radioNext', 'aim', 'fire',
+  'map', 'pause', 'sprint', 'horn', 'phone',
+];
+
+/** Zona muerta de los sticks. */
+function deadZone(v: number): number {
+  return Math.abs(v) < 0.15 ? 0 : v;
+}
+
 export class Input {
   /** Si es false, el juego no recibe teclas (menús abiertos). Los menús leen el DOM directamente. */
   enabled = true;
@@ -157,7 +169,10 @@ export class Input {
     return this.keysHeld.has(code);
   }
 
-  /** Eje de movimiento: x derecha, y adelante, en [-1, 1]. */
+  /**
+   * Eje de movimiento: x derecha, y adelante, en [-1, 1]. Devuelve siempre el mismo objeto
+   * (se lee al momento; no hay que guardarlo).
+   */
   moveAxis(): { x: number; y: number } {
     let x = (this.down('right') ? 1 : 0) - (this.down('left') ? 1 : 0);
     let y = (this.down('forward') ? 1 : 0) - (this.down('back') ? 1 : 0);
@@ -165,8 +180,11 @@ export class Input {
       x = this.gamepadMove.x;
       y = this.gamepadMove.y;
     }
-    return { x, y };
+    this.axis.x = x;
+    this.axis.y = y;
+    return this.axis;
   }
+  private readonly axis = { x: 0, y: 0 };
 
   releaseAll() {
     for (const a of [...this.held]) this.set(a, false);
@@ -178,22 +196,16 @@ export class Input {
     if (this.gamepadIndex === null) return;
     const gp = navigator.getGamepads?.()[this.gamepadIndex];
     if (!gp) return;
-    const dz = (v: number) => (Math.abs(v) < 0.15 ? 0 : v);
-    this.gamepadMove.x = dz(gp.axes[0] ?? 0);
-    this.gamepadMove.y = -dz(gp.axes[1] ?? 0);
-    const lx = dz(gp.axes[2] ?? 0);
-    const ly = dz(gp.axes[3] ?? 0);
+    this.gamepadMove.x = deadZone(gp.axes[0] ?? 0);
+    this.gamepadMove.y = -deadZone(gp.axes[1] ?? 0);
+    const lx = deadZone(gp.axes[2] ?? 0);
+    const ly = deadZone(gp.axes[3] ?? 0);
     if (lx || ly || this.gamepadMove.x || this.gamepadMove.y) this.usingGamepad = true;
     this.lookDX += lx * 900 * dt;
     this.lookDY += ly * 600 * dt;
-    const b = (i: number) => !!gp.buttons[i]?.pressed;
-    const map: [number, Action][] = [
-      [0, 'jump'], [1, 'vehicle'], [2, 'interact'], [3, 'reload'],
-      [4, 'radioPrev'], [5, 'radioNext'], [6, 'aim'], [7, 'fire'],
-      [8, 'map'], [9, 'pause'], [10, 'sprint'], [11, 'horn'], [12, 'phone'],
-    ];
-    for (const [i, a] of map) {
-      const pressed = b(i);
+    for (let i = 0; i < GAMEPAD_MAP.length; i++) {
+      const a = GAMEPAD_MAP[i];
+      const pressed = !!gp.buttons[i]?.pressed;
       if (pressed !== this.held.has(a) && this.gamepadOwns(a, pressed)) this.set(a, pressed);
     }
   }

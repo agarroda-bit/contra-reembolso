@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import type { Npc } from '../actors/npc';
+import type { Poi } from '../core/contracts';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { VehicleManager } from '../vehicles/manager';
 import type { NpcManager } from '../actors/npcManager';
@@ -35,6 +36,7 @@ const tmpV2 = new THREE.Vector3();
 const tmpE = new THREE.Vector3();
 const tmpT = new THREE.Vector3();
 const tmpF = new THREE.Vector3();
+const tmpS = new THREE.Vector3();
 
 interface Unit extends ChaseNav {
   car: Vehicle;
@@ -174,6 +176,8 @@ export class Police implements System {
   private roads: Roads;
   private roadblockTimer = 10;
   private paintCooldown = 0;
+  /** Taller de pintura (se busca una vez). */
+  private paintPoi: Poi | null | undefined;
   /** Calor que aún pueden dar los disparos ahora mismo (se recarga poco a poco: ver SHOT_HEAT_MAX). */
   private shotBudget = SHOT_HEAT_MAX;
 
@@ -291,25 +295,27 @@ export class Police implements System {
 
   /** ¿Algún policía (a pie o en coche) ve este punto? */
   seesPoint(pt: THREE.Vector3, maxDist = 60): boolean {
-    const target = tmpT.copy(pt).setY(pt.y + 1);
-    const look = (e: THREE.Vector3) => {
-      const d = e.distanceTo(target);
-      if (d > maxDist) return false;
-      const dir = tmpV2.copy(target).sub(e);
-      return !this.game.physics.raycast(e, dir, d - 0.8, SOLID);
-    };
+    const target = tmpS.copy(pt).setY(pt.y + 1);
     for (const o of this.officers) {
       if (!o.alive || o.vehicle || o.busy) continue;
-      if (look(tmpE.copy(o.position).setY(o.position.y + 1.6))) return true;
+      if (this.look(tmpE.copy(o.position).setY(o.position.y + 1.6), target, maxDist)) return true;
     }
     for (const u of this.units) {
       // solo cuentan los coches con un policía al volante (no el que conduces tú ni uno vacío)
       if (u.car.destroyed || u.car.disposed || u.car === this.vm.current || u.car.driver?.kind !== 'npc') continue;
       const e = u.car.getPosition(tmpE);
       e.y += 0.8;
-      if (look(e)) return true;
+      if (this.look(e, target, maxDist)) return true;
     }
     return false;
+  }
+
+  /** ¿Desde `eye` se ve `target` (a menos de maxDist y sin paredes en medio)? */
+  private look(eye: THREE.Vector3, target: THREE.Vector3, maxDist: number): boolean {
+    const d = eye.distanceTo(target);
+    if (d > maxDist) return false;
+    const dir = tmpV2.copy(target).sub(eye);
+    return !this.game.physics.raycast(eye, dir, d - 0.8, SOLID);
   }
 
   /** Borra la búsqueda y retira a la policía. */
@@ -525,16 +531,18 @@ export class Police implements System {
     // unidades
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
-      u.crew = u.crew.filter((n) => !n.removed);
+      dropRemoved(u.crew);
       if (u.car.disposed) {
         // el coche ya no existe: los agentes siguen a pie
         for (const n of u.crew) if (!this.officers.includes(n)) this.officers.push(n);
         this.units.splice(i, 1);
         continue;
       }
-      const alive = u.crew.some((n) => n.alive);
+      let alive = false;
+      for (const n of u.crew) if (n.alive) alive = true;
       const carIsMine = u.car === this.vm.current;
-      const ref = carIsMine ? u.crew.find((n) => !n.removed)?.position ?? p.position : u.car.getPosition(tmpV);
+      // (tras dropRemoved, el primero de la tripulación es uno que sigue existiendo)
+      const ref = carIsMine ? u.crew[0]?.position ?? p.position : u.car.getPosition(tmpV);
       const far = ref.distanceTo(p.position) > 220;
       if (far) {
         this.despawnUnit(u);
@@ -665,7 +673,8 @@ export class Police implements System {
     const g = this.game;
     const v = this.vm?.current;
     if (!v || this.paintCooldown > 0) return;
-    const poi = g.world.pois.find((x) => x.kind === 'paint');
+    // (se busca una vez: los sitios del mapa no cambian)
+    const poi = (this.paintPoi ??= g.world.pois.find((x) => x.kind === 'paint') ?? null);
     if (!poi) return;
     if (v.getPosition(tmpV).distanceTo(poi.door) > 7) return;
     if (Math.abs(v.speed) > 6) return;
@@ -685,6 +694,13 @@ export class Police implements System {
     this.clear();
     g.events.emit('toast', { text: `¡Pintado nuevo por ${price} €! La policía ya no te reconoce.`, color: c, time: 3 });
   }
+}
+
+/** Quita de la lista los que ya no existen, sin crear una lista nueva. */
+function dropRemoved(list: Npc[]) {
+  let w = 0;
+  for (let i = 0; i < list.length; i++) if (!list[i].removed) list[w++] = list[i];
+  list.length = w;
 }
 
 /** Cambia el color de la carrocería (recolorea los vértices del color antiguo). */

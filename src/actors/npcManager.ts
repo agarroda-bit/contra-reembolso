@@ -8,6 +8,7 @@ import type { VehicleManager } from '../vehicles/manager';
 const tmpV = new THREE.Vector3();
 const tmpL = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
+const tmpK = new THREE.Vector3();
 
 export class NpcManager implements System {
   name = 'npcs';
@@ -92,7 +93,7 @@ export class NpcManager implements System {
         // ¡atropello!
         const lv = v.body.linvel();
         const side = Math.sign(tmpL.x) || 1;
-        const kick = new THREE.Vector3(lv.x * 0.85, 0, lv.z * 0.85);
+        const kick = tmpK.set(lv.x * 0.85, 0, lv.z * 0.85);
         // un poco hacia el lado para que salga rodando y no quede debajo
         kick.x += Math.cos(v.heading) * side * 3;
         kick.z += -Math.sin(v.heading) * side * 3;

@@ -48,6 +48,8 @@ export interface CombatBrain {
   unseenFor: number;
   /** Ha perdido el interés: se va (y la banda lo retira cuando nadie lo ve). */
   bored: boolean;
+  /** Vector propio para `goal` al apartarse a quemarropa. */
+  goalBuf?: THREE.Vector3;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
@@ -79,6 +81,7 @@ const tmpMuzzle = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
+const tmpAway = new THREE.Vector3();
 
 export function makeCombatBrain(side: 'police' | 'gang', weapon: WeaponId): CombatBrain {
   return {
@@ -263,14 +266,15 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
     case 'engage':
       // con arma de fuego, a quemarropa no: se aparta unos pasos (disparando) y luego sigue
       if (def.mode !== 'melee' && dist < 3.5) {
-        const away = new THREE.Vector3().copy(npc.position).sub(target).setY(0);
+        const away = tmpAway.copy(npc.position).sub(target).setY(0);
         if (away.lengthSq() < 0.01) away.set(rnd.next() - 0.5, 0, rnd.next() - 0.5);
         const side = tmpDir.set(-away.z, 0, away.x).normalize().multiplyScalar(rnd.next() < 0.5 ? -2 : 2);
         away.normalize().multiplyScalar(3.5).add(side).add(npc.position);
         if (reachable(game, npc.position, away)) {
           away.y = game.world.heightAt(away.x, away.z);
           b.mode = 'flank';
-          b.goal = away;
+          // (vector propio del cerebro: nada de uno nuevo cada vez que se aparta)
+          b.goal = (b.goalBuf ??= new THREE.Vector3()).copy(away);
           b.modeTimer = 1;
           break;
         }

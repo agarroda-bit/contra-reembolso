@@ -31,6 +31,8 @@ export class CombatHud implements System {
   private hit: HTMLDivElement;
   private arrest: HTMLDivElement;
   private shownList = '';
+  private shownCurrent = '';
+  private shownCount = -1;
   private hitTimer = 0;
   /** Flechas de «te disparan desde aquí» (se reutilizan). */
   private dirs: { el: HTMLDivElement; from: THREE.Vector3; t: number }[] = [];
@@ -105,9 +107,12 @@ export class CombatHud implements System {
     }
     // rueda de armas
     const c = g.mod.combat;
-    if (c) {
+    // (solo se rehace si cambia el arma o cuántas tienes: nada de listas ni textos nuevos en cada frame)
+    if (c && (c.current !== this.shownCurrent || c.owned.size !== this.shownCount || this.shownList === '')) {
       const owned = [...c.owned] as WeaponId[];
       const key = owned.join(',') + '|' + c.current;
+      this.shownCurrent = c.current;
+      this.shownCount = c.owned.size;
       if (key !== this.shownList) {
         this.shownList = key;
         this.wheel.innerHTML = '';
