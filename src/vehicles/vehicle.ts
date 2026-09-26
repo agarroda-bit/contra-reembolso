@@ -299,7 +299,8 @@ export class Vehicle {
       }
     } else {
       if (this.airborne) this.setAirborne(false);
-      if (this.airTime > 0.6) this.game.events.emit('vehicle:landed' as any, { vehicle: this, air: this.airTime } as any);
+      // air = segundos en el aire; fall = velocidad vertical al tocar el suelo (m/s), mejor medida del golpe
+      if (this.airTime > 0.6) this.game.events.emit('vehicle:landed' as any, { vehicle: this, air: this.airTime, fall: Math.max(0, -this.prevVel.y) } as any);
       this.airTime = 0;
       // carga aerodinámica: pega al suelo a alta velocidad
       const down = Math.min(absSpeed, 50) * mass * 0.12;
