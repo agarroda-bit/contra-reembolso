@@ -70,7 +70,7 @@ const FILAS: { id: string; s: Sim[]; t?: string; m: number; malo?: boolean }[] =
   { id: 'B', s: ['B', 'B', 'B'], m: TRIO.B },
   { id: 'P', s: ['P', 'P', 'P'], m: TRIO.P },
   { id: 'C', s: ['C', 'C', 'C'], m: TRIO.C },
-  { id: 'lujo', s: ['M', 'S', '7'], t: 'Mezcla de lujo', m: LUJO },
+  { id: 'lujo', s: ['M', 'S', '7'], t: 'Mezcla: tres cualesquiera de estos', m: LUJO },
   { id: 'c2', s: ['C', 'C'], t: 'Dos cerezas', m: DOS_CEREZAS },
   { id: 'c1', s: ['C'], t: 'Una cereza: recuperas', m: UNA_CEREZA },
   { id: 'anulado', s: ['D', 'C'], t: 'Un Devuelto se lleva las cerezas', m: 0, malo: true },

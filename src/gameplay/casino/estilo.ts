@@ -25,8 +25,8 @@ const CSS = `
 .cc-neon{font:900 italic 30px/1 system-ui;color:#fff;letter-spacing:.5px;white-space:nowrap;
   text-shadow:0 0 3px #fff,0 0 9px #ff4f81,0 0 18px #ff4f81,0 0 34px #ff4f81;animation:cc-parpadeo 7s infinite}
 @keyframes cc-parpadeo{0%,18%,20.5%,63%,65%,100%{opacity:1}19%,64%{opacity:.45}}
-.cc-seccion{font:900 18px system-ui;color:#ffd23f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cc-derecha{margin-left:auto;display:flex;align-items:center;gap:8px}
+.cc-seccion{flex:1 1 auto;min-width:0;font:900 18px system-ui;color:#ffd23f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-derecha{flex:none;margin-left:auto;display:flex;align-items:center;gap:8px}
 .cc-pill{background:#fff7e6;border:3px solid #ffd23f;border-radius:14px;padding:3px 12px;font:900 18px/1.05 system-ui;color:#1b1030;min-width:92px;text-align:right;white-space:nowrap}
 .cc-pill small{display:block;font:800 10px/1.2 system-ui;opacity:.6;text-transform:uppercase;letter-spacing:.6px}
 .cc-pill.total{background:#ffd23f;border-color:#fff7e6}
@@ -50,6 +50,20 @@ const CSS = `
 /* pie con teclas */
 .cc-teclas{position:relative;z-index:3;height:34px;flex:none;display:flex;align-items:center;justify-content:center;gap:18px;background:rgba(27,16,48,.92);color:#fff7e6;font:700 13px system-ui;border-top:3px solid #ffd23f;white-space:nowrap;overflow:hidden}
 .cc-teclas kbd{color:#ffd23f;background:#2b1d4a;margin-right:5px}
+/* ventanas estrechas: la barra de arriba y el pie encogen para que no se corte «Salir» */
+@media (max-width:1180px){
+  .cc-barra{gap:10px;padding:0 12px}
+  .cc-neon{font-size:24px}
+  .cc-seccion{font-size:15px}
+  .cc-pill{min-width:74px;font-size:16px;padding:3px 9px}
+  .cc-mini{padding:0 9px;font-size:13px}
+  .cc-teclas{gap:12px;font-size:11.5px}
+  .cc-teclas kbd{font-size:10px;padding:0 4px;margin-right:4px}
+}
+@media (max-width:900px){
+  .cc-neon{display:none}
+  .cc-teclas{gap:8px;font-size:10.5px}
+}
 
 /* escena escalable */
 .cc-main{position:relative;z-index:1;flex:1;min-height:0}
@@ -224,6 +238,7 @@ const CSS = `
 .cc-ru-num{width:66px;height:66px;border-radius:50%;border:4px solid #1b1030;display:flex;align-items:center;justify-content:center;font:900 32px system-ui;color:#fff;box-shadow:4px 4px 0 rgba(12,4,22,.55);background:#2b1d4a}
 .cc-ru-num.rojo{background:#d7263d}.cc-ru-num.negro{background:#1b1030;border-color:#ffd23f}.cc-ru-num.verde{background:#0aa36b}
 .cc-ru-num.nuevo{animation:cc-pop .5s cubic-bezier(.2,1.8,.4,1)}
+.cc-ru-num.girando{background:#6c3bd1;border-color:#ffd23f;animation:cc-late .6s infinite}
 .cc-ru-txt{background:#fff7e6;border:3px solid #1b1030;border-radius:14px;padding:6px 12px;font:900 16px/1.2 system-ui;box-shadow:4px 4px 0 rgba(12,4,22,.55);max-width:320px}
 .cc-ru-txt small{display:block;font:700 12px system-ui;opacity:.65}
 .cc-ru-historial{position:absolute;left:14px;top:530px;width:430px}
@@ -276,7 +291,8 @@ const CSS = `
 .cc-bj-total{position:absolute;min-width:46px;height:40px;padding:0 10px;border-radius:20px;border:3px solid #1b1030;background:#fff7e6;font:900 21px/34px system-ui;text-align:center;box-shadow:3px 3px 0 rgba(0,0,0,.35);transition:opacity .2s;box-sizing:border-box}
 .cc-bj-total.pasa{background:#ff4f81;color:#fff}.cc-bj-total.bj{background:#ffd23f}
 .cc-bj-total small{font:800 11px system-ui;opacity:.6;margin-left:3px}
-.cc-bj-etq{position:absolute;font:900 13px system-ui;color:#fff7e6;letter-spacing:2px;text-transform:uppercase;opacity:.8}
+.cc-bj-etq{position:absolute;font:900 13px system-ui;color:#fff7e6;letter-spacing:2px;text-transform:uppercase;text-shadow:2px 2px 0 rgba(12,4,22,.6);transition:opacity .2s;white-space:nowrap}
+.cc-bj-etq.tu{color:#ffd23f}
 .cc-circulo{position:absolute;left:545px;top:488px;width:110px;height:110px;border-radius:50%;border:4px dashed rgba(255,247,230,.7);display:flex;align-items:flex-end;justify-content:center}
 .cc-circulo .cc-monton{margin-bottom:34px}
 .cc-circulo .vacio{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;font:900 12px system-ui;color:#fff7e6;opacity:.75}

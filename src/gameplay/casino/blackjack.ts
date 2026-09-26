@@ -2,7 +2,7 @@
 // la banca pide hasta 16 y se planta con 17 (también con 17 blando), blackjack paga 3 a 2,
 // empate devuelve la apuesta. Sin seguro ni separar (decisión: más sencillo y más rápido).
 import { ajustes, boton, crearFicha, crearMonton, Crupier, el, elegir, esperar, FICHAS, fmt, frase } from './comun';
-import { crearCartaEl, nombreCarta, valorCarta, type Carta } from './cartas';
+import { crearCartaEl, nombreCarta, tituloCarta, valorCarta, type Carta } from './cartas';
 import type { CtxCasino, PantallaCasino } from './tipos';
 
 // ─────────────────────────────── Reglas ───────────────────────────────
@@ -117,6 +117,8 @@ export class Blackjack implements PantallaCasino {
   private crupier: Crupier;
   private totJ: HTMLDivElement;
   private totB: HTMLDivElement;
+  private etqJ: HTMLDivElement;
+  private etqB: HTMLDivElement;
   private circulo: HTMLDivElement;
   private acciones: HTMLDivElement;
   private cartel: HTMLDivElement;
@@ -147,7 +149,10 @@ export class Blackjack implements PantallaCasino {
     this.el.appendChild(cru);
     this.totB = el('div', 'cc-bj-total');
     this.totJ = el('div', 'cc-bj-total');
-    this.el.append(this.totB, this.totJ);
+    // etiquetas para que se vea de un vistazo qué mano es de quién
+    this.etqB = el('div', 'cc-bj-etq', 'Banca');
+    this.etqJ = el('div', 'cc-bj-etq tu', 'Tú');
+    this.el.append(this.totB, this.totJ, this.etqB, this.etqJ);
     this.circulo = el('div', 'cc-circulo');
     this.el.appendChild(this.circulo);
     // fichas
@@ -357,6 +362,7 @@ export class Blackjack implements PantallaCasino {
     const d = this.cartasB[1];
     if (d?.classList.contains('oculta')) {
       d.classList.remove('oculta');
+      if (this.banca[1]) d.title = tituloCarta(this.banca[1]);
       this.ctx.sonido.play('card', { pitch: 1.2 });
     }
     this.pintarTotales();
@@ -582,16 +588,18 @@ export class Blackjack implements PantallaCasino {
   }
 
   private pintarTotales() {
-    const pinta = (tot: HTMLDivElement, mano: Carta[], y: number, banca: boolean) => {
+    const pinta = (tot: HTMLDivElement, etq: HTMLDivElement, mano: Carta[], y: number, banca: boolean) => {
       if (!mano.length) {
-        tot.style.opacity = '0';
+        tot.style.opacity = etq.style.opacity = '0';
         return;
       }
-      tot.style.opacity = '1';
+      tot.style.opacity = etq.style.opacity = '1';
       const n = mano.length;
       const x0 = CX - (ANCHO + (n - 1) * PASO) / 2;
-      tot.style.left = x0 - 70 + 'px';
+      // la pastilla del total, a la izquierda de las cartas, y encima su etiqueta
+      tot.style.right = etq.style.right = 1200 - (x0 - 14) + 'px';
       tot.style.top = y + 50 + 'px';
+      etq.style.top = y + 26 + 'px';
       tot.className = 'cc-bj-total';
       if (banca && this.oculta) {
         tot.textContent = valorCarta(mano[0]) + ' + ?';
@@ -606,8 +614,8 @@ export class Blackjack implements PantallaCasino {
         tot.classList.add('pasa');
       } else tot.textContent = blanda && t < 21 ? `${t - 10}/${t}` : String(t);
     };
-    pinta(this.totB, this.banca, Y_BANCA, true);
-    pinta(this.totJ, this.jugador, Y_JUGADOR, false);
+    pinta(this.totB, this.etqB, this.banca, Y_BANCA, true);
+    pinta(this.totJ, this.etqJ, this.jugador, Y_JUGADOR, false);
   }
 
   private pintarZapato() {
@@ -655,10 +663,17 @@ export class Blackjack implements PantallaCasino {
     return this.estado === 'reparto' || this.estado === 'jugador' || this.estado === 'banca';
   }
 
+  avisoOcupado(): string {
+    return this.estado === 'jugador'
+      ? 'Primero acaba la mano, que las cartas no se quedan a medias: pide (P), plántate (S) o dobla (D).'
+      : '¡Quieto parado! Espera a que termine la mano.';
+  }
+
   tick() {}
 
   tecla(e: KeyboardEvent): boolean {
-    if (e.repeat && e.code !== 'KeyP') return true;
+    // tecla mantenida: nada (si no, dejar la P pulsada pediría cartas hasta pasarse)
+    if (e.repeat) return true;
     switch (e.code) {
       case 'Space':
       case 'Enter':
@@ -667,11 +682,9 @@ export class Blackjack implements PantallaCasino {
         else if (this.estado === 'jugador' && e.code !== 'Space') this.plantarse();
         return true;
       case 'KeyP':
-      case 'ArrowUp':
         this.pedir();
         return true;
       case 'KeyS':
-      case 'ArrowDown':
         this.plantarse();
         return true;
       case 'KeyD':

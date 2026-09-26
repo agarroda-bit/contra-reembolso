@@ -37,6 +37,11 @@ export function nombreCarta(c: Carta): string {
   return RANGOS[c.r] + PALOS[c.p];
 }
 
+/** Texto de ayuda al pasar el ratón («K de picas»). */
+export function tituloCarta(c: Carta): string {
+  return `${RANGOS[c.r]} de ${NOMBRE_PALO[c.p]}`;
+}
+
 /** Crea el elemento de una carta (boca abajo si `oculta`). */
 export function crearCartaEl(c: Carta, oculta = false): HTMLDivElement {
   const roja = c.p === 1 || c.p === 2;
@@ -58,6 +63,7 @@ export function crearCartaEl(c: Carta, oculta = false): HTMLDivElement {
       <div class="esq a"><span>${rango}</span><i>${palo}</i></div>${centro}
       <div class="esq b"><span>${rango}</span><i>${palo}</i></div></div>
     <div class="dorso"><i>📦</i></div></div>`;
-  d.title = `${rango} de ${NOMBRE_PALO[c.p]}`;
+  // boca abajo no lleva título: si no, al pasar el ratón se chivaría la carta tapada
+  if (!oculta) d.title = tituloCarta(c);
   return d;
 }

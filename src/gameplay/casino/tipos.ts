@@ -32,6 +32,8 @@ export interface PantallaCasino {
   readonly titulo: string;
   /** Hay una jugada en marcha (no se puede salir). */
   ocupado(): boolean;
+  /** Lo que dice el crupier si intentas salir a mitad de jugada (opcional). */
+  avisoOcupado?(): string;
   /** Tecla pulsada: devuelve true si la ha usado. */
   tecla(e: KeyboardEvent): boolean;
   tick(dt: number): void;

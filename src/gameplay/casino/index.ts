@@ -143,6 +143,8 @@ export class Casino {
     this.quitarMoney = null;
     this.confeti.parar();
     this.sonido.pararMusica();
+    // que la bola de la ruleta (o las monedas) no sigan sonando en la calle
+    this.sonido.silenciar();
     this.root.remove();
     this.root = null;
     const p = this.previo;
@@ -180,7 +182,7 @@ export class Casino {
   atras() {
     if (!this.root) return;
     if (this.pantalla?.ocupado()) {
-      this.decir('¡Quieto parado! Espera a que termine la jugada.', 'aviso');
+      this.decir(this.pantalla.avisoOcupado?.() ?? '¡Quieto parado! Espera a que termine la jugada.', 'aviso');
       this.sonido.play('error');
       return;
     }

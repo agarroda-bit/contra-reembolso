@@ -26,6 +26,9 @@ export class SonidoCasino {
   vivas = 0;
   creadas = 0;
   private ultimoTic = 0;
+  /** Bus propio de los efectos del casino (para poder callarlos todos de golpe al salir). */
+  private bus: GainNode | null = null;
+  private busCtx: AudioContext | null = null;
 
   constructor(private game: Game) {}
 
@@ -63,10 +66,37 @@ export class SonidoCasino {
   // ─────────── utilidades ───────────
 
   private salida(ctx: AudioContext, vol: number): GainNode {
+    if (!this.bus || this.busCtx !== ctx) {
+      this.bus = ctx.createGain();
+      this.bus.connect(this.audio!.sfxBus);
+      this.busCtx = ctx;
+    }
     const g = ctx.createGain();
     g.gain.value = vol;
-    g.connect(this.audio!.sfxBus);
+    g.connect(this.bus);
     return g;
+  }
+
+  /** Apaga en seco (fundido corto) los efectos propios que sigan sonando: la bola, monedas… */
+  silenciar() {
+    const b = this.bus;
+    const c = this.busCtx;
+    this.bus = null;
+    this.busCtx = null;
+    if (!b || !c) return;
+    try {
+      b.gain.setValueAtTime(b.gain.value, c.currentTime);
+      b.gain.linearRampToValueAtTime(0.0001, c.currentTime + 0.15);
+    } catch {
+      /* nada */
+    }
+    setTimeout(() => {
+      try {
+        b.disconnect();
+      } catch {
+        /* nada */
+      }
+    }, 300);
   }
 
   private seguir(src: AudioScheduledSourceNode) {

@@ -774,6 +774,10 @@ export class Ruleta implements PantallaCasino {
       return prom;
     }
     this.tray = simular(this.phi0, idx);
+    // mientras rueda no se enseña el número anterior (confundía: parecía el de esta tirada)
+    this.numEl.className = 'cc-ru-num girando';
+    this.numEl.textContent = '?';
+    this.txtEl.innerHTML = '¡No va más!<small>La bolita está rodando…</small>';
     c.decir(elegir(['¡No va más! Ahí va la bolita…', 'Hagan juego… ¡no va más!', 'Rueda, rueda, bolita loca…', '¡Allá que va! Cruzamos los dedos.']));
     c.sonido.bolaRuleta(this.tray.tCaida + 0.5, this.tray.golpes);
     c.sonido.play('whoosh', { volume: 0.5 });
