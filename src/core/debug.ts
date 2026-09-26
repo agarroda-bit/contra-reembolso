@@ -4,6 +4,7 @@ import type { Game } from './game';
 
 export function installDebug(game: Game) {
   (window as any).__cr = game;
+  (window as any).THREE = THREE;
   if (!game.debug) return;
   const panel = document.createElement('div');
   panel.id = 'debug-panel';
