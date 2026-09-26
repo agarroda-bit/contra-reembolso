@@ -3,6 +3,9 @@
 import * as THREE from 'three';
 import type { Game } from './game';
 
+/** Nombre con el que game.ts apunta cada paso de física. */
+const PHYSICS = 'física (Rapier)';
+
 /** Tiempos acumulados de un tramo (se reinicia cuando se quiere medir desde cero). */
 class PerfWindow {
   frames = 0;
@@ -19,10 +22,12 @@ class PerfWindow {
   gpuSamples = 0;
   calls = 0;
   tris = 0;
+  /** Pasos de física (a 60 fps, uno por frame; a 30 fps, dos: la lógica fija cuesta el doble por frame). */
+  steps = 0;
   readonly sys = new Float64Array(256);
 
   reset() {
-    this.frames = this.interval = this.maxInterval = this.hitches = 0;
+    this.frames = this.interval = this.maxInterval = this.hitches = this.steps = 0;
     this.cpu = this.maxCpu = this.renderCpu = this.gpu = this.gpuSamples = this.calls = this.tris = 0;
     this.sys.fill(0);
   }
@@ -44,6 +49,8 @@ export interface PerfSnapshot {
   gpu: number;
   draws: number;
   tris: number;
+  /** Pasos de física por frame. */
+  pasos: number;
   /** ms de CPU por frame de cada sistema, de más a menos. */
   sistemas: [string, number][];
 }
@@ -99,6 +106,10 @@ export class FrameProfiler {
   }
 
   add(name: string, ms: number) {
+    if (name === PHYSICS) {
+      this.win.steps++;
+      this.total.steps++;
+    }
     const i = this.slot(name);
     this.win.sys[i] += ms;
     this.total.sys[i] += ms;
@@ -212,6 +223,7 @@ export class FrameProfiler {
       gpu: w.gpuSamples ? r(w.gpu / w.gpuSamples) : -1,
       draws: Math.round(w.calls / n),
       tris: Math.round(w.tris / n),
+      pasos: r(w.steps / n),
       sistemas,
     };
   }
@@ -294,6 +306,18 @@ export function installDebug(game: Game) {
     addBtn('🌅 tarde', () => (game.clock.hour = 19.2));
     addBtn('🌙 noche', () => (game.clock.hour = 23));
     addBtn('⏸ hora', () => (game.clock.frozen = !game.clock.frozen));
+    // trucos que pide el encargo: dinero, invencible y búsqueda
+    const toast = (text: string) => game.events.emit('toast', { text, color: '#ffd23f', time: 1.5 });
+    addBtn('💶 +10.000 €', () => game.mod.economy?.addCash?.(10000, 'trucos'));
+    addBtn('🛡 invencible', () => {
+      const p = game.mod.player;
+      if (!p) return;
+      p.invincible = !p.invincible;
+      if (p.invincible) p.health = p.maxHealth ?? 100;
+      toast(p.invincible ? 'Invencible: SÍ' : 'Invencible: NO');
+    });
+    addBtn('🚨 +1', () => game.mod.police?.setWanted?.(Math.min(5, (game.mod.police.wanted ?? 0) + 1)));
+    addBtn('🚨 −1', () => game.mod.police?.setWanted?.(Math.max(0, (game.mod.police.wanted ?? 0) - 1)));
     addBtn('⏱ tiempos', () => (detail = !detail));
   }, 0);
 

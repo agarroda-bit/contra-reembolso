@@ -32,7 +32,9 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<Quality, QualityPreset> = {
-  baja: { pixelRatio: 0.75, shadows: false, shadowMapSize: 512, drawDistance: 170, density: 0.5, maxLights: 0, charShadowDistance: 0 },
+  // baja: para ordenadores flojos (sin sombras, sin antialias, sin luces de farola ni destellos,
+  // menos distancia y menos gente: 12 peatones y 6 coches circulando)
+  baja: { pixelRatio: 0.75, shadows: false, shadowMapSize: 512, drawDistance: 170, density: 0.4, maxLights: 0, charShadowDistance: 0 },
   media: { pixelRatio: 1, shadows: true, shadowMapSize: 1024, drawDistance: 240, density: 0.8, maxLights: 2, charShadowDistance: 35 },
   alta: { pixelRatio: 1.5, shadows: true, shadowMapSize: 2048, drawDistance: 330, density: 1, maxLights: 4, charShadowDistance: 50 },
 };

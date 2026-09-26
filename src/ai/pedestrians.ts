@@ -19,6 +19,17 @@ interface PedBrain {
 
 const tmpV = new THREE.Vector3();
 const tmpT = new THREE.Vector3();
+const tmpS = new THREE.Vector3();
+/** Más lejos de esto (m) del jugador, el peatón sobra aquí: reaparece cerca o se borra. */
+const FAR = 150;
+
+/** Sitio libre en una acera para un peatón (arista, sentido, lado y punto en tmpS). */
+interface Spot {
+  edge: number;
+  dir: 1 | -1;
+  side: 1 | -1;
+  t: number;
+}
 
 export class Pedestrians implements System {
   name = 'pedestrians';
@@ -69,30 +80,59 @@ export class Pedestrians implements System {
     }
   }
 
-  private spawnPed() {
+  /** Busca un sitio en una acera a 25-110 m del jugador (el punto queda en tmpS). null = ahora no. */
+  private pickSpot(): Spot | null {
     const focus = this.game.mod.player?.position ?? this.game.camera.position;
     const edges = this.roads.edgesInRing(focus, 25, 110, false);
-    if (!edges.length) return;
-    const eid = edges[Math.floor(rnd.next() * edges.length)];
-    const e = this.roads.g.edges[eid];
+    if (!edges.length) return null;
+    const edge = edges[Math.floor(rnd.next() * edges.length)];
+    const e = this.roads.g.edges[edge];
     const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
     const side: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
     const t = rnd.next();
-    const pos = this.roads.lanePoint(eid, dir, t, side * (e.width / 2 + 1.2), new THREE.Vector3());
-    if (!this.game.world.isLand(pos.x, pos.z)) return;
+    const pos = this.roads.lanePoint(edge, dir, t, side * (e.width / 2 + 1.2), tmpS);
+    if (!this.game.world.isLand(pos.x, pos.z)) return null;
     // no aparecer delante de la cámara si está cerca
     const cam = this.game.camera.position;
     const toP = tmpT.copy(pos).sub(cam);
     const fwd = this.game.camera.getWorldDirection(tmpV);
-    if (toP.length() < 60 && toP.normalize().dot(fwd) > 0.5) return;
+    if (toP.length() < 60 && toP.normalize().dot(fwd) > 0.5) return null;
+    return { edge, dir, side, t };
+  }
+
+  private spawnPed() {
+    const spot = this.pickSpot();
+    if (!spot) return;
+    const { edge: eid, dir, side, t } = spot;
+    const e = this.roads.g.edges[eid];
     const kinds: LookKind[] = ['civil', 'civil', 'civil', 'civil', 'abuela', 'rico', 'fiestero'];
     let kind = kinds[Math.floor(rnd.next() * kinds.length)];
     if (e.district === 'colina' && rnd.next() < 0.5) kind = 'rico';
     if (e.district === 'viejo' && rnd.next() < 0.3) kind = 'abuela';
-    const npc = this.npcs.spawn('civil', randomLookFor(this.rng, kind), pos, this.roads.heading(eid, dir));
+    const npc = this.npcs.spawn('civil', randomLookFor(this.rng, kind), tmpS, this.roads.heading(eid, dir));
     npc.walkSpeed = kind === 'abuela' ? 0.9 : 1.2 + rnd.next() * 0.6;
     npc.brain = { edge: eid, dir, t, side, pause: 0, panic: 0, from: null } as PedBrain;
     this.peds.push(npc);
+  }
+
+  /**
+   * Un peatón que se ha quedado muy lejos (vas en coche) reaparece paseando cerca, con el mismo
+   * muñeco: crear uno nuevo (geometría, esqueleto, colisor) cuesta ~2 ms y, conduciendo, pasaba
+   * varias veces por segundo. false = no se puede (se borra como antes).
+   */
+  private relocate(p: Npc): boolean {
+    if (p.busy || p.vehicle || this.peds.length > this.target) return false;
+    const spot = this.pickSpot();
+    if (!spot) return false;
+    p.position.copy(tmpS);
+    p.heading = this.roads.heading(spot.edge, spot.dir);
+    p.velocity.set(0, 0, 0);
+    p.target = null;
+    p.health = p.maxHealth;
+    p.customPose = 'normal';
+    p.brain = { edge: spot.edge, dir: spot.dir, t: spot.t, side: spot.side, pause: 0, panic: 0, from: null } as PedBrain;
+    p.setState('walk');
+    return true;
   }
 
   update(dt: number) {
@@ -100,7 +140,7 @@ export class Pedestrians implements System {
     const focus = this.game.mod.player?.position ?? this.game.camera.position;
     for (let i = this.peds.length - 1; i >= 0; i--) {
       const p = this.peds[i];
-      if (p.removed || p.position.distanceTo(focus) > 150) {
+      if (p.removed || (p.position.distanceToSquared(focus) > FAR * FAR && !this.relocate(p))) {
         this.peds.splice(i, 1);
         if (!p.removed) this.npcs.remove(p);
         continue;
