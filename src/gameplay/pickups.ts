@@ -13,8 +13,14 @@ export interface Pickup {
   amount: number;
   mesh: THREE.Object3D;
   t: number;
-  /** Segundos desde que apareció (un paquete recién caído no se recoge en el mismo instante). */
+  /** Segundos desde que apareció. */
   age: number;
+  /**
+   * Segundos que tiene que pasar en el suelo antes de poder recogerse (-1 = se decide en su primer
+   * frame). Solo los paquetes de encargo que se te acaban de caer del vehículo esperan; el resto se
+   * recoge al pasar, como siempre. Se puede forzar al crearlo con data.grace (segundos).
+   */
+  wait: number;
   life: number; // segundos (Infinity = siempre)
   data?: any;
   onTake?: (p: Pickup) => void;
@@ -58,7 +64,11 @@ function geoFor(kind: PickupKind): THREE.BufferGeometry {
 
 let nextId = 1;
 const tmpV = new THREE.Vector3();
-/** Un paquete que se acaba de caer tarda esto en poder recogerse (si no, se cae y se recoge a la vez). */
+/**
+ * Un paquete de encargo que se te acaba de caer del vehículo (embestidas, atracos) tarda esto en
+ * poder recogerse (si no, se cae y se recoge a la vez). Los demás paquetes (furgón que los va
+ * perdiendo, bolso del ladrón, el que suelta el vecino de Los Devueltos) se recogen al momento.
+ */
 const PACKAGE_GRACE = 1.5;
 
 export class Pickups implements System {
@@ -76,7 +86,8 @@ export class Pickups implements System {
     mesh.castShadow = true;
     mesh.position.copy(pos);
     this.game.scene.add(mesh);
-    const p: Pickup = { id: nextId++, kind, pos: pos.clone(), amount, mesh, t: Math.random() * 6, age: 0, life, onTake, data };
+    const wait = typeof data?.grace === 'number' ? data.grace : kind === 'package' ? -1 : 0;
+    const p: Pickup = { id: nextId++, kind, pos: pos.clone(), amount, mesh, t: Math.random() * 6, age: 0, wait, life, onTake, data };
     this.list.push(p);
     return p;
   }
@@ -118,12 +129,32 @@ export class Pickups implements System {
         this.remove(p);
         continue;
       }
+      // se decide en el primer frame: el encargo que lo suelta apunta cuándo y dónde justo después de crearlo
+      if (p.wait < 0) p.wait = this.isFreshJobDrop(p) ? PACKAGE_GRACE : 0;
       p.age += dt;
       if (player.state === 'dead') continue;
-      if (p.kind === 'package' && p.age < PACKAGE_GRACE) continue;
+      if (p.age < p.wait) continue;
       const dx = p.pos.x - ppos.x, dz = p.pos.z - ppos.z, dy = p.pos.y - ppos.y;
       if (dx * dx + dz * dz < reach * reach && Math.abs(dy) < 2.5) this.take(p);
     }
+  }
+
+  /**
+   * ¿Es un paquete de encargo que se acaba de caer del vehículo? (jobs.dropFrom marca el encargo con
+   * droppedAt = ahora y dropPos = donde cae). El del vecino de Los Devueltos también lleva dropPos,
+   * pero su droppedAt es de cuando lo robó, hace rato: ese se recoge al momento.
+   */
+  private isFreshJobDrop(p: Pickup): boolean {
+    const active = this.game.mod.jobs?.active as any[] | undefined;
+    if (!active) return false;
+    const now = this.game.time.elapsed;
+    for (const j of active) {
+      const at = j.droppedAt as number | undefined;
+      const dp = j.dropPos as THREE.Vector3 | undefined;
+      if (j.state !== 'pickup' || at === undefined || !dp || now - at > 2.5) continue;
+      if (Math.abs(dp.x - p.pos.x) < 0.05 && Math.abs(dp.z - p.pos.z) < 0.05) return true;
+    }
+    return false;
   }
 
   private take(p: Pickup) {
