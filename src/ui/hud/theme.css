@@ -1,0 +1,212 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   TEMA DE CONTRA REEMBOLSO
+   Variables y piezas visuales compartidas: HUD, menús, móvil, tiendas, casino...
+   Estilo: pegatinas gruesas, bordes redondeados, sombras duras, colores de la isla.
+   Uso: import '../hud/theme.css' y clases .cr-* (o solo las variables --cr-*).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Colores de la isla */
+  --cr-amarillo: #ffd23f;
+  --cr-rosa: #ff4f81;
+  --cr-turquesa: #2ec4b6;
+  --cr-morado: #6c3bd1;
+  --cr-naranja: #ff7b54;
+  --cr-noche: #1b1030;
+  --cr-noche-2: #2a1a4a;
+  --cr-verde: #3ddc84;
+  --cr-rojo: #ff3b4f;
+  --cr-azul: #3a86ff;
+  --cr-crema: #fff6e0;
+  --cr-gris: #9a8fb3;
+
+  /* Fondos de panel (legibles sobre cielo claro y de noche) */
+  --cr-panel: rgba(27, 16, 48, 0.8);
+  --cr-panel-suave: rgba(27, 16, 48, 0.62);
+  --cr-panel-solido: #241640;
+  --cr-velo: rgba(12, 6, 26, 0.72);
+
+  /* Bordes y radios */
+  --cr-borde: 3px;
+  --cr-borde-grueso: 5px;
+  --cr-radio: 14px;
+  --cr-radio-chico: 9px;
+  --cr-radio-grande: 22px;
+
+  /* Sombras duras tipo pegatina */
+  --cr-sombra: 4px 4px 0 rgba(0, 0, 0, 0.42);
+  --cr-sombra-grande: 7px 7px 0 rgba(0, 0, 0, 0.42);
+  --cr-sombra-rosa: 5px 5px 0 var(--cr-rosa);
+  --cr-sombra-amarilla: 5px 5px 0 var(--cr-amarillo);
+  --cr-sombra-turquesa: 5px 5px 0 var(--cr-turquesa);
+  --cr-sombra-morada: 5px 5px 0 var(--cr-morado);
+  --cr-texto-sombra: 2px 2px 0 rgba(0, 0, 0, 0.55);
+  --cr-texto-contorno: -2px -2px 0 var(--cr-noche), 2px -2px 0 var(--cr-noche), -2px 2px 0 var(--cr-noche),
+    2px 2px 0 var(--cr-noche), 3px 4px 0 var(--cr-noche);
+
+  /* Tipografías (solo del sistema) */
+  --cr-fuente: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --cr-fuente-redonda: ui-rounded, 'SF Pro Rounded', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cr-fuente-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --cr-emoji: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+
+  /* Animación */
+  --cr-rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --cr-suave: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ─────────────────────────── Piezas reutilizables ─────────────────────────── */
+
+/* Panel oscuro con borde grueso y sombra dura */
+.cr-panel {
+  background: var(--cr-panel);
+  color: var(--cr-crema);
+  border: var(--cr-borde) solid var(--cr-noche);
+  border-radius: var(--cr-radio);
+  box-shadow: var(--cr-sombra);
+  font-family: var(--cr-fuente);
+}
+.cr-panel--solido { background: var(--cr-panel-solido); }
+.cr-panel--claro { background: var(--cr-crema); color: var(--cr-noche); }
+.cr-panel--rosa { box-shadow: var(--cr-sombra-rosa); }
+.cr-panel--amarillo { box-shadow: var(--cr-sombra-amarilla); }
+.cr-panel--turquesa { box-shadow: var(--cr-sombra-turquesa); }
+.cr-panel--morado { box-shadow: var(--cr-sombra-morada); }
+
+/* Un poco torcido: desenfadado */
+.cr-torcido { transform: rotate(-1.5deg); }
+.cr-torcido-der { transform: rotate(1.5deg); }
+
+/* Título grande tipo pegatina */
+.cr-titulo {
+  font-family: var(--cr-fuente);
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--cr-amarillo);
+  text-shadow: 4px 4px 0 var(--cr-noche);
+  text-transform: uppercase;
+  line-height: 0.95;
+  margin: 0;
+}
+
+/* Etiqueta pequeña en mayúsculas (tipo pestaña) */
+.cr-etiqueta {
+  display: inline-block;
+  font: 900 11px/1 var(--cr-fuente);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 7px 3px;
+  border-radius: 6px;
+  background: var(--cr-amarillo);
+  color: var(--cr-noche);
+}
+
+/* Botones */
+.cr-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: 900 17px/1 var(--cr-fuente);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 13px 22px 12px;
+  color: var(--cr-noche);
+  background: var(--cr-amarillo);
+  border: var(--cr-borde) solid var(--cr-noche);
+  border-radius: var(--cr-radio);
+  box-shadow: 4px 4px 0 var(--cr-noche);
+  cursor: pointer;
+  transition: transform 0.12s var(--cr-rebote), box-shadow 0.12s, background 0.12s, filter 0.12s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.cr-btn:hover { transform: translate(-1px, -2px) rotate(-1deg); box-shadow: 6px 6px 0 var(--cr-noche); filter: brightness(1.06); }
+.cr-btn:active { transform: translate(3px, 3px); box-shadow: 1px 1px 0 var(--cr-noche); }
+.cr-btn:focus-visible { outline: 3px solid var(--cr-crema); outline-offset: 3px; }
+.cr-btn:disabled, .cr-btn[aria-disabled='true'] { filter: grayscale(0.9) brightness(0.8); cursor: not-allowed; transform: none; }
+.cr-btn--rosa { background: var(--cr-rosa); color: #fff; }
+.cr-btn--turquesa { background: var(--cr-turquesa); }
+.cr-btn--morado { background: var(--cr-morado); color: #fff; }
+.cr-btn--naranja { background: var(--cr-naranja); }
+.cr-btn--oscuro { background: var(--cr-noche-2); color: var(--cr-crema); border-color: var(--cr-crema); box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.5); }
+.cr-btn--chico { font-size: 13px; padding: 8px 12px 7px; border-radius: var(--cr-radio-chico); box-shadow: 3px 3px 0 var(--cr-noche); }
+.cr-btn--grande { font-size: 22px; padding: 16px 30px 15px; border-radius: var(--cr-radio-grande); }
+
+/* Tecla en una cajita */
+.cr-tecla {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.7em;
+  height: 1.7em;
+  padding: 0 0.4em;
+  box-sizing: border-box;
+  font: 900 0.9em/1 var(--cr-fuente);
+  color: var(--cr-noche);
+  background: var(--cr-crema);
+  border: 2px solid var(--cr-noche);
+  border-radius: 7px;
+  box-shadow: 0 3px 0 var(--cr-noche);
+  transform: translateY(-1px);
+}
+
+/* Barra de progreso */
+.cr-barra {
+  position: relative;
+  height: 10px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--cr-noche);
+  overflow: hidden;
+}
+.cr-barra > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  border-radius: 99px;
+  background: var(--cr-verde);
+  transform-origin: left center;
+  transition: transform 0.25s var(--cr-suave), background-color 0.3s;
+  box-shadow: inset 0 3px 0 rgba(255, 255, 255, 0.28);
+}
+
+/* Chip / insignia */
+.cr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 800 13px/1 var(--cr-fuente);
+  padding: 6px 10px;
+  border-radius: 99px;
+  background: var(--cr-noche-2);
+  color: var(--cr-crema);
+  border: 2px solid var(--cr-noche);
+}
+
+.cr-emoji { font-family: var(--cr-emoji); font-style: normal; line-height: 1; }
+.cr-num { font-variant-numeric: tabular-nums; }
+
+/* Dinero: colores para ganar y perder */
+.cr-dinero-mas { color: var(--cr-verde); }
+.cr-dinero-menos { color: var(--cr-rojo); }
+
+/* Animaciones reutilizables */
+@keyframes cr-bote {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+  55% { transform: scale(1.12) rotate(2deg); opacity: 1; }
+  75% { transform: scale(0.96) rotate(-1deg); }
+  100% { transform: scale(1) rotate(-1.5deg); }
+}
+@keyframes cr-latido {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@keyframes cr-temblor {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px) rotate(-2deg); }
+  40% { transform: translateX(4px) rotate(2deg); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
