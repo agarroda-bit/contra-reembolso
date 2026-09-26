@@ -51,6 +51,21 @@ function shortName(name: string): string {
   return name.split(/[\s(«"]/)[0] || name;
 }
 
+/** Frases genéricas del chat (para que no se repita siempre la misma). */
+const LINES = {
+  accept: ['¡Voy para allá! 📦', 'Hecho. Contra reembolso, ¿eh?', 'Marchando 🚐', 'Dame un momento, que estoy aparcando fatal.', 'Voy volando. Bueno, en furgoneta.'],
+  decline: ['Lo siento, hoy no puedo 🙏', 'Uf, me pilla fatal. ¡Otra vez será!', 'Paso, que voy hasta arriba de cajas 📦'],
+  expire: ['Da igual, ya se lo pido a otro. 🙄', 'Me has dejado en visto. Qué feo. 🙄', 'Nada, se lo pido a la competencia. Van de morado, ¿sabes? 🙄'],
+  cancel: ['He cancelado el pedido. Una estrella. 😤', 'Pedido cancelado. Voy a comprarlo en persona, como en los noventa. 😤', 'Cancelado. Y lo pienso contar en el grupo de vecinos. 😤'],
+  perfect: ['⭐⭐⭐⭐⭐ ¡Repetiré!', '⭐⭐⭐⭐⭐ Rápido y entero. Un milagro.', '⭐⭐⭐⭐⭐ Te recomendaré a mi cuñado. Y eso que no le quiero.'],
+  ok: ['⭐⭐⭐ Bien, sin más.', '⭐⭐⭐ Correcto. Como un bocadillo de pan solo.', '⭐⭐⭐⭐ Casi perfecto. Casi.'],
+  late: ['⭐⭐ Llegó. Tarde, pero llegó. ⌛', '⭐⭐ He tenido tiempo de hacerme un cocido esperando. ⌛'],
+  broken: ['⭐ Me ha llegado un puzle. 😒', '⭐ La caja ha sufrido más que yo un lunes. 😒', '⭐ Una estrella por traerlo. Las otras cuatro se han roto por el camino. 😒'],
+};
+function pick(list: string[]): string {
+  return list[Math.floor(rnd.next() * list.length)];
+}
+
 const REDIRECTS = [
   'Uy, que me he ido a casa de mi primo 😅',
   'Cambio de planes: nos hemos movido 🎉',
@@ -202,7 +217,7 @@ export class Jobs implements System {
       color: JOB_COLORS[(o.id - 1) % JOB_COLORS.length],
     };
     this.active.push(job);
-    this.msgs?.reply('cliente-' + o.client.id, rnd.next() < 0.5 ? '¡Voy para allá! 📦' : 'Hecho. Contra reembolso, ¿eh?');
+    this.msgs?.reply('cliente-' + o.client.id, pick(LINES.accept));
     this.game.mod.audio?.play('success', { volume: 0.5 });
     this.game.events.emit('job:accepted' as any, { job } as any);
     this.game.events.emit('toast', { text: `Encargo aceptado: recoge en ${o.pickupName}`, color: job.color, time: 2.2 });
@@ -214,7 +229,7 @@ export class Jobs implements System {
     if (i < 0) return;
     const o = this.offers[i];
     this.offers.splice(i, 1);
-    this.msgs?.reply('cliente-' + o.client.id, 'Lo siento, hoy no puedo 🙏');
+    this.msgs?.reply('cliente-' + o.client.id, pick(LINES.decline));
   }
 
   // ─────────── Distancias y tiempos ───────────
@@ -453,7 +468,7 @@ export class Jobs implements System {
       if (g.time.elapsed > this.offers[i].expires) {
         const o = this.offers[i];
         this.offers.splice(i, 1);
-        this.msgs?.receive('cliente-' + o.client.id, o.client.name, o.client.avatar, 'Da igual, ya se lo pido a otro. 🙄', undefined, false);
+        this.msgs?.receive('cliente-' + o.client.id, o.client.name, o.client.avatar, pick(LINES.expire), undefined, false);
       }
     }
 
@@ -470,7 +485,7 @@ export class Jobs implements System {
       if (j.timeLeft < -60) {
         j.state = 'failed';
         this.eco?.addFame(-3);
-        this.msgs?.receive('cliente-' + j.offer.client.id, j.offer.client.name, j.offer.client.avatar, 'He cancelado el pedido. Una estrella. 😤');
+        this.msgs?.receive('cliente-' + j.offer.client.id, j.offer.client.name, j.offer.client.avatar, pick(LINES.cancel));
         g.mod.audio?.play('fail', { volume: 0.5 });
       }
       // cliente que cambia de dirección al llegar
@@ -809,7 +824,7 @@ export class Jobs implements System {
     const title = perfect ? '¡ENTREGA PERFECTA!' : broken ? 'Entrega… regular' : late ? 'Entrega con retraso' : '¡Entregado!';
     g.events.emit('toast', { text: `${title}  +${pay} €${tip ? ` (+${tip} € de propina)` : ''}  ·  ⭐ +${famePts}`, color: perfect ? '#ffd23f' : broken ? '#ff4f81' : '#2ec4b6', time: 3 });
     g.events.emit('job:done' as any, { job: j, pay, tip, perfect } as any);
-    this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, broken ? 'Te dejo una estrella por la puntualidad. Las otras cuatro, no. 😒' : perfect ? '⭐⭐⭐⭐⭐ ¡Repetiré!' : '⭐⭐⭐ Bien, sin más.', undefined, false);
+    this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, pick(broken ? LINES.broken : perfect ? LINES.perfect : late ? LINES.late : LINES.ok), undefined, false);
     // el cliente se mete en casa
     const npc = s.npc;
     if (npc) {
