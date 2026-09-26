@@ -44,11 +44,18 @@ const RACE_LEN = 650;
 const RACE_CP_GAP = 110;
 /** Segundos sin avanzar para recolocar al rival en su calle. */
 const RACE_STUCK = 4.5;
+/** Al acabar la carrera el rival se va tranquilo (m/s) y desaparece pasados unos segundos, ya lejos. */
+const LEAVE_SPEED = 9;
+const LEAVE_MIN_T = 6;
+const LEAVE_MAX_T = 30;
+const LEAVE_DIST = 45;
 
 export class RandomEvents implements System {
   name = 'randomEvents';
   private ev: Ev | null = null;
   private timer = 150;
+  /** Rivales de carreras ya acabadas: se van despacio por su carril hasta desaparecer. */
+  private leaving: { v: Vehicle; t: number }[] = [];
   enabled = true;
 
   constructor(private game: Game) {
@@ -66,6 +73,7 @@ export class RandomEvents implements System {
   update(dt: number) {
     const g = this.game;
     if (!this.enabled || !g.world || !g.mod.player) return;
+    if (this.leaving.length) this.tickLeaving(dt);
     if (!this.ev) {
       this.timer -= dt;
       if (this.timer <= 0) {
@@ -306,12 +314,41 @@ export class RandomEvents implements System {
         setTimeout(() => !npc.removed && g.mod.npcs?.remove(npc), 4000);
       }
     } else if (ev.kind === 'race') {
+      // el rival no se queda con el acelerador pisado: frena y se va despacio por su carril
+      // (antes salía disparado sin control y se estampaba)
       const r = ev.rival;
-      setTimeout(() => {
-        const d = r.driver && r.driver.kind === 'npc' ? r.driver.npc : null;
-        if (d) g.mod.npcs?.remove(d);
-        if (r !== g.mod.vehicles?.current) g.mod.vehicles?.remove(r);
-      }, 6000);
+      const rb = (r as any).brain as CarBrain | undefined;
+      if (rb) {
+        rb.mode = 'lane';
+        rb.cruise = LEAVE_SPEED;
+        rb.reverse = 0;
+      }
+      r.controls.throttle = 0;
+      r.controls.steer = 0;
+      r.controls.boost = false;
+      this.leaving.push({ v: r, t: 0 });
+    }
+  }
+
+  /** Rivales que se van: conducen como el tráfico y desaparecen cuando ya están lejos. */
+  private tickLeaving(dt: number) {
+    const g = this.game;
+    const vm = g.mod.vehicles;
+    for (let i = this.leaving.length - 1; i >= 0; i--) {
+      const l = this.leaving[i];
+      const v = l.v;
+      l.t += dt;
+      const mine = v === vm?.current;
+      const d = v.driver && v.driver.kind === 'npc' ? v.driver.npc : null;
+      const far = v.disposed || v.getPosition(tmpV).distanceTo(g.mod.player.position) > LEAVE_DIST;
+      if (v.disposed || mine || (l.t > LEAVE_MIN_T && far) || l.t > LEAVE_MAX_T) {
+        // si el jugador se lo ha quitado, el coche es suyo: solo se deja de conducir
+        if (!mine && !v.disposed) {
+          if (d) g.mod.npcs?.remove(d);
+          vm?.remove(v);
+        }
+        this.leaving.splice(i, 1);
+      } else if (d && !v.destroyed) g.mod.traffic?.drive(v, dt);
     }
   }
 
