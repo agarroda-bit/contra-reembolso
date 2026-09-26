@@ -171,7 +171,7 @@ export class Jobs implements System {
     const districtK = dest.district === 'colina' ? 1.5 : dest.district === 'poligono' ? 1.2 : 1;
     const pay = opts.pay ?? Math.round((25 + dist * 0.28) * info.mult * districtK * (1 + (fameLvl - 1) * 0.12) / 5) * 5;
     // tiempo: ir a recoger + llevarlo, por calle (ver fairTime)
-    const from = this.game.mod.player?.position ?? pickup.door;
+    const from = this.playerSpot() ?? pickup.door;
     const time = opts.time ?? this.fairTime(from, pickup.door, dest.door, type);
     const item = client.items[Math.floor(this.rng.next() * client.items.length)];
     const ask = client.ask[Math.floor(this.rng.next() * client.ask.length)];
@@ -209,9 +209,9 @@ export class Jobs implements System {
     }
     this.offers.splice(i, 1);
     // si ha tardado en aceptar y se ha alejado, el reloj se ajusta (nunca a menos de lo prometido)
-    const pl = this.game.mod.player;
-    if (pl) {
-      const fresh = this.fairTime(pl.position, o.pickupPos, o.dest.door, o.type);
+    const from = this.playerSpot();
+    if (from) {
+      const fresh = this.fairTime(from, o.pickupPos, o.dest.door, o.type);
       if (fresh > o.time) o.time = fresh;
     }
     const job: ActiveJob = {
@@ -235,6 +235,23 @@ export class Jobs implements System {
   }
 
   // ─────────── Distancias y tiempos ───────────
+
+  /**
+   * Desde dónde se cuenta el camino del jugador. Dentro del ático, la oficina o el club el jugador
+   * está en realidad lejísimos de la isla (los interiores se montan aparte), así que se cuenta desde
+   * la puerta de fuera por la que ha entrado.
+   */
+  private playerSpot(): THREE.Vector3 | null {
+    const g = this.game;
+    const p = g.mod.player;
+    if (!p) return null;
+    const it = g.mod.interiors;
+    if (it?.inside && it.current) {
+      const poi = g.world.pois.find(it.current.def.poi);
+      if (poi) return poi.door;
+    }
+    return p.position;
+  }
 
   /** Metros por calle entre dos puntos (ruta de la red de calles; sin red, línea recta con recargo). */
   roadDist(a: THREE.Vector3, b: THREE.Vector3): number {
