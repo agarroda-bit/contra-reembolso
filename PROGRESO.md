@@ -2,16 +2,17 @@
 
 Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
-## Fase actual: 0 — Esqueleto y publicación
+## Fase actual: 1 — Isla y personaje
+
+## Fase 0 — Esqueleto y publicación ✅ (26/09, 04:00)
 
 ### Hecho
 - Proyecto Vite + TypeScript + Three.js + Rapier.
 - Página de prueba con un cubo que cae (física Rapier) y gira.
 - Tests con Playwright (Chromium headless, WebGL por SwiftShader).
-- Workflow de GitHub Actions para publicar en Pages.
+- Publicación en GitHub Pages desde la rama `gh-pages` con `npm run deploy` (ver DECISIONES).
+- Comprobado: el enlace carga la versión 819f00f y el test pasa contra la web publicada.
 
-### Falta
-- Comprobar que el enlace carga la última versión.
 
 ### Problemas
 - (ninguno por ahora)
