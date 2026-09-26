@@ -8,7 +8,7 @@ import type { Game } from '../../../core/game';
 import type { Interiors, InteriorContext, InteriorInstance } from '../index';
 import type { ShopItem, ShopSection } from '../../../ui/shop';
 import {
-  BAR, BOOTHS, MY_BOOTH, BOOTH, VIP, SPAWN, SPAWN_HEADING, EXIT, PORTERO_SPOT, DJ_SPOT, BPM,
+  BAR, BOOTHS, MY_BOOTH, BOOTH, VIP, SPAWN, SPAWN_HEADING, EXIT, PORTERO_SPOT, DJ_SPOT, WAITRESS_SPOT, BPM,
   onDanceFloor, nightKey, boothBackSeat,
 } from './layout';
 import { buildRoom, drawBoothSign, type RoomParts } from './room';
@@ -60,6 +60,7 @@ const PHOTO_TOASTS = [
 ];
 const BARMAN_LINES = ['¿Qué te pongo? Aquí no se fía, ¿eh?', 'El champán, solo en mesa VIP. Normas de la casa.', 'Tu cara me suena… ¿tú no me trajiste una tostadora?'];
 const PORTERO_NO = ['Sin mesa VIP no pasas, colega.', 'Esto es zona VIP. V-I-P. ¿Te suena?', 'Lista VIP… No sales. Paga una mesa y sales.'];
+const WAITRESS_LINES = ['¿Otra botellita, jefe? Viene con bengala.', 'Enseguida se la traigo. Aparten, que quema.', 'El champán frío y la cuenta caliente, como debe ser.'];
 const PORTERO_YES = ['Adelante, jefe.', 'Su mesa le espera, señor repartidor.', 'Pase, pase. Cuidado con el cordón.'];
 const LED_NORMAL = '★ CLUB REEMBOLSO VIP ★ AQUÍ SIEMPRE SON LAS 3 DE LA MAÑANA ★ SE ADMITE PAGO CONTRA REEMBOLSO ★ ';
 const LED_TABLE = '★ ¡MESA VIP PARA EL REPARTIDOR MÁS RÁPIDO DEL PUERTO! ★ ¡QUE SUENE ESA BOCINA! ★ ';
@@ -106,12 +107,15 @@ export class ClubState {
   }
 }
 
+/** Dónde se pide: en la barra, al portero o a la camarera desde tu mesa VIP. */
+export type ShopSpot = 'barra' | 'portero' | 'mesa';
+
 /** Lo que el club deja en game.mod.club (para pruebas, el móvil, logros...). */
 export interface ClubApi {
   state: ClubState;
   readonly inside: boolean;
-  /** Abre el menú de compras (como si pulsaras E en la barra). */
-  openShop(where?: 'barra' | 'portero'): void;
+  /** Abre el menú de compras (como si pulsaras E en la barra, junto al portero o en tu mesa). */
+  openShop(where?: ShopSpot): void;
   buyTable(): boolean;
   buyBottle(): boolean;
   /** Para pruebas: lanza la fiesta sin pagar. */
@@ -286,8 +290,12 @@ export class ClubInterior implements InteriorInstance {
     if (local.x > BAR.x1 - 0.2 && local.x < BAR.x1 + 2 && local.z > BAR.z0 - 0.4 && local.z < BAR.z1 + 0.4 && local.y < 0.5) {
       return { text: 'Pedir en la barra (mesa VIP y champán)', run: () => this.openShop('barra') };
     }
-    if (st.hasTable && local.y > 0.35 && d2(this.myTable) < 2.3 && this.myPose !== 'sit') {
-      return { text: 'Sentarte en tu reservado', run: () => this.sitDown(false) };
+    if (st.hasTable && local.y > 0.35) {
+      // sentado en tu mesa (o junto a la camarera) se pide el champán sin bajar a la barra
+      if (this.myPose === 'sit' || d2(WAITRESS_SPOT) < 1.6) {
+        return { text: 'Pedir champán a la camarera', run: () => this.openShop('mesa') };
+      }
+      if (d2(this.myTable) < 2.3) return { text: 'Sentarte en tu reservado', run: () => this.sitDown(false) };
     }
     if (local.z < -6.6 && Math.abs(local.x) < 2.6 && local.y < 0.4) {
       return { text: 'Pedirle una canción al DJ', run: () => this.askDj() };
@@ -351,18 +359,22 @@ export class ClubInterior implements InteriorInstance {
     g.mod.audio?.play('bell');
   }
 
-  openShop(where: 'barra' | 'portero' = 'barra') {
+  openShop(where: ShopSpot = 'barra') {
     const g = this.game;
     const ui = g.mod.shopUI;
     if (!ui) {
       g.events.emit('toast', { text: 'La barra está cerrada por inventario 🙃', color: '#ff4f81' });
       return;
     }
-    const speaker = where === 'portero' ? this.crowd.portero : this.crowd.barman;
-    const line = where === 'portero' ? (this.state.hasTable ? pick(PORTERO_YES) : pick(PORTERO_NO)) : pick(BARMAN_LINES);
+    const c = this.crowd;
+    const speaker = where === 'portero' ? c.portero : where === 'mesa' ? c.waitress : c.barman;
+    const line = where === 'portero'
+      ? (this.state.hasTable ? pick(PORTERO_YES) : pick(PORTERO_NO))
+      : where === 'mesa' ? pick(WAITRESS_LINES) : pick(BARMAN_LINES);
+    const who = where === 'portero' ? 'Toni, el portero' : where === 'mesa' ? 'Vane, la camarera VIP' : 'Paco, el camarero';
     ui.open({
       title: 'Club Reembolso VIP',
-      subtitle: where === 'portero' ? `«${line}» — Toni, el portero` : `«${line}» — Paco, el camarero`,
+      subtitle: `«${line}» — ${who}`,
       color: '#ff5fa2',
       icon: where === 'portero' ? '🕴️' : '🍾',
       sections: () => this.shopSections(),

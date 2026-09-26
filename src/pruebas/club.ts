@@ -5,7 +5,7 @@
 //   &fiesta=mesa|botella   lanza la fiesta (sin pagar) al entrar
 //   &comprar=mesa|botella|ambas   compra de verdad (con el dinero de prueba) al entrar
 //   &baila=1  &sienta=1    el jugador baila en la pista / se sienta en su reservado
-//   &tienda=barra|portero  abre el menú de compras
+//   &tienda=barra|portero|mesa  abre el menú de compras
 //   &vista=general|pista|vip|barra|dj|entrada   cámara fija para capturas
 //   &pos=x,z               coloca al jugador (coordenadas locales del club)
 //   &hora=23 &calidad=baja|media|alta &dinero=20000 &debug=1
@@ -133,7 +133,7 @@ async function boot() {
       club.buyBottle();
     }
     const tienda = P.get('tienda');
-    if (tienda === 'barra' || tienda === 'portero') club.openShop(tienda);
+    if (tienda === 'barra' || tienda === 'portero' || tienda === 'mesa') club.openShop(tienda);
     const vista = P.get('vista');
     if (vista && VIEWS[vista]) {
       const [cx, cy, cz, lx, ly, lz] = VIEWS[vista];
