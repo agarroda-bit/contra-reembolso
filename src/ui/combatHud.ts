@@ -6,6 +6,7 @@ import { WEAPONS, type WeaponId } from '../combat/weapons';
 
 const tmpF = new THREE.Vector3();
 const tmpR = new THREE.Vector3();
+const tmpP = new THREE.Vector3();
 
 const CSS = `
 .cr-rueda,.cr-impacto,.cr-arresto{pointer-events:none !important}
@@ -33,6 +34,8 @@ export class CombatHud implements System {
   private hitTimer = 0;
   /** Flechas de «te disparan desde aquí» (se reutilizan). */
   private dirs: { el: HTMLDivElement; from: THREE.Vector3; t: number }[] = [];
+  /** Marcas de enemigos del minimapa (se reutilizan cada frame). */
+  private threatPool: { x: number; z: number; icon: string; color: string; threat: true }[] = [];
 
   constructor(private game: Game) {
     const st = document.createElement('style');
@@ -126,17 +129,26 @@ export class CombatHud implements System {
     this.arrest.style.display = a > 0 && g.hud.visible ? 'block' : 'none';
     if (a > 0) (this.arrest.querySelector('b') as HTMLElement).style.width = `${Math.round(a * 100)}%`;
     // enemigos en el minimapa
+    // (se quitan las del frame anterior sin crear listas nuevas)
     const hud = g.hud;
-    hud.markers = hud.markers.filter((m) => !(m as any).threat);
+    const mk = hud.markers;
+    let w = 0;
+    for (let i = 0; i < mk.length; i++) if (!(mk[i] as any).threat) mk[w++] = mk[i];
+    mk.length = w;
     const p = g.mod.player?.position;
     if (p && g.mod.npcs) {
       let n = 0;
       for (const npc of g.mod.npcs.list) {
         if (n > 14) break;
         if (!npc.hostile || !npc.alive || npc.removed) continue;
-        const pos = npc.vehicle ? npc.vehicle.getPosition(npc.position.clone()) : npc.position;
+        const pos = npc.vehicle ? npc.vehicle.getPosition(tmpP) : npc.position;
         if (pos.distanceTo(p) > 90) continue;
-        hud.markers.push({ x: pos.x, z: pos.z, icon: '•', color: npc.police ? '#2ec4ff' : '#ff2d55', threat: true } as any);
+        let m = this.threatPool[n];
+        if (!m) m = this.threatPool[n] = { x: 0, z: 0, icon: '•', color: '', threat: true };
+        m.x = pos.x;
+        m.z = pos.z;
+        m.color = npc.police ? '#2ec4ff' : '#ff2d55';
+        mk.push(m as any);
         n++;
       }
     }
