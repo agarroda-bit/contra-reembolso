@@ -24,6 +24,10 @@ export function planViejo(p: PlanCtx): Special[] {
   // rincón hippie junto a la playa del poniente
   const hip = findFree(occ, -270, 40, 20, 9);
   if (hip) occ.markCircle(hip.x, hip.z, 9, OCC.RESERVED);
+  // pasaje entre las casas del poniente: da acceso a pie y en coche desde la avenida a la franja de la playa
+  // (rincón hippie y rampa); sin él, la fila de casas no tenía ni un hueco en 250 m
+  const passZ = hip ? hip.z : 40;
+  occ.markRect(-260.1, passZ, 6.9, 3.5, 0, OCC.RESERVED);
   // rampa en la franja de hierba entre las casas del poniente y la playa: se coge carrerilla hacia el norte,
   // paralela a la costa (un pasillo de 7 x 64 m libre de árboles para correr y aterrizar)
   let rampSpot: { x: number; z: number } | null = null;
@@ -45,6 +49,8 @@ export function planViejo(p: PlanCtx): Special[] {
         if (bar2) buildBar(ctx, out, bar2, 1, 'bar-2');
         if (roofHouse) buildRoofHouse(ctx, out, roofHouse);
         if (hip) buildHippie(ctx, out, hip.x, hip.z);
+        ctx.pave.rect(ctx.pave.walk, -260.1, passZ, 6.9, 2.6, 0, '#d9c29a', 1.6);
+        for (const s of [-1, 1]) ctx.props.add('pot', -254.2, ctx.heightAt(-254.2, passZ + s * 3.1), passZ + s * 3.1, s, 1.1);
         if (rampSpot) jumpRamp(ctx, rampSpot.x, rampSpot.z + 14, Math.PI, 9, 5, 1.8);
         // callejón sin salida (de verdad)
         collectible(ctx, -146, ctx.heightAt(-146, -20.5), -20.5);
