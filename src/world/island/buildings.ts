@@ -548,6 +548,9 @@ export function chalet(ctx: Ctx, lot: Lot, name: string) {
   b.box(-hw * 0.6 + 0.15, 1.35, hd + 2.6, 0.2, 2.5, 0.2, '#f4efe6');
   b.box(hw * 0.6 - 0.15, 1.35, hd + 2.6, 0.2, 2.5, 0.2, '#f4efe6');
   b.box(0, 2.65, hd + 1.4, hw * 1.2 + 0.2, 0.18, 2.9, trim);
+  // techo de la pérgola con colisor: si no, al mirar hacia abajo pegado a la fachada la cámara
+  // subía a través de él y la pantalla se quedaba entera del color de la pérgola
+  overhangCollider(ctx, b, 0, 2.65, hd + 1.4, (hw * 1.2 + 0.2) / 2, 0.09, 1.45);
   ctx.box(hp.x, lot.h + (y0 + H) / 2, hp.z, hw, (H - y0) / 2, hd, lot.rot);
   ctx.foot.push({ x: hp.x, z: hp.z, hw, hd, rot: lot.rot, color: col, height: H });
 
