@@ -945,7 +945,8 @@ export class Jobs implements System {
     g.mod.particles?.emit('money', g.mod.player.position.clone().setY(g.mod.player.position.y + 1.5), { count: 10 });
     const title = perfect ? '¡ENTREGA PERFECTA!' : broken ? 'Entrega… regular' : late ? 'Entrega con retraso' : '¡Entregado!';
     g.events.emit('toast', { text: `${title}  +${pay} €${tip ? ` (+${tip} € de propina)` : ''}  ·  ⭐ +${famePts}`, color: perfect ? '#ffd23f' : broken ? '#ff4f81' : '#2ec4b6', time: 3 });
-    g.events.emit('job:done' as any, { job: j, pay, tip, perfect } as any);
+    // why: cómo acabó la escena ('paciencia' = esperó a que la abuela contara todo, 'regateo', 'prisa'…)
+    g.events.emit('job:done' as any, { job: j, pay, tip, perfect, why } as any);
     this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, pick(broken ? LINES.broken : perfect ? LINES.perfect : late ? LINES.late : LINES.ok), undefined, false);
     // el cliente se mete en casa
     const npc = s.npc;
