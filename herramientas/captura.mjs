@@ -21,7 +21,8 @@ const page = args.page || 'index.html';
 const shots = JSON.parse(args.shots || '[{"wait":3000,"out":"capturas/tmp/captura.png"}]');
 const width = Number(args.width || 1280), height = Number(args.height || 720);
 
-const server = await createServer({ server: { port, strictPort: false }, logLevel: 'error', clearScreen: false });
+// caché de Vite propia por puerto: varios agentes a la vez no se pisan ("Outdated Optimize Dep")
+const server = await createServer({ server: { port, strictPort: false }, cacheDir: `node_modules/.vite-captura-${port}`, logLevel: 'error', clearScreen: false });
 await server.listen();
 const url = `http://localhost:${server.config.server.port}/${page}`;
 // --gpu: Chromium completo con la GPU real del Mac (Metal): fps realistas y capturas rápidas.

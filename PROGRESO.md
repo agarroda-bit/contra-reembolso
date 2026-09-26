@@ -6,7 +6,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 
 ## Fase actual: 8 — Pulido
 
-## Fase 7 — La historia del tablón ✅ (26/09, 08:00, publicada)
+## Fase 7 — La historia del tablón ✅ (26/09, 06:53, publicada)
 - Tablón de encargos grandes en la oficina (dentro, en la pared), con cinco misiones que se desbloquean por fama y en orden:
   1. «El reloj de la señora Puri» (fama 2): reloj de oro de la joyería del Centro a la Colina, con dos furgonetas moradas persiguiéndote y emboscada al llegar; si el reloj se rompe, fallas.
   2. «Mudanza exprés» (fama 3): cargar los muebles de Kevin en la furgoneta y llevarlos en 3 minutos sin romper nada (cada golpe rompe algo: «¡El flamenco!»).
@@ -15,7 +15,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
   5. «El Devolución» (fama 6): jefe final en su camión blindado recorriendo la isla; al 60 % llama a sus furgonetas y suelta paquetes FRÁGIL; al 25 % se baja y pelea a pie con lanzapaquetes. Final con créditos graciosos; después, el mundo libre sigue.
 - Pruebas: + la misión del reloj de principio a fin (`capturas/fase-7/`); el resto probadas a mano con scripts (jefe final y bomba completas).
 
-## Fase 6 — La vida de lujo ✅ (26/09, 07:45, publicada)
+## Fase 6 — La vida de lujo ✅ (26/09, 06:50, publicada)
 - Casino «La Suerte Loca» (Centro): vestíbulo y tres juegos de verdad con animaciones y sonido: tragaperras «La Paquetera», ruleta europea y blackjack «El 21 del Puerto». Apuestas de 10 a 500 € con el dinero del juego.
 - Club Reembolso VIP (Centro): interior con pista de baile de colores, DJ, focos, bola de espejos y gente bailando; mesa VIP (1.500 €) y botellas de champán (300 €): fiesta con luces, confeti y subida de FAMA. Sin contenido sexual.
 - El de las hierbas (Barrio Viejo): 50 €; efecto psicodélico de pantalla (colores, ondas), cámara lenta, el personaje anda raro, la radio suena distorsionada y salen frases graciosas.
@@ -26,7 +26,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 - Resto de armas locas: paquete FRÁGIL explosivo y pistola de sellos (en la armería y tiradas por la isla).
 - Pruebas: + casino, club, hierbas y vehículos locos (`capturas/fase-6/`).
 
-## Fase 5 — Tiendas y progreso ✅ (26/09, 07:25, publicada)
+## Fase 5 — Tiendas y progreso ✅ (26/09, 06:44, publicada)
 - Menú principal con la isla de fondo (Continuar / Nueva partida / Opciones / Controles), creación del repartidor (nombre, piel, peinado, color de pelo, uniforme, gorra) con vista previa girando, pausa (Esc) y opciones (sensibilidad, invertir eje, volúmenes, calidad baja/media/alta, campo de visión).
 - Tiendas físicas (E en la puerta): Talleres Manolo (concesionario de 6 vehículos, mejoras de motor/frenos/blindaje/neumáticos/maletero/nitro, reparación y pintura), Armería El Gatillo Alegre (armas, munición, chaleco, botiquín), Moda Paquetona (uniformes, gorras, gafas, cadena, zapatillas, chándal: se ve en el personaje).
 - Tu empresa (E en la oficina): ampliar la oficina por niveles (se ve fuera: cartel luminoso, estanterías, furgonetas aparcadas), comprar furgonetas para la flota, contratar repartidores que ingresan dinero cada día (y a veces piden ayuda por el móvil porque los asalta la banda), lujos de oficina.
@@ -36,7 +36,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 - Tutorial suave: Don Remigio te guía por el móvil (moverse, subir a la furgoneta, aceptar el primer encargo, recoger, entregar, ingresar en el cajero).
 - Pruebas: + menú y creación, + las cuatro tiendas (`capturas/fase-5/`), + guardar y continuar (`herramientas/prueba-guardado.mjs`).
 
-## Fase 4 — Encargos y dinero ✅ (26/09, 07:10, publicada)
+## Fase 4 — Encargos y dinero ✅ (26/09, 06:38, publicada)
 - Móvil «Pomelo» (Tab) con la app de mensajería inventada «PaqueChat»: van llegando encargos de clientes con qué quieren, dónde, cuánto pagan y el tiempo; se aceptan con un botón o Enter. Apps de Banco, Fama y Ayuda.
 - Encargos: recoger en la oficina o en tiendas (📦 en el mapa y columna de luz en la puerta), llevar sin romper (la integridad baja con golpes y saltos), entregar con E y cobrar en EFECTIVO; propina si llega rápido y entero, menos dinero si llega roto o tarde.
 - Tipos: FRÁGIL, URGENTE, SOSPECHOSO (triple y emboscada), PESADO (solo furgoneta o furgón). Capacidad según vehículo; a pie, un paquete.
@@ -44,7 +44,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 - Cajeros 🏧 (3) para ingresar el efectivo. Si te matan Los Devueltos, se llevan tu efectivo y tus paquetes a su guarida: tienes un día de juego para asaltarla y abrir la caja fuerte. Las embestidas de la furgoneta morada tiran paquetes al suelo, y si paras, te sacan del vehículo.
 - Pruebas: + abrir el móvil y aceptar un encargo (`capturas/fase-4/`).
 
-## Fase 3 — Armas y enemigos ✅ (26/09, 07:00, publicada)
+## Fase 3 — Armas y enemigos ✅ (26/09, 06:30, publicada)
 - Armas normales: pistola (empiezas con ella), escopeta, subfusil y fusil; locas: lanzapaquetes (cajas que rebotan y tumban) y pistola de cinta de embalar (deja pegados al suelo). Hay una tirada en cada barrio, más botiquines y un chaleco; reaparecen a los 3 min.
 - Apuntado al hombro con retícula (clic derecho), retroceso, fogonazo, trazadoras, casquillos, chispas; rueda de armas (1-5 y rueda del ratón); marca de impacto; disparo desde el vehículo hacia los lados y atrás.
 - Los Devueltos: guardias en su guarida del Polígono, emboscadas, persecuciones en furgoneta morada (embisten, disparan por la ventanilla, te sacan del vehículo). IA justa: avisan antes del primer tiro, se cubren, flanquean y fallan más de lejos. Al caer: nube de cartón y confeti, y a veces sueltan dinero o munición.
@@ -52,7 +52,7 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 - Muerte («¡TE HAN DEVUELTO!») y arresto («¡TE HAN PILLADO!») con pérdida del efectivo; reapareces en el centro de salud o la oficina. Caer al mar: te saca un pescador. La vida se recupera sola hasta 60.
 - Pruebas: + disparar y tiroteo (`capturas/fase-3/`). 19 fallos encontrados por un revisor, arreglados.
 
-## Fase 2 — Vehículos ✅ (26/09, 06:40, publicada)
+## Fase 2 — Vehículos ✅ (26/09, 06:22, publicada)
 - Furgoneta de reparto (6 paquetes), scooter (2) y coches de calle: utilitario, taxi, deportivo, todoterreno y furgón. Física de Rapier con ruedas por rayos y ayudas arcade (turbo con Shift, freno de mano con Espacio, se enderezan solos).
 - Subir y bajar con F; junto a un coche con conductor, F lo roba sacando al conductor con animación; tirarse en marcha te hace rodar.
 - Tráfico con IA (≈16 coches alrededor del jugador) que sigue su carril, frena si te pones delante y pita; coches aparcados; peatones que pasean, miran el móvil, huyen y se levantan cabreados si los atropellas.
