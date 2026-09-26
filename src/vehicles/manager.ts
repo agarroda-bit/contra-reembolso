@@ -139,19 +139,20 @@ export class VehicleManager implements System {
       g.hud.vehicle = null;
     }
 
-    // Pista de interacción a pie
+    // Pista de interacción a pie (la compone el sistema de interacción)
+    this.hintText = null;
     if (player.state === 'foot' && !this.transition) {
       const near = this.nearest(player.position, 3.4, (x) => !x.sinking);
       if (near) {
         const npc = near.driver && near.driver.kind === 'npc' ? near.driver.npc : null;
-        g.hud.hint = npc ? `F — Robar ${near.spec.name.toLowerCase()}` : `F — Subir a ${near.spec.name.toLowerCase()}`;
-        (this as any)._hinting = true;
-      } else if ((this as any)._hinting) {
-        g.hud.hint = null;
-        (this as any)._hinting = false;
+        this.hintText = npc ? `F — Robar ${near.spec.name.toLowerCase()}` : `F — Subir a ${near.spec.name.toLowerCase()}`;
       }
     }
+    if (!g.mod.interaction) g.hud.hint = this.hintText;
   }
+
+  /** Pista "F — Subir a…" para la interfaz. */
+  hintText: string | null = null;
 
   /** Motores y derrapes: el del jugador siempre, y los 3 más cercanos con motor en marcha. */
   private updateAudio() {
