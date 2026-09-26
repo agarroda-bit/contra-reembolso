@@ -8,7 +8,7 @@ import { esc, formatDistance } from './format';
 const DEFAULT_MARKER = '#ff4f81';
 // posiciones candidatas del nombre del barrio (en altos de letra y anchos del texto)
 const LABEL_DY = [0, -0.9, 0.9, -1.7, 1.7, -2.5, 2.5];
-const LABEL_DX = [0, -0.35, 0.35];
+const LABEL_DX = [0, -0.35, 0.35, -0.7, 0.7];
 const DEFAULT_WAYPOINT = '#ffd23f';
 const DISTRICT_COLORS: Record<string, string> = {
   puerto: '#2ec4b6', centro: '#ff4f81', colina: '#ffd23f', poligono: '#ff7b54', viejo: '#6c3bd1',
@@ -28,6 +28,8 @@ export class BigMap {
   private area: HTMLElement;
   private tip: HTMLElement;
   private legend: HTMLElement;
+  private title: HTMLElement;
+  private titleHidden = false;
   private dpr = 1;
   private W = 800;
   private H = 600;
@@ -95,6 +97,7 @@ export class BigMap {
     this.g = this.canvas.getContext('2d')!;
     this.tip = this.el.querySelector('.hud-mapa__tip')!;
     this.legend = this.el.querySelector('.hud-mapa__lista')!;
+    this.title = this.el.querySelector('.hud-mapa__titulo')!;
 
     const c = this.canvas;
     c.addEventListener('wheel', (e) => this.onWheel(e), { passive: false });
@@ -463,6 +466,13 @@ export class BigMap {
 
     this.drawGrid(g, world);
 
+    // tamaño de los iconos según el zoom
+    const base = Math.round(Math.min(34, 22 + Math.max(0, scale / this.fitScale - 1) * 3));
+
+    // nombres de barrio: debajo de los iconos (que siempre se vean y se puedan señalar),
+    // buscando un hueco para no taparlos
+    this.drawDistricts(g, world, base);
+
     // línea al destino
     const wp = this.game.hud.waypoint;
     const pp = this.toScreen(px, pz, this.pp);
@@ -489,7 +499,6 @@ export class BigMap {
     }
 
     // sitios
-    const base = Math.round(Math.min(34, 22 + Math.max(0, scale / this.fitScale - 1) * 3));
     for (const poi of world.pois) {
       const st = POI_STYLE[poi.kind];
       if (!st) continue;
@@ -525,9 +534,6 @@ export class BigMap {
       g.drawImage(spr, o.x - w / 2, o.y - w / 2, w, w);
     }
 
-    // nombres de barrio (encima de los iconos, pero buscando hueco para no taparlos)
-    this.drawDistricts(g, world, base);
-
     // destino
     if (wp) {
       this.toScreen(wp.x, wp.z, o);
@@ -560,6 +566,12 @@ export class BigMap {
 
     this.drawScaleBar(g);
     this.drawCompass(g);
+
+    const zoomed = scale > this.fitScale * 1.15;
+    if (zoomed !== this.titleHidden) {
+      this.titleHidden = zoomed;
+      this.title.classList.toggle('hud-mapa__titulo--fuera', zoomed);
+    }
   }
 
   private drawWaves(g: CanvasRenderingContext2D) {
