@@ -4,7 +4,15 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 3 — Armas y enemigos (integrando)
+## Fase actual: 4 — Encargos y dinero (integrando)
+
+## Fase 3 — Armas y enemigos ✅ (26/09, 07:00, publicada)
+- Armas normales: pistola (empiezas con ella), escopeta, subfusil y fusil; locas: lanzapaquetes (cajas que rebotan y tumban) y pistola de cinta de embalar (deja pegados al suelo). Hay una tirada en cada barrio, más botiquines y un chaleco; reaparecen a los 3 min.
+- Apuntado al hombro con retícula (clic derecho), retroceso, fogonazo, trazadoras, casquillos, chispas; rueda de armas (1-5 y rueda del ratón); marca de impacto; disparo desde el vehículo hacia los lados y atrás.
+- Los Devueltos: guardias en su guarida del Polígono, emboscadas, persecuciones en furgoneta morada (embisten, disparan por la ventanilla, te sacan del vehículo). IA justa: avisan antes del primer tiro, se cubren, flanquean y fallan más de lejos. Al caer: nube de cartón y confeti, y a veces sueltan dinero o munición.
+- Policía con 1-5 sirenas: sube por robar coches delante de ellos, disparar, atropellar o agredir; coches patrulla que te persiguen por las calles, furgones y controles desde 3 sirenas; con 1-2 sirenas intentan detenerte (barra de arresto); se pierde escapando un rato o en el taller de pintura.
+- Muerte («¡TE HAN DEVUELTO!») y arresto («¡TE HAN PILLADO!») con pérdida del efectivo; reapareces en el centro de salud o la oficina. Caer al mar: te saca un pescador. La vida se recupera sola hasta 60.
+- Pruebas: + disparar y tiroteo (`capturas/fase-3/`). 19 fallos encontrados por un revisor, arreglados.
 
 ## Fase 2 — Vehículos ✅ (26/09, 06:40, publicada)
 - Furgoneta de reparto (6 paquetes), scooter (2) y coches de calle: utilitario, taxi, deportivo, todoterreno y furgón. Física de Rapier con ruedas por rayos y ayudas arcade (turbo con Shift, freno de mano con Espacio, se enderezan solos).

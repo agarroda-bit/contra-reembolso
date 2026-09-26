@@ -33,6 +33,7 @@ import { RandomEvents } from './gameplay/randomEvents';
 import { PhotoMode } from './ui/photoMode';
 import { Achievements } from './gameplay/achievements';
 import { Daily } from './gameplay/daily';
+import { WeaponSpawns } from './gameplay/weaponSpawns';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -75,7 +76,11 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
     add(new Pedestrians(game));
   }
   if (fase >= 3) {
-    add(new Combat(game));
+    const combat = add(new Combat(game));
+    // el jefe te da una pistola "por si acaso"
+    combat.give('pistol', 36);
+    combat.select('fists');
+    add(new WeaponSpawns(game, fase));
     add(new Police(game));
     add(new Gang(game));
     add(new Respawn(game));

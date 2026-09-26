@@ -181,12 +181,12 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
     b.burst = def.auto ? 3 + Math.floor(rnd.next() * 3) : 1 + Math.floor(rnd.next() * 2);
   }
   b.burst--;
-  b.fireTimer = b.burst > 0 ? baseDelay : 1.1 + rnd.next() * 1.2;
+  b.fireTimer = b.burst > 0 ? baseDelay : 1.5 + rnd.next() * 1.6;
   const muzzle = npc.rig.handWorldPosition(new THREE.Vector3());
   // dispersión: cuanto más lejos y si vas en coche rápido, más fallan
   const v = game.mod.vehicles?.current;
   const moving = v ? Math.min(2, Math.abs(v.speed) / 12) : 0;
-  const spreadMul = 2.2 + dist / 7 + moving * 2;
+  const spreadMul = 3 + dist / 6 + moving * 2;
   // disparan a un punto algo desviado, no al centro exacto
   const aim = target.clone();
   aim.x += (rnd.next() - 0.5) * 0.8;
@@ -194,7 +194,7 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   aim.z += (rnd.next() - 0.5) * 0.8;
   npc.shotPulse = true;
   // daño reducido para NPCs (justo)
-  const npcDef = { ...def, damage: def.damage * (b.side === 'police' ? 0.45 : 0.4) };
+  const npcDef = { ...def, damage: def.damage * (b.side === 'police' ? 0.35 : 0.3) };
   combat.fire({ kind: 'npc', npc, exclude: npc.collider }, npcDef, muzzle, aim, spreadMul);
 }
 

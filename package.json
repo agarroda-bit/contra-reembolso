@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
-    "test": "playwright test",
+    "test": "vite build && playwright test",
     "deploy": "npm run build && node herramientas/publicar.mjs"
   },
   "dependencies": {

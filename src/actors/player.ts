@@ -48,6 +48,8 @@ export class Player implements System {
   readonly push = new THREE.Vector3();
   /** Va sentado en un vehículo (el muñeco es hijo del vehículo). */
   seated = false;
+  /** Última vez que recibió daño (la vida se recupera sola hasta 60 si pasa un rato). */
+  lastHurt = -99;
 
   readonly root = new THREE.Group();
   rig: CharacterRig | null = null;
@@ -142,6 +144,7 @@ export class Player implements System {
     const g = this.game;
     const input = g.input;
     const cam = g.mod.cameraRig as CameraRig | undefined;
+    if (this.state !== 'dead' && this.health < 60 && g.time.elapsed - this.lastHurt > 8) this.health = Math.min(60, this.health + dt * 2.5);
     if (this.state !== 'foot') {
       this.syncVisual(dt);
       return;
@@ -293,6 +296,7 @@ export class Player implements System {
       a -= absorbed;
     }
     this.health = Math.max(0, this.health - a);
+    this.lastHurt = this.game.time.elapsed;
     this.game.events.emit('player:hurt', { amount, source });
     if (this.health <= 0) {
       this.state = 'dead';

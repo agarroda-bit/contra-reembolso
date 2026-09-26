@@ -102,10 +102,10 @@ test('disparar', async ({ page }) => {
   await page.mouse.down();
   await page.waitForTimeout(80);
   await page.mouse.up();
-  await page.waitForTimeout(400);
+  // con SwiftShader va a pocos fps: se espera a que salga la bala (máx. 15 s)
+  await page.waitForFunction(() => (window as any).__cr.mod.combat.ammo.pistol.clip < 12, null, { timeout: 15_000 });
   await page.screenshot({ path: `${DIR}/05-apuntando.png` });
   await page.mouse.up({ button: 'right' });
-  expect((await g(page, `__cr.mod.combat.ammo.pistol.clip`)) as number).toBeLessThan(12);
   // tiroteo con la banda
   await g(page, `__cr.mod.gang.ambush(__cr.mod.player.position.clone().add(new THREE.Vector3(0,0,-16)), 3)`);
   await page.waitForTimeout(3500);

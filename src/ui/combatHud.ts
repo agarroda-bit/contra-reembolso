@@ -4,6 +4,7 @@ import type { Game, System } from '../core/game';
 import { WEAPONS, type WeaponId } from '../combat/weapons';
 
 const CSS = `
+.cr-rueda,.cr-impacto,.cr-arresto{pointer-events:none !important}
 .cr-rueda{position:fixed;left:50%;bottom:200px;transform:translateX(-50%);display:flex;gap:8px;z-index:20;pointer-events:none;transition:opacity .2s}
 .cr-rueda div{min-width:64px;padding:8px 10px 6px;border-radius:14px;background:rgba(27,16,48,.82);border:3px solid rgba(255,255,255,.15);text-align:center;color:#fff;font:800 11px system-ui}
 .cr-rueda div i{display:block;font-style:normal;font-size:26px;line-height:1.1}
