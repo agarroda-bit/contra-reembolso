@@ -46,6 +46,11 @@ export interface CombatBrain {
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
 const SHOUTS_GANG = ['¡Ese paquete es nuestro!', '¡Devuélvenos la mercancía!', '¡A por el repartidor!', '¡Te vamos a devolver al remitente!'];
+/** Aviso justo antes de empezar a disparar (para que se note que van a disparar). */
+const WARN_POLICE = ['¡Alto o disparo!', '¡Policía! ¡Quieto!', '¡Suelta el arma!'];
+const WARN_GANG = ['¡Ahí está!', '¡Te tengo, repartidor!', '¡Quieto ahí!', '¡Firma aquí… con plomo!'];
+/** Último aviso gritado por cualquiera (para que no griten seis a la vez). */
+let lastWarn = -99;
 
 /** Daño de sus armas respecto al del jugador (los enemigos pegan bastante menos: justo). */
 const DMG_GANG = 0.27;
@@ -293,7 +298,16 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   if (!b.los) return;
   // aviso antes del primer disparo
   if (!b.warned) {
-    if (b.telegraph <= 0) b.telegraph = 0.8;
+    if (b.telegraph <= 0) {
+      b.telegraph = 0.8;
+      const now = game.time.elapsed;
+      if (now - lastWarn > 1.5 && now - b.shouted > 3) {
+        lastWarn = b.shouted = now;
+        const list = b.side === 'police' ? WARN_POLICE : WARN_GANG;
+        game.events.emit('npc:shout' as any, { npc, text: list[Math.floor(rnd.next() * list.length)] } as any);
+        game.mod.audio?.say(npc.position, 3, npc.voice, 0.8);
+      }
+    }
     b.telegraph -= game.time.dt;
     npc.aiming = true;
     if (b.telegraph > 0) return;
