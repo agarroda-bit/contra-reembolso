@@ -211,7 +211,7 @@ export function urban(ctx: Ctx, lot: Lot, o: UrbanOpts) {
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   const tiled = o.tiled ?? false;
-  if (tiled) tiledRoof(b, hw, hd, H, rng, col);
+  if (tiled) roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col));
   else flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), trim, rng, o.roofAd === undefined);
   if (o.roofAd !== undefined && !tiled) {
     // valla publicitaria en la azotea, mirando a la calle
@@ -345,6 +345,16 @@ export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, 
   ctx.box(b.wx(x, z), b.wy(y), b.wz(x, z), hx, hy, hz, b.frameRot, G.STATIC, OVERHANG_FILTER);
 }
 
+/**
+ * Colisor de un tejado inclinado (hasta media altura, con el alero), en el marco actual de `b` y
+ * centrado en él. Sin él, el colisor de la casa acababa en lo alto de las paredes y, al mirar hacia
+ * abajo pegado a una casa, la cámara se metía dentro del tejado (pantalla entera de teja).
+ */
+export function roofCollider(ctx: Ctx, b: GeoBuilder, hw: number, hd: number, H: number, h: number, eave = 0.35) {
+  const y0 = H - 0.16, y1 = H + h * 0.5;
+  overhangCollider(ctx, b, 0, (y0 + y1) / 2, 0, hw + eave, (y1 - y0) / 2, hd + eave);
+}
+
 /** Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. */
 export function stripedAwning(b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
   const y1 = y0 - drop, z1 = z0 + depth;
@@ -408,7 +418,7 @@ export function house(ctx: Ctx, lot: Lot, o: { floors: number; flatRoof?: boolea
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   const flat = o.flatRoof ?? rng.chance(0.55);
   if (flat) flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), col, rng, true, 0.8);
-  else tiledRoof(b, hw, hd, H, rng, col);
+  else roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col));
   lot.meta.flat = flat;
   const wood = rng.pick(PAL.doorWood);
   const shutter = rng.pick(PAL.shutter);
@@ -498,7 +508,7 @@ export function chalet(ctx: Ctx, lot: Lot, name: string) {
   // casa
   b.box(0, (y0 + H) / 2, zc, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   b.frame(hp.x, lot.h, hp.z, lot.rot);
-  tiledRoof(b, hw, hd, H, rng, col, undefined, 0.5);
+  roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col, undefined, 0.5));
   const trim = rng.pick(['#8c5a3c', '#f4efe6', '#3f6f8f', '#6e8f4f']);
   for (let k = 0; k < 4; k++) {
     const { half } = facadeFrame(b, houseLot, k);

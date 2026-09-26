@@ -5,7 +5,7 @@ import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
 import { PlanCtx, Special, Out, collectible, makePoi, ground, doorPoint, stairs, stairRun, poiAt, jumpRamp, plazaPad } from './special';
-import { glass, facadeFrame, baseDepth, stripedAwning, awningCollider, house, PAL } from './buildings';
+import { glass, facadeFrame, baseDepth, stripedAwning, awningCollider, roofCollider, house, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, FONT, FONT_SCRIPT, FONT_FUN, FONT_SERIF } from './signs';
 import { BAR_NAMES } from './names';
@@ -146,6 +146,7 @@ function buildBar(ctx: Ctx, out: Out, lot: Lot, i: number, id: string) {
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   b.box(0, H - 0.08, 0, hw * 2 + 0.7, 0.16, hd * 2 + 0.7, '#b8a58c', SKIP.PY);
   b.roof(0, H, 0, hw * 2 + 0.7, hd * 2 + 0.7, 2.2, '#c65f36', col, false);
+  roofCollider(ctx, b, hw, hd, H, 2.2);
   ctx.box(lot.x, lot.h + (y0 + H) / 2, lot.z, hw, (H - y0) / 2, hd, lot.rot);
   const { half } = facadeFrame(b, lot, 0);
   facadeFrame(w, lot, 0);
@@ -291,11 +292,13 @@ function buildHippie(ctx: Ctx, out: Out, x: number, z: number) {
   b.frame(x, y, z, rot);
   vanGeo(b);
   ctx.box(x, y + 1.2, z, 2.3, 1.2, 1.0, rot);
-  // toldo con estructura
+  // toldo con estructura (a 2,9 m y con colisor: antes, a 2,4 m, la cámara lo atravesaba y tapaba al
+  // jugador justo al comprar)
   b.frame(x, y, z, rot);
-  stripedAwning(b, 2.4, 2.4, -1.0, 4.2, 3.2, 0.5, '#7c4dbb', '#ffd23f', 7);
-  b.box(0.4, 1.0, 2.2, 0.08, 2.0, 0.08, '#6b4a2a');
-  b.box(4.4, 1.0, 2.2, 0.08, 2.0, 0.08, '#6b4a2a');
+  stripedAwning(b, 2.4, 2.9, -1.0, 4.2, 3.2, 0.5, '#7c4dbb', '#ffd23f', 7);
+  awningCollider(ctx, b, 2.4, 2.9, -1.0, 4.2, 3.2);
+  b.box(0.4, 1.25, 2.2, 0.08, 2.5, 0.08, '#6b4a2a');
+  b.box(4.4, 1.25, 2.2, 0.08, 2.5, 0.08, '#6b4a2a');
   // puesto: mesa con macetas de "hierbas aromáticas"
   b.box(2.4, 0.45, 1.2, 2.6, 0.9, 0.9, '#b98a58');
   for (let i = 0; i < 5; i++) {
