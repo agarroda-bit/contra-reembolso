@@ -337,7 +337,6 @@ const KF_STAND = new Float32Array(NCH);
 const KF_LYING = new Float32Array(NCH);
 const KF_SITUP = new Float32Array(NCH);
 const KF_CROUCH = new Float32Array(NCH);
-const KF_DRIVE = new Float32Array(NCH);
 const KF_DUCK = new Float32Array(NCH);
 const KF_LEGIN = new Float32Array(NCH);
 const KF_REACH = new Float32Array(NCH);
@@ -346,7 +345,6 @@ const KF_PULL = new Float32Array(NCH);
 (function buildKeyframes() {
   standPose(KF_STAND);
   lyingPose(KF_LYING);
-  drivePose(KF_DRIVE, 1);
 
   // incorporarse: sentado en el suelo
   const o = KF_SITUP;
