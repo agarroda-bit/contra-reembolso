@@ -509,7 +509,7 @@ function missions(): Mission[] {
               if (!c.data.route.length) {
                 const nodes = roads.g.nodes;
                 const far = nodes[Math.floor(rnd.next() * nodes.length)].pos;
-                c.data.route = roads.route(tp, far);
+                c.data.route = roads.route(tp, far, true);
               }
             }
             const brain = (truck as any).brain as CarBrain;

@@ -18,9 +18,16 @@ const CAM_GROUPS = groups(G.ALL, SOLID);
 const CAM_RADIUS = 0.25;
 let camBall: RAPIER.Ball | null = null;
 let shoulderRay: RAPIER.Ray | null = null;
+/** Voladizos del mundo (toldos, balcones, marquesinas): mismos grupos que OVERHANG_FILTER de world/island/ctx.ts. */
+const OVERHANG_GROUPS = groups(G.STATIC, G.ALL & ~G.VEHICLE);
+/** Desde dónde sale la bolita en el lanzamiento en curso. */
+const castFrom = { x: 0, y: 0, z: 0 };
 /** Obstáculos finos que la cámara ignora (cilindros estrechos: farolas, árboles, postes, bolardos). */
 function solidEnough(c: RAPIER.Collider): boolean {
-  return !(c.shapeType() === RAPIER.ShapeType.Cylinder && c.radius() < 0.5);
+  if (c.shapeType() === RAPIER.ShapeType.Cylinder && c.radius() < 0.5) return false;
+  // voladizo en el que la bolita ya empieza metida (saltando bajo un toldo): no cuenta
+  if (camBall && c.collisionGroups() === OVERHANG_GROUPS && c.intersectsShape(camBall, castFrom, NO_ROT)) return false;
+  return true;
 }
 
 export class CameraRig implements System {
@@ -172,7 +179,8 @@ export class CameraRig implements System {
     // Colisión con el mundo: una bolita desde el pivote hacia la cámara (ignora lo fino)
     let d = this.dist;
     if (!camBall) camBall = new RAPIER.Ball(CAM_RADIUS);
-    const hit = g.physics.world.castShape(pivot, NO_ROT, tmpDir, camBall, 0, d + 0.1, false, undefined, CAM_GROUPS, undefined, this.excludeBody ?? undefined, solidEnough);
+    castFrom.x = pivot.x; castFrom.y = pivot.y; castFrom.z = pivot.z;
+    const hit =g.physics.world.castShape(pivot, NO_ROT, tmpDir, camBall, 0, d + 0.1, false, undefined, CAM_GROUPS, undefined, this.excludeBody ?? undefined, solidEnough);
     if (hit) d = Math.max(0.35, hit.time_of_impact - 0.05);
     // acercarse por una pared es instantáneo; volver a alejarse, suave (sin "bombeo" al pasar junto a esquinas)
     if (d < this.colDist || !this.initialized) this.colDist = d;

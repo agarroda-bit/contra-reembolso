@@ -1222,7 +1222,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
   // ── Puntos de interacción ──
   const spots: Spot[] = [
     {
-      pos: V(10, 1.3), r: 2.4, text: 'Mirar el tablón de encargos',
+      pos: V(10, 1.3), r: 2.4, text: 'Gestionar tu empresa (tablón, personal, flota)',
       run: () => {
         const c = game.mod.company;
         if (c?.open) c.open();

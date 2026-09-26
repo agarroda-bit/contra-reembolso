@@ -62,7 +62,7 @@ export class Company implements System {
   fleet = 0; // furgonetas de la flota (además de la tuya)
   luxuries = new Set<string>();
   private nextId = 1;
-  private rescue: { emp: Employee; pos: THREE.Vector3; timer: number; enemies: any[]; marker?: any } | null = null;
+  private rescue: { emp: Employee; pos: THREE.Vector3; timer: number; enemies: any[]; marker?: any; armed?: boolean } | null = null;
   private decor: THREE.Object3D[] = [];
   private office: Poi | undefined;
 
@@ -76,6 +76,9 @@ export class Company implements System {
     // por eso se mira al usarlo y no aquí.)
     it.addPoi((p) => p.kind === 'office' && (this.game.mod.fase ?? 9) < 6, 'Gestionar tu empresa (tablón, personal, flota)', () => this.open(), 3.2, 1);
     game.events.on('newday', () => this.payday());
+    game.events.on('player:respawn', () => {
+      if (this.rescue) { this.rescue.enemies = []; this.rescue.armed = false; }
+    });
     this.refreshDecor();
   }
 
@@ -326,7 +329,10 @@ export class Company implements System {
       r.marker ??= { x: r.pos.x, z: r.pos.z, icon: '🆘', color: '#ff4f81', label: `Ayuda a ${r.emp.name}`, rescue: true };
       g.hud.markers.push(r.marker);
       const p = g.mod.player;
-      if (!r.enemies.length && p.position.distanceTo(r.pos) < 60) r.enemies = g.mod.gang?.ambush(r.pos, 3) ?? [];
+      // tras reaparecer, la emboscada no vuelve a salir hasta que te alejes y vuelvas (sin bucles de muertes)
+      const dp = p.position.distanceTo(r.pos);
+      if (dp > 90) r.armed = true;
+      if (!r.enemies.length && r.armed !== false && dp < 60) r.enemies = g.mod.gang?.ambush(r.pos, 3) ?? [];
       // si se han borrado por distancia sin morir, volverán a salir cuando vuelvas
       if (r.enemies.length && r.enemies.some((n: any) => n.removed && n.state !== 'dead')) r.enemies = [];
       const beaten = r.enemies.length > 0 && r.enemies.every((n: any) => n.state === 'dead' || (n.killable && n.health <= 0));
@@ -337,6 +343,8 @@ export class Company implements System {
         dropMarkers(g.hud.markers, 'rescue');
         this.rescue = null;
       } else if (r.timer <= 0) {
+        // los que esperaban al acecho se van (no se quedan apostados junto a la puerta)
+        for (const n of r.enemies) if (!n.removed && n.alive && !n.brain?.aggro && n.brain) { n.brain.lurk = false; n.brain.bored = true; n.brain.calmUntil = g.time.elapsed + 30; }
         r.emp.robbed = true;
         r.emp.earnedToday = 0;
         g.mod.messages?.receive('staff-' + r.emp.id, r.emp.name, r.emp.avatar, 'Se lo han llevado todo, jefe. Hoy no hay caja. 😢');

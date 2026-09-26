@@ -88,12 +88,12 @@ const tmpQ = new THREE.Quaternion();
 /** Ruta por calles empezando por el cruce que el coche tiene delante (así no intenta dar la vuelta en mitad de una calle). */
 function chaseRoute(roads: Roads, car: Vehicle, carPos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3[] {
   const ne = roads.nearestEdge(carPos, true);
-  if (!ne || ne.dist > 12) return roads.route(carPos, target);
+  if (!ne || ne.dist > 12) return roads.route(carPos, target, true);
   const e = roads.g.edges[ne.edge];
   const a = roads.g.nodes[e.a].pos, b = roads.g.nodes[e.b].pos;
   const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
   const ahead = (b.x - a.x) * fx + (b.z - a.z) * fz > 0 ? b : a;
-  return roads.route(ahead, target);
+  return roads.route(ahead, target, true);
 }
 
 /**
