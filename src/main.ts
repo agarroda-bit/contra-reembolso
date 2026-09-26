@@ -8,6 +8,7 @@ import { buildPlaceholderWorld } from './world/placeholder';
 import { Player } from './actors/player';
 import { CameraRig } from './actors/cameraRig';
 import { VehicleManager } from './vehicles/manager';
+import { AudioEngine } from './audio/audio';
 
 async function boot() {
   const loading = new LoadingScreen();
@@ -25,10 +26,12 @@ async function boot() {
   game.scene.add(sun);
   const cam = new CameraRig(game);
   const player = new Player(game);
+  const audio = new AudioEngine(game);
   const vehicles = new VehicleManager(game);
   game.addSystem(player);
   game.addSystem(vehicles);
   game.addSystem(cam);
+  game.addSystem(audio);
   player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);
   // la furgoneta de reparto, aparcada al lado
   const sp = game.world.playerSpawn;

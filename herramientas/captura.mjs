@@ -3,6 +3,7 @@
 //   node herramientas/captura.mjs --page "index.html?debug=1" --port 5201 \
 //        --shots '[{"wait":3000,"out":"capturas/tmp/a.png"},{"eval":"__cr.clock.hour=23","wait":1500,"out":"capturas/tmp/b.png"}]'
 // Cada shot: { eval?: string (JS en la página), keys?: [{"key":"KeyW","ms":2000}], wait?: ms, out?: ruta png, log?: expresión JS a imprimir }
+// Añade --gpu para usar la GPU real (Metal) en vez de SwiftShader.
 // Imprime los errores de consola al final y sale con código 1 si hubo errores (salvo --allow-errors).
 import { createServer } from 'vite';
 import { chromium } from '@playwright/test';
@@ -23,9 +24,12 @@ const width = Number(args.width || 1280), height = Number(args.height || 720);
 const server = await createServer({ server: { port, strictPort: false }, logLevel: 'error', clearScreen: false });
 await server.listen();
 const url = `http://localhost:${server.config.server.port}/${page}`;
-const browser = await chromium.launch({
-  args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
-});
+// --gpu: Chromium completo con la GPU real del Mac (Metal): fps realistas y capturas rápidas.
+const browser = await chromium.launch(
+  args.gpu
+    ? { channel: 'chromium', args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] }
+    : { args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'] },
+);
 const ctx = await browser.newContext({ viewport: { width, height } });
 const p = await ctx.newPage();
 const errors = [];

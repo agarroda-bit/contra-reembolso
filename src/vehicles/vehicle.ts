@@ -63,6 +63,8 @@ export class Vehicle {
   /** Callback de impacto (daño a paquetes, sonidos...). */
   onImpact: ((dv: number, v: Vehicle) => void) | null = null;
   readonly wheelContact = [false, false, false, false];
+  /** Velocidad lateral (m/s): derrape. */
+  slip = 0;
 
   constructor(private game: Game, kind: VehicleKind, pos: THREE.Vector3, heading: number, color?: string) {
     this.spec = VEHICLES[kind];
@@ -267,6 +269,10 @@ export class Vehicle {
 
     // Impactos: cambio brusco de velocidad
     const lv = this.body.linvel();
+    // derrape: velocidad lateral en ejes del coche
+    tmpQ.set(r.x, r.y, r.z, r.w).invert();
+    const localV = tmpV.set(lv.x, lv.y, lv.z).applyQuaternion(tmpQ);
+    this.slip = contacts > 1 ? Math.abs(localV.x) : 0;
     const dv = Math.hypot(lv.x - this.prevVel.x, (lv.y - this.prevVel.y) * 0.6, lv.z - this.prevVel.z);
     this.prevVel.set(lv.x, lv.y, lv.z);
     if (dv > 5.5) this.impact(dv);

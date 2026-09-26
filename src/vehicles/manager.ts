@@ -97,6 +97,7 @@ export class VehicleManager implements System {
     const player = this.player;
     for (const v of this.list) v.syncVisual(dt);
     this.hornCooldown -= dt;
+    this.updateAudio();
 
     if (this.transition) {
       this.runTransition(dt);
@@ -149,6 +150,32 @@ export class VehicleManager implements System {
         g.hud.hint = null;
         (this as any)._hinting = false;
       }
+    }
+  }
+
+  /** Motores y derrapes: el del jugador siempre, y los 3 más cercanos con motor en marcha. */
+  private updateAudio() {
+    const audio = this.game.mod.audio;
+    if (!audio?.ctx) return;
+    const cam = this.game.camera.position;
+    const near = this.list
+      .filter((v) => !v.destroyed && (v === this.current || v.driver))
+      .map((v) => ({ v, d: v.getPosition(tmpV).distanceToSquared(cam) }))
+      .filter((x) => x.d < 70 * 70 || x.v === this.current)
+      .sort((a, b) => (a.v === this.current ? -1 : b.v === this.current ? 1 : a.d - b.d))
+      .slice(0, 4);
+    for (const { v } of near) {
+      const s = v.spec;
+      const sp = Math.abs(v.speed);
+      const gearSpan = s.maxSpeed / 5;
+      const gear = Math.min(4, Math.floor(sp / gearSpan));
+      const within = (sp - gear * gearSpan) / gearSpan;
+      const thr = Math.max(0, v.controls.throttle);
+      const rpm = Math.min(1, 0.12 + within * 0.7 + thr * 0.12 + (v.wheelContact.some((c) => c) ? 0 : thr * 0.3));
+      const pos = v.getPosition(new THREE.Vector3());
+      audio.engine(v.id, s.kind, pos, rpm, thr, v === this.current ? 1.2 : 0.8);
+      if (v.slip > 4.5 && sp > 4) audio.loop('skid' + v.id, 'skid', pos, Math.min(0.5, (v.slip - 4.5) / 10), Math.min(1, sp / 30));
+      if (v.sirenOn) audio.loop('siren' + v.id, 'siren', pos, 0.8);
     }
   }
 
