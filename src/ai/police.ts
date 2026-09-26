@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import type { Npc } from '../actors/npc';
+import type { Poi } from '../core/contracts';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { VehicleManager } from '../vehicles/manager';
 import type { NpcManager } from '../actors/npcManager';
@@ -22,11 +23,20 @@ const POLICE_ACC = [0.46, 0.46, 0.46, 0.48, 0.55, 0.62];
 const HEAT_SHOT = 0.3;
 /** Sin un policía delante, los disparos (la gente llamando) no pasan de 2 sirenas. */
 const HEAT_CAP_UNSEEN_SHOTS = HEAT_LEVELS[3] - 0.01;
+/** Por disparar, como mucho 1 de calor cada 2,5 s (una ráfaga de subfusil no dispara la búsqueda). */
+const SHOT_HEAT_MAX = 1;
+const SHOT_HEAT_REFILL = SHOT_HEAT_MAX / 2.5;
+/** Tiroteo con la banda (defenderte o asaltarles): sin testigos no pasa de 1 sirena y con policía delante, de 2. */
+const HEAT_CAP_GANG_UNSEEN = HEAT_LEVELS[2] - 0.01;
+const HEAT_CAP_GANG_SEEN = HEAT_LEVELS[3] - 0.01;
+/** Distancia a la que un enfrentamiento con la banda cuenta como «tiroteo con la banda». */
+const GANG_FIGHT_DIST = 60;
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpE = new THREE.Vector3();
 const tmpT = new THREE.Vector3();
 const tmpF = new THREE.Vector3();
+const tmpS = new THREE.Vector3();
 
 interface Unit extends ChaseNav {
   car: Vehicle;
@@ -166,6 +176,10 @@ export class Police implements System {
   private roads: Roads;
   private roadblockTimer = 10;
   private paintCooldown = 0;
+  /** Taller de pintura (se busca una vez). */
+  private paintPoi: Poi | null | undefined;
+  /** Calor que aún pueden dar los disparos ahora mismo (se recarga poco a poco: ver SHOT_HEAT_MAX). */
+  private shotBudget = SHOT_HEAT_MAX;
 
   constructor(private game: Game) {
     game.mod.police = this;
@@ -174,7 +188,14 @@ export class Police implements System {
     // crímenes
     ev.on('vehicle:steal' as any, (e: any) => this.crime(e.npc?.police ? 3 : 1, 'robo', true));
     ev.on('weapon:shot' as any, (e: any) => {
-      if (e.shooter?.kind === 'player') this.crime(e.melee ? 0.15 : HEAT_SHOT, 'disparos', false, 60, HEAT_CAP_UNSEEN_SHOTS);
+      if (e.shooter?.kind !== 'player') return;
+      // en las misiones de la historia contra la banda, los tiros no traen a la policía
+      if (game.mod.story?.gangMission) return;
+      const w = Math.min(e.melee ? 0.15 : HEAT_SHOT, this.shotBudget);
+      if (w <= 0.001) return;
+      this.shotBudget -= w;
+      const gang = this.gangFight();
+      this.crime(w, 'disparos', false, 60, gang ? HEAT_CAP_GANG_UNSEEN : HEAT_CAP_UNSEEN_SHOTS, gang ? HEAT_CAP_GANG_SEEN : Infinity);
     });
     ev.on('npc:runover' as any, (e: any) => {
       if (e.vehicle === game.mod.vehicles?.current) this.crime(e.npc.police ? 2 : 0.6, 'atropello', true);
@@ -185,7 +206,8 @@ export class Police implements System {
         if (n.police) this.crime(1.5, 'agresión a la autoridad', false, 999);
       }
       const b = n.brain as CombatBrain | undefined;
-      if (b && 'side' in b) {
+      // (los de la banda los enfada gang.ts, solo si el golpe es tuyo)
+      if (b && 'side' in b && b.side === 'police') {
         b.lastHurt = game.time.elapsed;
         b.aggro = true;
       }
@@ -211,10 +233,30 @@ export class Police implements System {
   }
 
   /**
-   * Un delito. `needsWitness`: solo cuenta si lo ve la policía (o con probabilidad si lo ve la gente).
-   * maxDist: distancia a la que la policía lo oye/ve.
+   * ¿Hay un enfrentamiento con la banda alrededor del jugador? (alguno de Los Devueltos enfadado cerca,
+   * o estás en su territorio). Entonces los disparos cuentan poco: te estás defendiendo o es cosa de bandas.
    */
-  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55, capUnseen = Infinity) {
+  private gangFight(): boolean {
+    const gang = this.game.mod.gang;
+    if (!gang) return false;
+    const p = this.game.mod.player;
+    const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpF) : p.position;
+    const h = gang.hideout;
+    if (h && h.door.distanceTo(pos) < GANG_FIGHT_DIST) return true;
+    for (const m of gang.members as Npc[]) {
+      if (!m.alive || m.removed) continue;
+      const b = m.brain as CombatBrain | undefined;
+      if (b?.aggro && m.position.distanceTo(pos) < GANG_FIGHT_DIST) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Un delito. `needsWitness`: solo cuenta si lo ve la policía (o con probabilidad si lo ve la gente).
+   * maxDist: distancia a la que la policía lo oye/ve. capUnseen/capSeen: tope de calor que puede dar
+   * este delito sin testigos / con un policía delante (si ya hay más calor, no lo baja).
+   */
+  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55, capUnseen = Infinity, capSeen = Infinity) {
     const p = this.game.mod.player;
     if (!p) return;
     const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : p.position;
@@ -228,8 +270,8 @@ export class Police implements System {
       if (rnd.next() > 0.35) return;
     }
     const before = this.wanted;
-    if (seen) this.heat += weight;
-    else if (this.heat < capUnseen) this.heat = Math.min(capUnseen, this.heat + weight);
+    const cap = seen ? capSeen : capUnseen;
+    if (this.heat < cap) this.heat = Math.min(cap, this.heat + weight);
     this.recalc();
     this.unseen = 0;
     this.lastSeen.copy(pos);
@@ -254,25 +296,27 @@ export class Police implements System {
 
   /** ¿Algún policía (a pie o en coche) ve este punto? */
   seesPoint(pt: THREE.Vector3, maxDist = 60): boolean {
-    const target = tmpT.copy(pt).setY(pt.y + 1);
-    const look = (e: THREE.Vector3) => {
-      const d = e.distanceTo(target);
-      if (d > maxDist) return false;
-      const dir = tmpV2.copy(target).sub(e);
-      return !this.game.physics.raycast(e, dir, d - 0.8, SOLID);
-    };
+    const target = tmpS.copy(pt).setY(pt.y + 1);
     for (const o of this.officers) {
       if (!o.alive || o.vehicle || o.busy) continue;
-      if (look(tmpE.copy(o.position).setY(o.position.y + 1.6))) return true;
+      if (this.look(tmpE.copy(o.position).setY(o.position.y + 1.6), target, maxDist)) return true;
     }
     for (const u of this.units) {
       // solo cuentan los coches con un policía al volante (no el que conduces tú ni uno vacío)
       if (u.car.destroyed || u.car.disposed || u.car === this.vm.current || u.car.driver?.kind !== 'npc') continue;
       const e = u.car.getPosition(tmpE);
       e.y += 0.8;
-      if (look(e)) return true;
+      if (this.look(e, target, maxDist)) return true;
     }
     return false;
+  }
+
+  /** ¿Desde `eye` se ve `target` (a menos de maxDist y sin paredes en medio)? */
+  private look(eye: THREE.Vector3, target: THREE.Vector3, maxDist: number): boolean {
+    const d = eye.distanceTo(target);
+    if (d > maxDist) return false;
+    const dir = tmpV2.copy(target).sub(eye);
+    return !this.game.physics.raycast(eye, dir, d - 0.8, SOLID);
   }
 
   /** Borra la búsqueda y retira a la policía. */
@@ -427,6 +471,7 @@ export class Police implements System {
     const p = g.mod.player;
     if (!p || !g.world) return;
     g.hud.wanted = this.wanted;
+    this.shotBudget = Math.min(SHOT_HEAT_MAX, this.shotBudget + SHOT_HEAT_REFILL * dt);
     this.paintCooldown -= dt;
     this.checkPaintShop();
 
@@ -487,16 +532,18 @@ export class Police implements System {
     // unidades
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
-      u.crew = u.crew.filter((n) => !n.removed);
+      dropRemoved(u.crew);
       if (u.car.disposed) {
         // el coche ya no existe: los agentes siguen a pie
         for (const n of u.crew) if (!this.officers.includes(n)) this.officers.push(n);
         this.units.splice(i, 1);
         continue;
       }
-      const alive = u.crew.some((n) => n.alive);
+      let alive = false;
+      for (const n of u.crew) if (n.alive) alive = true;
       const carIsMine = u.car === this.vm.current;
-      const ref = carIsMine ? u.crew.find((n) => !n.removed)?.position ?? p.position : u.car.getPosition(tmpV);
+      // (tras dropRemoved, el primero de la tripulación es uno que sigue existiendo)
+      const ref = carIsMine ? u.crew[0]?.position ?? p.position : u.car.getPosition(tmpV);
       const far = ref.distanceTo(p.position) > 220;
       if (far) {
         this.despawnUnit(u);
@@ -597,7 +644,12 @@ export class Police implements System {
   private checkArrest(dt: number) {
     const g = this.game;
     const p = g.mod.player;
-    if (p.state === 'dead') return;
+    if (p.state === 'dead') {
+      // pillado (o muerto): el cartel de «te están deteniendo» se quita ya, no encima de «¡TE HAN PILLADO!»
+      this.arrestTimer = 0;
+      (g.hud as any).arrest = 0;
+      return;
+    }
     let near = false;
     const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : p.position;
     const slow = p.state === 'foot' ? p.velocity.length() < 2.2 : Math.abs(this.vm.current?.speed ?? 99) < 1.2;
@@ -622,7 +674,8 @@ export class Police implements System {
     const g = this.game;
     const v = this.vm?.current;
     if (!v || this.paintCooldown > 0) return;
-    const poi = g.world.pois.find((x) => x.kind === 'paint');
+    // (se busca una vez: los sitios del mapa no cambian)
+    const poi = (this.paintPoi ??= g.world.pois.find((x) => x.kind === 'paint') ?? null);
     if (!poi) return;
     if (v.getPosition(tmpV).distanceTo(poi.door) > 7) return;
     if (Math.abs(v.speed) > 6) return;
@@ -642,6 +695,13 @@ export class Police implements System {
     this.clear();
     g.events.emit('toast', { text: `¡Pintado nuevo por ${price} €! La policía ya no te reconoce.`, color: c, time: 3 });
   }
+}
+
+/** Quita de la lista los que ya no existen, sin crear una lista nueva. */
+function dropRemoved(list: Npc[]) {
+  let w = 0;
+  for (let i = 0; i < list.length; i++) if (!list[i].removed) list[w++] = list[i];
+  list.length = w;
 }
 
 /** Cambia el color de la carrocería (recolorea los vértices del color antiguo). */

@@ -141,6 +141,8 @@ function spawnBoss(g: Game, pos: THREE.Vector3): Npc {
   n.health = n.maxHealth = 650;
   const b = makeCombatBrain('gang', 'launcher');
   b.aggro = true;
+  // sus cajas pegan algo más que las de los demás (9 en vez de 7)
+  b.dmgMul = 1.3;
   n.brain = b;
   armNpc(n, 'launcher');
   g.mod.gang?.members.push(n);
@@ -252,8 +254,9 @@ function missions(): Mission[] {
             c.data.van.packages = 5;
             c.data.off = c.g.events.on('vehicle:impact' as any, (e: any) => {
               if (e.vehicle === c.data.van) {
-                c.data.integrity -= Math.max(0, e.dv - 3.5) * 6;
-                if (e.dv > 7) c.g.mod.bubbles?.say(c.g.mod.player, ['¡El flamenco!', '¡Crac! Eso era el espejo…', 'La lámpara de lava ya no es de lava'][Math.floor(rnd.next() * 3)], 1.8);
+                // un roce con un bordillo o una farola (dv 7-10) quita un 7-17 %; un buen choque (dv 15), un 35 %
+                c.data.integrity -= Math.max(0, e.dv - 5) * 3.5;
+                if (e.dv > 7.5) c.g.mod.bubbles?.say(c.g.mod.player, ['¡El flamenco!', '¡Crac! Eso era el espejo…', 'La lámpara de lava ya no es de lava'][Math.floor(rnd.next() * 3)], 1.8);
               }
             });
             c.data.off2 = c.g.events.on('vehicle:landed' as any, (e: any) => {
@@ -269,7 +272,7 @@ function missions(): Mission[] {
               c.data.failText = 'La furgoneta con la mudanza ha quedado para chatarra.';
               return 'fail';
             }
-            if (c.data.integrity <= 20) {
+            if (c.data.integrity < 10) {
               c.data.failText = 'Los muebles han llegado en formato «hágalo usted mismo».';
               return 'fail';
             }
@@ -407,8 +410,15 @@ function missions(): Mission[] {
             if (!c.data.spawned && near(c.g, h.door, 150)) {
               c.data.spawned = true;
               c.data.guards = c.g.mod.gang?.ambush(h.door, 2) ?? [];
-              const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', true);
-              if (extra) c.data.guards.push(extra);
+              const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', false);
+              if (extra) {
+                // guarda la puerta como los demás apostados: no sale corriendo a buscarte ni se borra por estar lejos
+                const eb = extra.brain as CombatBrain;
+                eb.home = extra.position.clone();
+                eb.holdAt = extra.position.clone();
+                eb.aggro = false;
+                c.data.guards.push(extra);
+              }
             }
             if (!c.data.spawned) return;
             // si te alejas mucho, desaparecen: vuelven a salir cuando vuelvas
@@ -621,6 +631,12 @@ export class Story implements System {
     return !!this.active;
   }
 
+  /** Misión de la historia contra Los Devueltos en marcha (la policía no viene por los tiros). */
+  get gangMission(): boolean {
+    const id = this.active?.m.id;
+    return id === 'reloj' || id === 'guarida' || id === 'jefe';
+  }
+
   /** Premio de una misión (repetirla paga menos: si no, el jefe final sería un cajero automático). */
   reward(m: Mission): { money: number; fame: number } {
     const again = this.completed.has(m.id);
@@ -699,11 +715,16 @@ export class Story implements System {
     this.finishCleanup();
     msg(g, BOSS, a.m.outro);
     this.announced = '';
-    g.mod.economy?.addCash(r.money + bonus, 'misión');
+    // misión cumplida = fin del lío: la policía lo deja y la banda que quede cerca se retira
+    // (si no, tras el final te matan en la calle y pierdes el premio)
+    g.mod.police?.clear?.();
+    g.mod.gang?.standDown?.(playerPos(g), 250);
+    // el premio va al banco (el efectivo se pierde al morir o al ser detenido)
+    g.mod.economy?.addBank(r.money + bonus, 'misión');
     g.mod.economy?.addFame(r.fame, 'misión');
     g.mod.audio?.play('success');
     g.mod.particles?.emit('confetti', g.mod.player.position.clone().setY(g.mod.player.position.y + 2), { count: 60, speed: 1.3 });
-    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)}  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 3.5 });
+    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)} ingresados en tu cuenta  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 4 });
     // qué viene ahora (si subir de fama no lo ha anunciado ya)
     const next = this.nextMission();
     if (first && next && a.m.id !== 'jefe' && this.announced !== next.id) {
@@ -833,6 +854,9 @@ export class Story implements System {
       this.credits = null;
       g.paused = false;
       g.input.enabled = true;
+      // unos segundos de margen para situarte al volver a la calle
+      const pl = g.mod.player;
+      if (pl) pl.shield = Math.max(pl.shield ?? 0, 3);
     };
     skip.onclick = close;
     const tick = () => {

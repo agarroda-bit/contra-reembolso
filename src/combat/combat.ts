@@ -51,6 +51,14 @@ const tmpO = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 
+/** Teclas 1-5 (cambio de arma por grupo). */
+const SLOT_ACTIONS = ['weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5'] as const;
+/** «Subfusil (recargando…)» ya hecho (no se pega el texto en cada frame). */
+const RELOAD_NAME = Object.fromEntries(WEAPON_ORDER.map((w) => [w, WEAPONS[w].name + ' (recargando…)'])) as Record<WeaponId, string>;
+
+/** Daño al jugador de cada caja del lanzapaquetes de un enemigo (antes 12: era el arma de casi todas las muertes). */
+const PACKAGE_HIT_PLAYER = 7;
+
 /** Ayuda de apuntado: cono (radianes) alrededor del centro de la pantalla y fuerza del imán. */
 const ASSIST_CONE = 0.075;
 const ASSIST_PULL = 2;
@@ -80,6 +88,10 @@ export class Combat implements System {
   /** Trazadoras libres (se reutilizan: nada de mallas nuevas en cada disparo). */
   private tracerPool: THREE.Mesh[] = [];
   private wheelTimer = 0;
+  /** Armas que tienes, en orden (se rehace al girar la rueda). */
+  private readonly wheelList: WeaponId[] = [];
+  /** Datos del arma para el HUD (se reutilizan). */
+  private readonly hudWeapon = { name: '', icon: '', clip: 0, reserve: 0, infinite: false };
   /** Segundos que le quedan al jugador con los pies precintados (cinta de la banda). */
   private tapedPlayer = 0;
   /** Sin munición infinita salvo trucos. */
@@ -187,16 +199,17 @@ export class Combat implements System {
 
     // cambio de arma
     if (canAct) {
-      (['weapon1', 'weapon2', 'weapon3', 'weapon4', 'weapon5'] as const).forEach((a, i) => {
-        if (input.pressed(a)) this.selectSlot(i + 1, inVehicle);
-      });
+      for (let i = 0; i < SLOT_ACTIONS.length; i++) if (input.pressed(SLOT_ACTIONS[i])) this.selectSlot(i + 1, inVehicle);
       if (input.wheel !== 0) {
         this.cycle(input.wheel > 0 ? 1 : -1, inVehicle);
         this.wheelTimer = 1.2;
+        // (la lista se hace al girar la rueda, no en cada frame)
+        this.wheelList.length = 0;
+        for (const w of WEAPON_ORDER) if (this.owned.has(w)) this.wheelList.push(w);
       }
     }
     if (this.wheelTimer > 0) this.wheelTimer -= dt;
-    (g.hud as any).weaponWheel = this.wheelTimer > 0 ? WEAPON_ORDER.filter((w) => this.owned.has(w)) : null;
+    (g.hud as any).weaponWheel = this.wheelTimer > 0 ? this.wheelList : null;
     if (inVehicle && !WEAPONS[this.current].driveBy && this.current !== 'fists') this.select('fists');
 
     const def = WEAPONS[this.current];
@@ -246,17 +259,17 @@ export class Combat implements System {
       }
     }
 
-    g.hud.weapon =
-      this.current === 'fists' && this.owned.size === 1
-        ? null
-        : {
-            name: def.name,
-            icon: def.icon,
-            clip: def.clip > 0 ? a.clip : 0,
-            reserve: def.clip > 0 ? a.reserve : 0,
-            infinite: def.clip === 0 || this.infiniteAmmo,
-          };
-    if (this.reloading > 0 && g.hud.weapon) g.hud.weapon.name = def.name + ' (recargando…)';
+    // (el mismo objeto cada frame: el HUD compara los valores, no el objeto)
+    if (this.current === 'fists' && this.owned.size === 1) g.hud.weapon = null;
+    else {
+      const hw = this.hudWeapon;
+      hw.name = this.reloading > 0 ? RELOAD_NAME[def.id] : def.name;
+      hw.icon = def.icon;
+      hw.clip = def.clip > 0 ? a.clip : 0;
+      hw.reserve = def.clip > 0 ? a.reserve : 0;
+      hw.infinite = def.clip === 0 || this.infiniteAmmo;
+      g.hud.weapon = hw;
+    }
 
     if (this.tapedPlayer > 0) {
       this.tapedPlayer -= dt;
@@ -366,7 +379,8 @@ export class Combat implements System {
   fire(shooter: Shooter, def: WeaponDef, muzzle: THREE.Vector3, target: THREE.Vector3, spreadMul = 1) {
     const g = this.game;
     g.mod.audio?.play(def.sound, { pos: shooter.kind === 'player' ? null : muzzle, volume: shooter.kind === 'player' ? 0.9 : 1 });
-    g.events.emit('weapon:shot' as any, { pos: muzzle.clone(), shooter, weapon: def.id } as any);
+    // un puñetazo al aire no es un «disparo» (la policía no viene por eso): melee() avisa solo si golpea a alguien
+    if (def.mode !== 'melee') g.events.emit('weapon:shot' as any, { pos: muzzle.clone(), shooter, weapon: def.id } as any);
     const dir = tmpDir.copy(target).sub(muzzle).normalize();
     switch (def.mode) {
       case 'melee':
@@ -624,7 +638,8 @@ export class Combat implements System {
         const p = this.player;
         const pdy = pr.pos.y - p.position.y;
         if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && !pr.hit.size && pdy > -0.3 && pdy < 2 && Math.hypot(pr.pos.x - p.position.x, pr.pos.z - p.position.z) < 0.9) {
-          p.hurt(12, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
+          const mul = (pr.owner.npc?.brain as { dmgMul?: number } | null)?.dmgMul ?? 1;
+          p.hurt(PACKAGE_HIT_PLAYER * mul, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
           p.push.set(lv.x * 0.3, 3, lv.z * 0.3);
           pr.hit.add(null as any);
         }

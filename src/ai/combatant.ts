@@ -42,6 +42,21 @@ export interface CombatBrain {
   acc: number | null;
   /** Distancia desde la que se para a disparar (si no, la de su arma). Con muchas sirenas se acercan más. */
   engageRange: number | null;
+  /** Tregua: hasta este momento (game.time.elapsed) no se enfada solo por verte (sí si le atacas). */
+  calmUntil: number;
+  /** Segundos que lleva enfadado sin verte (la banda pierde el interés pasado un rato). */
+  unseenFor: number;
+  /** Ha perdido el interés: se va (y la banda lo retira cuando nadie lo ve). */
+  bored: boolean;
+  /** Vector propio para `goal` al apartarse a quemarropa. */
+  goalBuf?: THREE.Vector3;
+  /** Banda: dónde te vio por última vez (si te pierde de vista, va ahí y no a donde estás de verdad). */
+  seenAt?: THREE.Vector3;
+  /**
+   * Al acecho: emboscada montada junto a donde acabas de reaparecer. Se queda esperando sin atacar
+   * aunque te vea; solo se enfada si te acercas mucho (LURK_WAKE) o le atacas.
+   */
+  lurk?: boolean;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
@@ -61,6 +76,10 @@ const DMG_POLICE = 0.29;
  */
 const ACC_GANG = 0.4;
 const ACC_POLICE = 0.46;
+/** Segundos sin verte (ni que les hagas daño) tras los que la banda deja de buscarte. */
+const LOSE_INTEREST = 25;
+/** Los que están al acecho (ver `lurk`) solo se enfadan si te ven a menos de esto. */
+const LURK_WAKE = 12;
 const tmpSide = new THREE.Vector3();
 
 const tmpV = new THREE.Vector3();
@@ -71,12 +90,14 @@ const tmpMuzzle = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
+const tmpAway = new THREE.Vector3();
 
 export function makeCombatBrain(side: 'police' | 'gang', weapon: WeaponId): CombatBrain {
   return {
     side, weapon, mode: 'idle', los: false, losTimer: rnd.next() * 0.3, telegraph: 0, warned: false, fireTimer: 0, burst: 0,
     modeTimer: 0, goal: null, lastHurt: -99, arrestOnly: false, aggro: false, home: null, shouted: 0,
     path: null, pathTimer: 0, hunt: null, holdAt: null, dmgMul: 1, acc: null, engageRange: null,
+    calmUntil: 0, unseenFor: 0, bored: false,
   };
 }
 
@@ -125,8 +146,28 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
     const len = dir.length();
     const hit = len < 70 ? game.physics.raycast(eye, dir, len - 0.5, SOLID, npc.collider) : null;
     b.los = len < 70 && !hit;
-    if (b.los && dist < 45) b.aggro = true;
+    // la banda se acuerda de dónde te vio: si te escondes, te busca ahí (no sabe dónde estás de verdad)
+    if (b.los && b.side === 'gang') b.hunt = (b.seenAt ??= new THREE.Vector3()).copy(target);
+    // (en tregua, p. ej. recién reaparecido, no se enfadan solo por verte; al acecho, solo si te acercas mucho)
+    if (b.los && (b.lurk ? dist < LURK_WAKE : dist < 45 && game.time.elapsed >= b.calmUntil)) {
+      b.aggro = true;
+      b.bored = false;
+    }
   }
+  // la banda no te persigue para siempre: si pasa un rato sin verte (ni que les hagas nada), lo dejan
+  if (b.aggro && b.side === 'gang') {
+    if (b.los) b.unseenFor = 0;
+    else b.unseenFor += dt;
+    if (b.unseenFor > LOSE_INTEREST && game.time.elapsed - b.lastHurt > LOSE_INTEREST) {
+      b.aggro = false;
+      b.bored = true;
+      b.unseenFor = 0;
+      b.mode = 'idle';
+      b.path = null;
+      b.warned = false;
+      npc.stop();
+    }
+  } else b.unseenFor = 0;
   if (!b.aggro) {
     npc.aiming = false;
     return;
@@ -236,14 +277,15 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
     case 'engage':
       // con arma de fuego, a quemarropa no: se aparta unos pasos (disparando) y luego sigue
       if (def.mode !== 'melee' && dist < 3.5) {
-        const away = new THREE.Vector3().copy(npc.position).sub(target).setY(0);
+        const away = tmpAway.copy(npc.position).sub(target).setY(0);
         if (away.lengthSq() < 0.01) away.set(rnd.next() - 0.5, 0, rnd.next() - 0.5);
         const side = tmpDir.set(-away.z, 0, away.x).normalize().multiplyScalar(rnd.next() < 0.5 ? -2 : 2);
         away.normalize().multiplyScalar(3.5).add(side).add(npc.position);
         if (reachable(game, npc.position, away)) {
           away.y = game.world.heightAt(away.x, away.z);
           b.mode = 'flank';
-          b.goal = away;
+          // (vector propio del cerebro: nada de uno nuevo cada vez que se aparta)
+          b.goal = (b.goalBuf ??= new THREE.Vector3()).copy(away);
           b.modeTimer = 1;
           break;
         }
@@ -319,11 +361,13 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   const def = WEAPONS[b.weapon];
   // ráfagas: los enemigos disparan más lento que el jugador
   const baseDelay = Math.max(0.28, 1 / def.rate) / rateK;
+  // el lanzapaquetes, de una en una y con calma (una caja cada 2-3 s): si no, era el arma de casi todas las muertes
+  const heavy = def.mode === 'package';
   if (b.burst <= 0) {
-    b.burst = def.auto ? 3 + Math.floor(rnd.next() * 3) : 1 + Math.floor(rnd.next() * 2);
+    b.burst = heavy ? 1 : def.auto ? 3 + Math.floor(rnd.next() * 3) : 1 + Math.floor(rnd.next() * 2);
   }
   b.burst--;
-  b.fireTimer = b.burst > 0 ? baseDelay : 1.5 + rnd.next() * 1.6;
+  b.fireTimer = b.burst > 0 ? baseDelay : heavy ? 1.8 + rnd.next() * 1.2 :1.5 + rnd.next() * 1.6;
   const muzzle = npc.rig.handWorldPosition(tmpMuzzle);
   // ¿este disparo va a dar? Depende de la distancia y de si te mueves (corriendo o en coche fallan más)
   const p = game.mod.player;

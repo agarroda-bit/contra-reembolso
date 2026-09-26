@@ -20,6 +20,7 @@ export type PlayerState = 'foot' | 'vehicle' | 'dead' | 'busy';
 const tmpF = new THREE.Vector3();
 const tmpR = new THREE.Vector3();
 const tmpMove = new THREE.Vector3();
+const NO_MOVE = { x: 0, y: 0 } as const;
 
 export class Player implements System {
   name = 'player';
@@ -34,6 +35,8 @@ export class Player implements System {
   armor = 0;
   stamina = 100;
   invincible = false;
+  /** Segundos de invulnerabilidad que quedan (al reaparecer: el personaje parpadea). */
+  shield = 0;
   /** Pose especial mientras dure (bailar, etc.). */
   pose: CharacterPose = 'normal';
   poseTimer = 0;
@@ -63,6 +66,8 @@ export class Player implements System {
   private lastGroundedTime = 0;
   private placeholder: THREE.Object3D | null = null;
   private landTimer = 0;
+  /** Parámetros de animación (se reutilizan: nada de objetos nuevos por frame). */
+  private readonly anim: CharacterAnimParams = { speed: 0, grounded: true, vy: 0, pose: 'normal', aiming: false, aimPitch: 0, weapon: 'none', shot: false, wobble: 0 };
 
   constructor(private game: Game, private makeRig?: (look: CharacterLook) => CharacterRig, look?: CharacterLook) {
     game.mod.player = this;
@@ -145,12 +150,17 @@ export class Player implements System {
     const input = g.input;
     const cam = g.mod.cameraRig as CameraRig | undefined;
     if (this.state !== 'dead' && this.health < 60 && g.time.elapsed - this.lastHurt > 8) this.health = Math.min(60, this.health + dt * 2.5);
+    if (this.shield > 0) {
+      this.shield = Math.max(0, this.shield - dt);
+      // parpadeo mientras dura (así se ve que aún no te pueden hacer daño)
+      if (this.rig) this.rig.root.visible = this.shield <= 0 || Math.floor(this.shield * 8) % 2 === 0;
+    }
     if (this.state !== 'foot') {
       this.syncVisual(dt);
       return;
     }
     // Entrada → dirección deseada relativa a la cámara
-    const ax = input.enabled ? input.moveAxis() : { x: 0, y: 0 };
+    const ax = input.enabled ? input.moveAxis() : NO_MOVE;
     const fwd = cam ? cam.forwardXZ(tmpF) : tmpF.set(0, 0, -1);
     const right = cam ? cam.rightXZ(tmpR) : tmpR.set(1, 0, 0);
     this.wantMove.set(0, 0, 0).addScaledVector(fwd, ax.y).addScaledVector(right, ax.x);
@@ -259,17 +269,17 @@ export class Player implements System {
     if (this.landTimer > 0) this.landTimer -= dt;
     if (this.rig && this.root.visible) {
       const hs = Math.hypot(this.velocity.x, this.velocity.z);
-      this.rig.update(dt, {
-        speed: this.state === 'foot' ? hs : 0,
-        grounded: this.grounded,
-        vy: this.vy,
-        pose: this.pose,
-        aiming: this.aiming,
-        aimPitch: this.aimPitch,
-        weapon: this.weaponKind,
-        shot: this.shotPulse,
-        wobble: this.wobble,
-      });
+      const a = this.anim;
+      a.speed = this.state === 'foot' ? hs : 0;
+      a.grounded = this.grounded;
+      a.vy = this.vy;
+      a.pose = this.pose;
+      a.aiming = this.aiming;
+      a.aimPitch = this.aimPitch;
+      a.weapon = this.weaponKind;
+      a.shot = this.shotPulse;
+      a.wobble = this.wobble;
+      this.rig.update(dt, a);
       this.shotPulse = false;
     }
     // HUD
@@ -288,7 +298,7 @@ export class Player implements System {
 
   /** Recibir daño (lo usan balas, golpes, explosiones). Devuelve true si ha muerto. */
   hurt(amount: number, source?: unknown): boolean {
-    if (this.invincible || this.state === 'dead') return false;
+    if (this.invincible || this.shield > 0 || this.state === 'dead') return false;
     let a = amount;
     if (this.armor > 0) {
       const absorbed = Math.min(this.armor, a * 0.7);
