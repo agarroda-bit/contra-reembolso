@@ -5,6 +5,9 @@ import { Game } from './core/game';
 import { installDebug } from './core/debug';
 import { LoadingScreen } from './ui/loading';
 import { buildPlaceholderWorld } from './world/placeholder';
+import { Player } from './actors/player';
+import { CameraRig } from './actors/cameraRig';
+import { VehicleManager } from './vehicles/manager';
 
 async function boot() {
   const loading = new LoadingScreen();
@@ -20,8 +23,16 @@ async function boot() {
   const sun = new THREE.DirectionalLight('#ffffff', 1.6);
   sun.position.set(30, 50, 20);
   game.scene.add(sun);
-  game.camera.position.set(30, 25, 40);
-  game.camera.lookAt(0, 0, 0);
+  const cam = new CameraRig(game);
+  const player = new Player(game);
+  const vehicles = new VehicleManager(game);
+  game.addSystem(player);
+  game.addSystem(vehicles);
+  game.addSystem(cam);
+  player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);
+  // la furgoneta de reparto, aparcada al lado
+  const sp = game.world.playerSpawn;
+  vehicles.spawn('van', sp.pos.clone().add(new THREE.Vector3(4, 0, -2)), sp.heading + Math.PI / 2).owned = true;
 
   await loading.step(1, '¡Listo!');
   loading.hide();
