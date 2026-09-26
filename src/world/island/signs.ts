@@ -32,6 +32,8 @@ export const FONT_IMPACT = 'Impact, "Arial Black", "Helvetica Neue", sans-serif'
 export const FONT_SCRIPT = '"Brush Script MT", "Snell Roundhand", "Segoe Script", cursive';
 
 export class Signs {
+  /** Píxeles por metro con los que se ha dibujado el atlas. */
+  density = 0;
   private specs = new Map<string, Spec>();
   private quads: Quad[] = [];
 
@@ -105,6 +107,7 @@ export class Signs {
       if (ok) break;
       density *= 0.88;
     }
+    this.density = density;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = S;
     const g = canvas.getContext('2d')!;

@@ -309,7 +309,9 @@ function billboard(ctx: Ctx, x: number, z: number, rot: number, i: number) {
   // focos
   b.frame(x, y, z, rot);
   for (const px of [-3, 0, 3]) b.box(px, 5.85, 0.9, 0.4, 0.2, 0.3, '#333', 0, [1, 0.9, 0.6, 0.0]);
-  ctx.box(x, y + 3, z, 2.8, 3, 0.2, rot);
+  // dos postes (se puede pasar por debajo del cartel)
+  for (const px of [-2.6, 2.6]) ctx.cyl(x + Math.cos(rot) * px, y + 3, z - Math.sin(rot) * px, 3, 0.25);
+  ctx.box(x, y + 7.6, z, 4.5, 1.8, 0.2, rot);
   ctx.foot.push({ x, z, hw: 4.5, hd: 0.3, rot, color: '#e8e8e8', height: 9, open: true });
 }
 

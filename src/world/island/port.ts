@@ -111,7 +111,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   const y0 = baseDepth(ctx, lot);
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   // el amarillo corporativo brilla un poco (la fachada mira al norte y casi siempre está en sombra)
-  const glowY = [0.42, 0.3, 0.02, 0.45];
+  const glowY = [0.2, 0.14, 0.01, 1.0]; // nivel 1: el mismo brillo de día y de noche
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, YELLOW, SKIP.NY | SKIP.PY, glowY);
   b.quadL(-hw, H, hd, hw, H, hd, hw, H, -hd, -hw, H, -hd, '#cfc6b4');
   // peto azul marino

@@ -252,7 +252,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
 
   // que las consultas de física funcionen ya (Rapier actualiza su BVH al dar un paso)
   game.physics.world.step();
-  console.log(`[isla] solares ${layout.lots.length}, plan ${(t1 - t0).toFixed(0)} ms, total ${(performance.now() - t0).toFixed(0)} ms`);
+  console.log(`[isla] solares ${layout.lots.length}, carteles ${signs.count} (${signs.density.toFixed(0)} px/m), plan ${(t1 - t0).toFixed(0)} ms, total ${(performance.now() - t0).toFixed(0)} ms`);
 
   const spawn = out.spawn ?? { pos: new THREE.Vector3(0, heightAt(0, 180), 180), heading: Math.PI };
   let night = -1;
