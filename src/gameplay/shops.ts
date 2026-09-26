@@ -256,14 +256,16 @@ export class Shops implements System {
           const d = WEAPONS[w];
           const has = combat.owned.has(w);
           const lock = weaponFame(w);
+          // lo que da de verdad una compra de munición: dos cargadores (tres paquetes FRÁGIL)
+          const refill = Math.max(1, d.clip || 1) * (d.mode === 'grenade' ? 3 : 2);
           return {
             id: w, icon: d.icon, name: d.name, desc: d.desc, price: has ? d.ammoPrice : d.price,
-            label: has ? `+${d.clip || 1} munición` : 'Comprar', owned: has,
+            label: has ? `+${refill} ${d.mode === 'grenade' ? 'paquetes' : 'munición'}` : 'Comprar', owned: has,
             locked: !has && this.fameLvl < lock ? `Fama ${lock}` : undefined,
             buy: () => {
               if (has) {
                 if (!this.eco.spend(d.ammoPrice, 'munición')) return false;
-                combat.ammo[w].reserve += Math.max(1, d.clip) * (d.mode === 'grenade' ? 3 : 2);
+                combat.ammo[w].reserve += refill;
               } else {
                 if (!this.eco.spend(d.price, 'arma')) return false;
                 combat.give(w);
