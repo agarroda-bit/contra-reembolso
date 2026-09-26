@@ -51,6 +51,9 @@ const tmpO = new THREE.Vector3();
 const tmpA = new THREE.Vector3();
 const tmpB = new THREE.Vector3();
 
+/** Daño al jugador de cada caja del lanzapaquetes de un enemigo (antes 12: era el arma de casi todas las muertes). */
+const PACKAGE_HIT_PLAYER = 7;
+
 /** Ayuda de apuntado: cono (radianes) alrededor del centro de la pantalla y fuerza del imán. */
 const ASSIST_CONE = 0.075;
 const ASSIST_PULL = 2;
@@ -625,7 +628,8 @@ export class Combat implements System {
         const p = this.player;
         const pdy = pr.pos.y - p.position.y;
         if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && !pr.hit.size && pdy > -0.3 && pdy < 2 && Math.hypot(pr.pos.x - p.position.x, pr.pos.z - p.position.z) < 0.9) {
-          p.hurt(12, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
+          const mul = (pr.owner.npc?.brain as { dmgMul?: number } | null)?.dmgMul ?? 1;
+          p.hurt(PACKAGE_HIT_PLAYER * mul, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
           p.push.set(lv.x * 0.3, 3, lv.z * 0.3);
           pr.hit.add(null as any);
         }

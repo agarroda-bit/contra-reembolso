@@ -346,11 +346,13 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   const def = WEAPONS[b.weapon];
   // ráfagas: los enemigos disparan más lento que el jugador
   const baseDelay = Math.max(0.28, 1 / def.rate) / rateK;
+  // el lanzapaquetes, de una en una y con calma (una caja cada 2-3 s): si no, era el arma de casi todas las muertes
+  const heavy = def.mode === 'package';
   if (b.burst <= 0) {
-    b.burst = def.auto ? 3 + Math.floor(rnd.next() * 3) : 1 + Math.floor(rnd.next() * 2);
+    b.burst = heavy ? 1 : def.auto ? 3 + Math.floor(rnd.next() * 3) : 1 + Math.floor(rnd.next() * 2);
   }
   b.burst--;
-  b.fireTimer = b.burst > 0 ? baseDelay : 1.5 + rnd.next() * 1.6;
+  b.fireTimer = b.burst > 0 ? baseDelay : heavy ? 1.8 + rnd.next() * 1.2 :1.5 + rnd.next() * 1.6;
   const muzzle = npc.rig.handWorldPosition(tmpMuzzle);
   // ¿este disparo va a dar? Depende de la distancia y de si te mueves (corriendo o en coche fallan más)
   const p = game.mod.player;

@@ -141,6 +141,8 @@ function spawnBoss(g: Game, pos: THREE.Vector3): Npc {
   n.health = n.maxHealth = 650;
   const b = makeCombatBrain('gang', 'launcher');
   b.aggro = true;
+  // sus cajas pegan algo más que las de los demás (9 en vez de 7)
+  b.dmgMul = 1.3;
   n.brain = b;
   armNpc(n, 'launcher');
   g.mod.gang?.members.push(n);
