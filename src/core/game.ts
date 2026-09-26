@@ -123,6 +123,21 @@ export class Game {
     fog.far = q.drawDistance;
     this.onResize();
     this.events.emit('settings', this.settings);
+    // cambiar sombras o luces obliga a recompilar los shaders: que sea en paralelo, no uno a uno
+    this.warmShaders();
+  }
+
+  /**
+   * Compila en segundo plano (en paralelo, si el navegador puede) los shaders de TODO lo que hay en
+   * la escena, también lo que aún no se ve (estrellas, lo que queda detrás, luces de noche...).
+   * Si no, se compilan de uno en uno la primera vez que aparecen y el juego se congela un momento.
+   */
+  warmShaders() {
+    try {
+      this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    } catch {
+      /* no pasa nada: se compilarán al usarlos */
+    }
   }
 
   private onResize() {
@@ -154,6 +169,7 @@ export class Game {
     if (this.running) return;
     this.running = true;
     this.last = performance.now();
+    this.warmShaders();
     this.renderer.setAnimationLoop((t) => this.frame(t));
   }
 
