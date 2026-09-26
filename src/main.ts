@@ -71,12 +71,17 @@ async function boot() {
     if (game.mod.shops) game.mod.shops.profile = profile;
   }
 
+  // el menú principal se crea ya: así su vista de la isla también se prepara con la pantalla de carga
+  const menus = fase >= 5 && !prueba ? new Menus(game) : null;
+
+  // los shaders se compilan con la pantalla de carga puesta: si no, el primer frame se congela un momento
+  await loading.step(0.85, 'Calentando motores…');
+  await warmUp(game, menus);
   await loading.step(1, '¡A repartir!');
   loading.hide();
   game.start();
 
-  if (fase >= 5 && !prueba) {
-    const menus = new Menus(game);
+  if (menus) {
     game.addSystem(menus);
     // en el menú no llegan encargos ni persecuciones
     if (game.mod.jobs) game.mod.jobs.autoOffers = false;
@@ -110,6 +115,26 @@ async function boot() {
     if (game.mod.economy && prueba) game.mod.economy.cash = 500;
   }
   (window as any).__ready = true;
+}
+
+/**
+ * Compila en paralelo los shaders de todo lo que hay en la escena antes de quitar la pantalla de carga
+ * (si el navegador no sabe, o tarda demasiado, se sigue igual: se compilarán al usarlos).
+ */
+async function warmUp(game: Game, menus: Menus | null) {
+  try {
+    await Promise.race([game.renderer.compileAsync(game.scene, game.camera), new Promise((r) => setTimeout(r, 10000))]);
+    // y un dibujado de prueba, tapado por la pantalla de carga: sube a la tarjeta gráfica las mallas y
+    // texturas que se ven al empezar (detrás del jugador y, si hay menú, la vista de la isla) y prepara las sombras
+    game.mod.cameraRig?.postUpdate?.(1 / 60);
+    game.render();
+    if (menus) {
+      menus.update(0);
+      game.render();
+    }
+  } catch {
+    /* nada: se hará en el primer frame */
+  }
 }
 
 /** Mueve el punto de inicio si la cámara (detrás del jugador) quedaría tapada por algo cercano. */
