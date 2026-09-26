@@ -5,7 +5,7 @@ import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
 import { PlanCtx, Special, Out, collectible, makePoi, poiAt, ground, doorPoint, curbParking, curbGap, plazaPad } from './special';
-import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, flatRoof, PAL } from './buildings';
+import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, awningCollider, flatRoof, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, shopSign, FONT_IMPACT, FONT, FONT_SCRIPT, FONT_SERIF, FONT_FUN } from './signs';
 import { makeBeamMaterial } from './materials';
@@ -394,6 +394,7 @@ function buildClothes(ctx: Ctx, out: Out, lot: Lot) {
     b.panelZ(0, 1.5, 0.05, 3.4, 3.0, '#1b1b1b');
     glass(w, 0, 1.45, 0.07, 2.8, 2.8, [1, 0.9, 0.95, 0.02]);
     stripedAwning(b, 0, 3.9, 0.05, half * 2 - 1, 1.5, 0.5, '#1b1b1b', '#fbf7f2', 14);
+    awningCollider(ctx, b, 0, 3.9, 0.05, half * 2 - 1, 1.5);
     ctx.signs.define('moda', 12, 2.2, (g, W, Hh) => {
       g.fillStyle = '#1b1b1b';
       roundRect(g, 0, 0, W, Hh, Hh * 0.2);

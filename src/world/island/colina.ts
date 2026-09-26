@@ -4,7 +4,7 @@ import type { Ctx } from './ctx';
 import { SKIP, lin } from './geo';
 import { OCC } from './occ';
 import { PlanCtx, Special, Out, collectible, makePoi, ground } from './special';
-import { glass, facadeFrame, baseDepth, stripedAwning } from './buildings';
+import { glass, facadeFrame, baseDepth, stripedAwning, overhangCollider } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, FONT_SERIF, FONT } from './signs';
 
@@ -94,6 +94,7 @@ function buildAttic(ctx: Ctx, out: Out, lot: Lot) {
       b.panelZ(0, 1.6, 0.04, 4.4, 3.2, '#8c7a5c');
       glass(w, 0, 1.55, 0.06, 3.8, 3.0, [1, 0.85, 0.6, 0.02], lin('#3a4a58').clone(), lin('#9ab8cc').clone());
       b.box(0, 3.45, 1.4, 6, 0.25, 2.8, '#3a3a3a');
+      overhangCollider(ctx, b, 0, 3.45, 1.4, 3, 0.125, 1.4); // marquesina: que la cámara no se meta
       ctx.signs.define('vistas', 7, 1.1, (g, W, Hh) => {
         g.fillStyle = '#2a2a2a';
         roundRect(g, 0, 0, W, Hh, Hh * 0.2);

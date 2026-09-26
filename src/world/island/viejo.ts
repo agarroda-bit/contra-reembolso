@@ -5,7 +5,7 @@ import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
 import { PlanCtx, Special, Out, collectible, makePoi, ground, doorPoint, stairs, stairRun, poiAt, jumpRamp, plazaPad } from './special';
-import { glass, facadeFrame, baseDepth, stripedAwning, house, PAL } from './buildings';
+import { glass, facadeFrame, baseDepth, stripedAwning, awningCollider, house, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, FONT, FONT_SCRIPT, FONT_FUN, FONT_SERIF } from './signs';
 import { BAR_NAMES } from './names';
@@ -156,6 +156,7 @@ function buildBar(ctx: Ctx, out: Out, lot: Lot, i: number, id: string) {
   glass(w, 2.5, 1.7, 0.05, 3.6, 1.8, [1, 0.8, 0.45, 0.02], lin('#40302a').clone(), lin('#a08060').clone());
   b.panelZ(2.5, 1.7, 0.04, 3.9, 2.1, '#5e3b22');
   stripedAwning(b, 0, 3.0, 0.05, half * 2 - 0.6, 1.8, 0.6, i === 0 ? '#2f7fcf' : '#3f9a5a', '#f7f4ec', 8);
+  awningCollider(ctx, b, 0, 3.0, 0.05, half * 2 - 0.6, 1.8);
   // ventanas de arriba
   for (const x of [-3, 3]) {
     glass(w, x, fh + 1.6, 0.04, 1.0, 1.3, [1, 0.85, 0.55, 0.4]);

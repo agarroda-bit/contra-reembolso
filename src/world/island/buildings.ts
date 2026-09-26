@@ -2,7 +2,8 @@
 // Todo va a las mallas fusionadas por trozos (sólido + ventanas). Un colisor de caja por edificio.
 import * as THREE from 'three';
 import { GeoBuilder, SKIP, lin, Col } from './geo';
-import type { Ctx } from './ctx';
+import { type Ctx, OVERHANG_FILTER } from './ctx';
+import { G } from '../../core/physics';
 import { Lot, lotPoint } from './layout';
 import { OCC } from './occ';
 import { Rng } from '../../core/rng';
@@ -326,6 +327,24 @@ function balcony(b: GeoBuilder, x: number, yb: number, w: number, d: number, rng
   }
 }
 
+/**
+ * Colisor de un toldo bajo (mismos datos que stripedAwning, en el marco actual de `b`): una caja que
+ * va desde 2,2 m (se pasa andando por debajo) hasta lo alto del toldo. Así la cámara no se mete en
+ * la lona: a pie se queda por debajo; en coche por la acera, el punto que sigue la cámara (a unos
+ * 2,3-3 m) queda dentro de la caja y la cámara sale limpia por arriba, sin quedarse pegada. Los
+ * vehículos la atraviesan.
+ */
+export function awningCollider(ctx: Ctx, b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number) {
+  const yb = 2.2;
+  if (y0 <= yb + 0.1) return;
+  overhangCollider(ctx, b, x, (yb + y0) / 2, z0 + depth / 2, w / 2, (y0 - yb) / 2, depth / 2);
+}
+
+/** Colisor de un voladizo recto (balcón, marquesina) en el marco actual de `b`: centro y medias medidas locales. */
+export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, z: number, hx: number, hy: number, hz: number) {
+  ctx.box(b.wx(x, z), b.wy(y), b.wz(x, z), hx, hy, hz, b.frameRot, G.STATIC, OVERHANG_FILTER);
+}
+
 /** Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. */
 export function stripedAwning(b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
   const y1 = y0 - drop, z1 = z0 + depth;
@@ -365,6 +384,7 @@ function shopfront(ctx: Ctx, b: GeoBuilder, w: GeoBuilder, half: number, gf: num
   const [c1, c2] = shop.awning ?? rng.pick(PAL.awning);
   if (rng.chance(0.75)) {
     stripedAwning(b, 0, 3.1, 0.05, W - 0.4, 1.6, 0.55, c1, c2, Math.max(4, Math.round(W / 1.2)));
+    awningCollider(ctx, b, 0, 3.1, 0.05, W - 0.4, 1.6);
     ctx.signs.place(b, key, 0, 3.72, 0.08, sw, sw * (0.9 / 4.4), 0.35);
   } else {
     ctx.signs.place(b, key, 0, 3.55, 0.08, sw, sw * (0.9 / 4.4), 0.35);
@@ -430,8 +450,9 @@ export function house(ctx: Ctx, lot: Lot, o: { floors: number; flatRoof?: boolea
         b.panelZ(x, wy, 0.035, 1.25, 1.55, '#ece6da');
         if (f === 0) grille(b, x, wy, 0.1, 0.95, 1.25);
         else if (rng.chance(0.4)) {
-          // balconcillo con macetas
+          // balconcillo con macetas (el del primer piso, a 3 m, con colisor: si no, tapa la cámara)
           balcony(b, x, yb, 1.6, 0.55, rng, false);
+          if (yb < 3.5) overhangCollider(ctx, b, x, yb + 0.53, 0.3, 0.8, 0.53, 0.3);
         } else {
           b.panelZ(x - 0.72, wy, 0.06, 0.48, 1.25, shutter);
           b.panelZ(x + 0.72, wy, 0.06, 0.48, 1.25, shutter);
