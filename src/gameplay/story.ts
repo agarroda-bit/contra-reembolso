@@ -611,6 +611,7 @@ export class Story implements System {
     game.events.on('fame:level' as any, (e: any) => {
       const m = this.nextMission();
       if (!m || this.active || m.fame !== e.level) return;
+      this.announced = m.id;
       msg(game, BOSS, `¡Ya tienes fama ${e.level}, chaval! Tengo un encargo gordo para ti: «${m.title}». Está en el tablón de la oficina (E en la puerta).`);
       game.events.emit('toast', { text: `${m.icon} Nueva misión en el tablón de la oficina`, color: '#d4af37', time: 3 });
     });
@@ -696,15 +697,16 @@ export class Story implements System {
     const first = !this.completed.has(a.m.id);
     this.completed.add(a.m.id);
     this.finishCleanup();
+    msg(g, BOSS, a.m.outro);
+    this.announced = '';
     g.mod.economy?.addCash(r.money + bonus, 'misión');
     g.mod.economy?.addFame(r.fame, 'misión');
     g.mod.audio?.play('success');
     g.mod.particles?.emit('confetti', g.mod.player.position.clone().setY(g.mod.player.position.y + 2), { count: 60, speed: 1.3 });
     g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)}  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 3.5 });
-    msg(g, BOSS, a.m.outro);
-    // qué viene ahora
+    // qué viene ahora (si subir de fama no lo ha anunciado ya)
     const next = this.nextMission();
-    if (first && next && a.m.id !== 'jefe') {
+    if (first && next && a.m.id !== 'jefe' && this.announced !== next.id) {
       const lvl = g.mod.economy?.fameLevel ?? 1;
       setTimeout(() => {
         if (lvl >= next.fame) msg(g, BOSS, `Y ya tengo el siguiente: «${next.title}». Cuando quieras, en el tablón de la oficina.`);
@@ -719,6 +721,8 @@ export class Story implements System {
   private readonly hudJob = { id: 'story', title: '', timeLeft: null as number | null, integrity: null as number | null, color: '#d4af37' };
   private readonly marker = { x: 0, z: 0, icon: '', color: '#d4af37', label: '', story: true };
   private readonly wp = { x: 0, z: 0, label: '', color: '#d4af37', auto: true, story: true };
+  /** Última misión anunciada al subir de fama (para no repetir el aviso). */
+  private announced = '';
 
   update(dt: number) {
     const a = this.active;
