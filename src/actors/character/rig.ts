@@ -44,6 +44,16 @@ export const characterLod = {
   shadowDistance: Infinity,
 };
 
+const IDENTITY = new THREE.Matrix4();
+
+/**
+ * Los huesos NO cuelgan de la escena: viven en el espacio de la malla y se recalculan solo cuando
+ * cambia la pose (no cada vez que el muñeco se mueve por el mundo). Así la escena tiene 24 objetos
+ * menos por personaje que recorrer tres veces por frame (matrices, sombras y render), y los que
+ * están lejos y se animan a menos ritmo no suben su textura de huesos a la GPU en cada frame.
+ * Los enganches (mano, cabeza, pecho...) sí están en la escena, como hijos de la malla, con su
+ * matriz calculada a partir de la de su hueso.
+ */
 export class Character implements CharacterRig {
   readonly root = new THREE.Group();
   /** Escala según la altura del look. */
@@ -61,6 +71,12 @@ export class Character implements CharacterRig {
   private lodShadow = true;
   /** Alguien ha quitado la sombra a propósito: el nivel de detalle no la vuelve a poner. */
   private shadowOptOut = false;
+  /** Hueso del que cuelga cada enganche. */
+  private readonly socketBone: [THREE.Object3D, number][] = [];
+  /** La pose ha cambiado desde el último cálculo de los huesos. */
+  private bonesDirty = true;
+  private boneVersion = 1;
+  private skelVersion = 0;
 
   constructor(look: CharacterLook) {
     this.root.name = 'personaje';
@@ -75,10 +91,28 @@ export class Character implements CharacterRig {
     this.triangles = built.triangles;
     this.mesh = new THREE.SkinnedMesh(built.geometry, characterMaterial());
     this.mesh.name = 'personaje-malla';
-    this.mesh.add(this.bones[B.hips]);
-    this.mesh.add(this.bones[B.ground]);
+    // huesos en reposo (espacio de la malla) → sus inversas; unión "separada" con matriz identidad:
+    // el shader hace mundo = matriz de la malla × hueso (espacio de la malla) × inversa × vértice
+    this.bones[B.hips].updateMatrixWorld(true);
+    this.bones[B.ground].updateMatrixWorld(true);
     this.skeleton = new THREE.Skeleton(this.bones);
-    this.mesh.bind(this.skeleton); // en reposo y en el origen
+    this.mesh.bindMode = THREE.DetachedBindMode;
+    this.mesh.bind(this.skeleton, IDENTITY);
+    // three sube la textura de huesos al pintar: solo si la pose ha cambiado desde la última vez
+    const skel = this.skeleton;
+    skel.update = () => {
+      if (this.bonesDirty) this.updateBones();
+      if (this.skelVersion === this.boneVersion) return;
+      this.skelVersion = this.boneVersion;
+      THREE.Skeleton.prototype.update.call(skel);
+    };
+    // justo antes de calcular las matrices de la escena (ya con toda la lógica del frame hecha,
+    // también lo que otros tocan a mano en los huesos), se recalculan los huesos si hace falta
+    const root = this.root;
+    root.updateMatrixWorld = (force?: boolean) => {
+      if (this.bonesDirty && root.visible) this.updateBones();
+      THREE.Object3D.prototype.updateMatrixWorld.call(root, force);
+    };
     // esfera generosa fija (cubre tumbado, brazos arriba...) para el recorte por cámara
     this.mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.8, 0), 1.65);
     this.mesh.castShadow = true;
@@ -86,11 +120,14 @@ export class Character implements CharacterRig {
     this.body.add(this.mesh);
     this.root.add(this.body);
 
+    // position/quaternion de cada enganche son relativos a su hueso (como si colgara de él)
     const sock = (bone: number, x: number, y: number, z: number, name: string) => {
       const o = new THREE.Object3D();
       o.name = name;
       o.position.set(x, y, z);
-      this.bones[bone].add(o);
+      o.matrixAutoUpdate = false;
+      this.mesh.add(o);
+      this.socketBone.push([o, bone]);
       return o;
     };
     this.sockets = {
@@ -127,6 +164,7 @@ export class Character implements CharacterRig {
     this.sockets.back.position.z = -(built.chestZ + 0.01);
     this.sockets.chest.position.z = built.chestZ + 0.01;
     this.sockets.head.position.y = built.headTop + 0.005;
+    this.bonesDirty = true;
     this.look = look;
     this.anim.configure((look as CharacterLookExtra).kind, look.emblem);
     this.applyScale();
@@ -153,8 +191,23 @@ export class Character implements CharacterRig {
     this.lodShadow = m.castShadow;
   }
 
+  /** Recalcula los huesos (espacio de la malla) y los enganches a partir de la pose actual. */
+  private updateBones() {
+    this.bonesDirty = false;
+    this.bones[B.hips].updateMatrixWorld(true);
+    this.bones[B.ground].updateMatrixWorld(true);
+    const sb = this.socketBone;
+    for (let i = 0; i < sb.length; i++) {
+      const s = sb[i][0];
+      s.updateMatrix(); // relativo al hueso…
+      s.matrix.premultiply(this.bones[sb[i][1]].matrixWorld); // …y ahora relativo a la malla
+    }
+    this.boneVersion++;
+  }
+
   /** Copia la pose calculada a los huesos. */
   private apply() {
+    this.bonesDirty = true;
     const c = this.anim.cur;
     const bones = this.bones;
     for (let k = 0; k < ROT_BONES.length; k++) {
@@ -215,6 +268,7 @@ export class Character implements CharacterRig {
    * `userData.muzzle` (metros hacia su +Z), devuelve la boca del cañón.
    */
   handWorldPosition(target: THREE.Vector3): THREE.Vector3 {
+    if (this.bonesDirty) this.updateBones();
     const s = this.sockets.handR;
     s.updateWorldMatrix(true, false);
     const kids = s.children;

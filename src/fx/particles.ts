@@ -259,7 +259,13 @@ export class Particles implements System {
       }
       p.mesh.count = maxIndex;
       if (maxIndex === 0) p.alive = 0;
-      p.mesh.instanceMatrix.needsUpdate = true;
+      else {
+        // a la GPU solo sube el tramo que se pinta (no las 700 piezas de cada tanda)
+        const im = p.mesh.instanceMatrix;
+        im.clearUpdateRanges();
+        im.addUpdateRange(0, maxIndex * 16);
+        im.needsUpdate = true;
+      }
     }
   }
 }
