@@ -8,7 +8,7 @@ import type { Game } from '../../../core/game';
 import type { Interiors, InteriorContext, InteriorInstance } from '../index';
 import type { ShopItem, ShopSection } from '../../../ui/shop';
 import {
-  BAR, BOOTHS, MY_BOOTH, BOOTH, VIP, SPAWN, SPAWN_HEADING, EXIT, PORTERO_SPOT, BARMAN_SPOT, DJ_SPOT, BPM, BEAT,
+  BAR, BOOTHS, MY_BOOTH, BOOTH, VIP, SPAWN, SPAWN_HEADING, EXIT, PORTERO_SPOT, DJ_SPOT, BPM,
   onDanceFloor, nightKey, boothBackSeat,
 } from './layout';
 import { buildRoom, drawBoothSign, type RoomParts } from './room';
@@ -139,7 +139,6 @@ export class ClubInterior implements InteriorInstance {
   private root: THREE.Group;
   private origin: THREE.Vector3;
   private partyTimer = 0;
-  private partyMax = 1;
   private fallbackBeat = 0;
   private ledTimer = 0;
   private myPose: 'dance' | 'sit' | null = null;
@@ -155,7 +154,6 @@ export class ClubInterior implements InteriorInstance {
   private flash: HTMLDivElement;
   private playerLocal = new THREE.Vector3();
   private playerLocal2 = new THREE.Vector3();
-  private seatedAt: THREE.Vector3 | null = null;
   /** Botellas pagadas que la camarera aún no ha dejado en la mesa. */
   private pending = 0;
   /** Bengala de la botella que lleva la camarera (sigue a su mano). */
@@ -226,7 +224,6 @@ export class ClubInterior implements InteriorInstance {
       p.poseTimer = 0;
     }
     this.myPose = null;
-    this.seatedAt = null;
     if (this.cinematicTimer > 0) {
       this.cinematicTimer = 0;
       this.afterCinematic = null;
@@ -236,7 +233,7 @@ export class ClubInterior implements InteriorInstance {
 
   // ───── Estado (mesa, botellas, cordón) ─────
 
-  applyState(force = false) {
+  applyState(force = false, instantRope = force) {
     const st = this.state;
     const night = st.night;
     if (!force && night === this.lastNight) return;
@@ -244,7 +241,7 @@ export class ClubInterior implements InteriorInstance {
     const has = st.hasTable;
     // si se acaba la noche con el jugador dentro de la zona VIP, el cordón se queda abierto hasta que baje
     const inVip = this.inside && this.localPlayer().x > VIP.x0 - 0.2 && this.localPlayer().z < VIP.z1 + 0.2;
-    this.setRope(has || (inVip && this.ropeOpen), force);
+    this.setRope(has || (inVip && this.ropeOpen), instantRope);
     this.room.boothSign.redraw((g, w, h) => drawBoothSign(g, w, h, has));
     this.room.boothSignMat.opacity = has ? 1 : 0.55;
     this.showBottles(st.bottlesTonight - this.pending);
@@ -478,7 +475,6 @@ export class ClubInterior implements InteriorInstance {
 
   private startParty(seconds: number, bars: number) {
     this.partyTimer = Math.max(this.partyTimer, seconds);
-    this.partyMax = Math.max(this.partyTimer, 1);
     this.music.party(bars);
     this.fx.strobe(1);
   }
@@ -487,7 +483,7 @@ export class ClubInterior implements InteriorInstance {
   celebrateTable() {
     const g = this.game;
     this.setRope(true);
-    this.applyState(true);
+    this.applyState(true, false);
     g.mod.bubbles?.say(this.crowd.worldPos(this.crowd.portero), pick(PORTERO_YES), 3);
     this.fadeCut(() => {
       this.sitDown(true);
@@ -566,7 +562,6 @@ export class ClubInterior implements InteriorInstance {
       p.pose = 'sit';
       p.poseTimer = 600;
       this.myPose = 'sit';
-      this.seatedAt = seat.clone();
       // cámara de frente y un poco de lado para verte en tu trono de terciopelo
       const cam = this.game.mod.cameraRig;
       if (cam) {
@@ -691,7 +686,6 @@ export class ClubInterior implements InteriorInstance {
         p.poseTimer = 0;
         this.myPose = null;
       }
-      if (this.myPose !== 'sit') this.seatedAt = null;
     }
 
     // frases del portero y del camarero al acercarte
@@ -869,5 +863,3 @@ export function installClub(game: Game): void {
   game.mod.club = api;
 }
 
-void BARMAN_SPOT;
-void BEAT;

@@ -2,7 +2,7 @@
 // sus puntitos, humo bajo, pantalla LED, confeti, bengalas, chorros de CO2 y las luces reales (3).
 // Todo barato: instancias, mezcla aditiva y shaders cortos. Solo se actualiza mientras estás dentro.
 import * as THREE from 'three';
-import { ROOM, FLOOR, BALL, VIP, DJ, floorAt } from './layout';
+import { ROOM, FLOOR, BALL, DJ, floorAt } from './layout';
 import { BEAM_ORIGINS, BEAM_Y, type RoomParts } from './room';
 import { dotTexture, spotTexture, tileTexture, noiseTexture, ledTextTexture, drawLedText } from './textures';
 
@@ -848,4 +848,3 @@ export class ClubFx {
 
 const LED_TEXT = '★ CLUB REEMBOLSO VIP ★ AQUÍ SIEMPRE SON LAS 3 DE LA MAÑANA ★ SE ADMITE PAGO CONTRA REEMBOLSO ★ ';
 
-void VIP;

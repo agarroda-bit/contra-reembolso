@@ -314,4 +314,3 @@ function bowTie(): THREE.Mesh {
   return m;
 }
 
-void tmpV;

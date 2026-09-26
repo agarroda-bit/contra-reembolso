@@ -54,8 +54,6 @@ export interface RoomParts {
   dispose(): void;
 }
 
-const tmpQ = new THREE.Quaternion();
-
 export function buildRoom(ctx: InteriorContext): RoomParts {
   const { root, game, origin } = ctx;
   const lit = new GeoBuilder();
@@ -758,5 +756,3 @@ function photocallTexture(): THREE.CanvasTexture {
   return t;
 }
 
-void tmpQ;
-void STOOLS;
