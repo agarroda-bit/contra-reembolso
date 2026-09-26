@@ -11,7 +11,7 @@ import { AudioEngine } from '../audio/audio';
 import { openCasino, openCasinoGame, closeCasino, isCasinoOpen, type Casino, type Juego } from '../gameplay/casino';
 import { FICHAS } from '../gameplay/casino/comun';
 import { rtpTragaperras, evaluar, TIRAS, N, type Sim, type Tragaperras } from '../gameplay/casino/tragaperras';
-import { ORDEN, type Ruleta } from '../gameplay/casino/ruleta';
+import { ORDEN, simular as simularBola, type Ruleta } from '../gameplay/casino/ruleta';
 import { totalMano, type Blackjack } from '../gameplay/casino/blackjack';
 import type { Carta } from '../gameplay/casino/cartas';
 
@@ -319,6 +319,26 @@ async function main() {
     bj: () => {
       const b = pant<Blackjack>();
       return { estado: b.estado, mano: b.describir(), ultima: b.ultimaMano };
+    },
+    /** Simula muchas tiradas de la bola y comprueba que siempre acaba en el número pedido. */
+    bola: (n = 300) => {
+      const SEG = (Math.PI * 2) / 37;
+      let mal = 0, tMin = 99, tMax = 0, tSum = 0, golpesSum = 0, rMin = 9, rMax = 0;
+      for (let i = 0; i < n; i++) {
+        const obj = Math.floor(Math.random() * 37);
+        const tr = simularBola(Math.random() * 6.28, obj);
+        const idx = (((Math.round(tr.relFinal / SEG) % 37) + 37) % 37);
+        if (idx !== obj) mal++;
+        tMin = Math.min(tMin, tr.tFijo);
+        tMax = Math.max(tMax, tr.tFijo);
+        tSum += tr.tFijo;
+        golpesSum += tr.golpes.length;
+        for (const r of tr.rad) {
+          rMin = Math.min(rMin, r);
+          rMax = Math.max(rMax, r);
+        }
+      }
+      return { n, mal, tFijoMin: +tMin.toFixed(2), tFijoMax: +tMax.toFixed(2), tFijoMedio: +(tSum / n).toFixed(2), golpesMedios: +(golpesSum / n).toFixed(1), rMin: +rMin.toFixed(3), rMax: +rMax.toFixed(3) };
     },
     /** Comprueba que las tiras tienen lo que dicen. */
     tiras: () => TIRAS.map((t) => t.join('')).concat([String(N), String(ORDEN.length)]),

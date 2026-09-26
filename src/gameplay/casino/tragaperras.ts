@@ -323,7 +323,10 @@ export class Tragaperras implements PantallaCasino {
    * `forzar`: símbolos de la línea (solo pruebas).
    */
   girar(forzar?: Sim[]): Promise<JugadaTragaperras | null> {
-    if (this.girando) return Promise.resolve(null);
+    if (this.girando) {
+      this.meterPrisa();
+      return Promise.resolve(null);
+    }
     const c = this.ctx;
     if (!c.cartera.apostar(this.apuesta)) {
       c.decir(c.cartera.disponible() < FICHAS[0] ? frase('pobre') : `No te llega para ${fmt(this.apuesta)}. Baja la apuesta, valiente.`, 'aviso');
@@ -361,7 +364,7 @@ export class Tragaperras implements PantallaCasino {
     this.tiempo = 0;
     this.suspenseHecho = false;
     const s0 = TIRAS[0][this.paradas[0]], s1 = TIRAS[1][this.paradas[1]];
-    const suspense = s0 === s1 && (s0 === '7' || s0 === 'M' || s0 === 'S');
+    const suspense = s0 === s1 && (s0 === '7' || s0 === 'M' || s0 === 'S' || s0 === 'B');
     this.rodillos.forEach((r, i) => {
       r.fase = 'arranque';
       r.t = 0;
@@ -371,6 +374,13 @@ export class Tragaperras implements PantallaCasino {
       r.celda = Math.floor(r.pos);
     });
     return prom;
+  }
+
+  /** Pulsar otra vez mientras gira: los rodillos paran antes (sin cambiar el resultado). */
+  private meterPrisa() {
+    this.rodillos.forEach((r, i) => {
+      if (r.fase === 'gira' || r.fase === 'arranque') r.tParar = Math.min(r.tParar, this.tiempo + 0.05 + i * 0.12);
+    });
   }
 
   /** Coloca un rodillo en su parada al instante. */

@@ -1,5 +1,5 @@
 // Vestíbulo del casino: cartel de neón con bombillas y las tres mesas para elegir.
-import { Crupier, el, elegir, fmt, type Juego } from './comun';
+import { Crupier, el, elegir, fmt, frase, type Juego } from './comun';
 import { crearCartaEl } from './cartas';
 import { TRIO } from './tragaperras';
 import { MAX_MESA } from './ruleta';
@@ -89,12 +89,12 @@ export class Vestibulo implements PantallaCasino {
       fila.appendChild(t);
     });
     this.el.appendChild(fila);
-    this.crupier = new Crupier(elegir(SALUDOS));
+    this.crupier = new Crupier(ctx.cartera.disponible() < 10 ? frase('pobre') : elegir(SALUDOS));
     const cru = el('div', 'cc-vest-crupier');
     cru.appendChild(this.crupier.el);
     this.el.appendChild(cru);
     this.el.appendChild(el('div', 'cc-aviso-juego', 'Juega con cabeza: la casa siempre gana (casi siempre).'));
-    this.ctx.teclas('<span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>Elegir juego</span><span><kbd>←</kbd><kbd>→</kbd>Mover</span><span><kbd>Enter</kbd>Jugar</span><span><kbd>Esc</kbd>Salir a la calle</span>');
+    this.ctx.teclas('<span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>Elegir juego</span><span><kbd>←</kbd><kbd>→</kbd>Mover</span><span><kbd>Enter</kbd>Jugar</span><span><kbd>Esc</kbd> o <kbd>E</kbd> Salir a la calle</span>');
   }
 
   private bombilla(x: number, y: number): HTMLElement {

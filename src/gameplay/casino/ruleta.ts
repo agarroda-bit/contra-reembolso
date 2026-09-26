@@ -95,7 +95,7 @@ function velRueda(t: number): number {
   return W_REPOSO + A_RUEDA * Math.exp(-K_RUEDA * t);
 }
 
-interface Trayectoria {
+export interface Trayectoria {
   dt: number;
   ang: Float32Array;
   rad: Float32Array;
@@ -111,7 +111,7 @@ interface Trayectoria {
  * Simula la tirada entera y luego la gira para que la bola acabe en `objetivoIdx`
  * (el punto de lanzamiento lo decide el crupier: nadie lo nota).
  */
-function simular(phi0: number, objetivoIdx: number): Trayectoria {
+export function simular(phi0: number, objetivoIdx: number): Trayectoria {
   const dt = 1 / 120;
   const ang: number[] = [];
   const rad: number[] = [];
@@ -521,7 +521,7 @@ export class Ruleta implements PantallaCasino {
     this.montarMandos();
     this.elegirFicha(10, false);
     this.moverCursor(0, 0);
-    this.ctx.teclas('<span><kbd>←↑→↓</kbd>Mover</span><span><kbd>Enter</kbd>Poner ficha</span><span><kbd>1</kbd>–<kbd>4</kbd>Ficha</span><span><kbd>Espacio</kbd>Girar</span><span><kbd>⌫</kbd>Deshacer</span><span><kbd>X</kbd>Borrar</span><span><kbd>R</kbd>Repetir</span><span><kbd>Esc</kbd>Vestíbulo</span>');
+    this.ctx.teclas('<span><kbd>←↑→↓</kbd>Mover</span><span><kbd>Enter</kbd>Poner ficha</span><span><kbd>1</kbd>–<kbd>4</kbd>Ficha</span><span><kbd>Espacio</kbd>Girar</span><span><kbd>⌫</kbd>Deshacer</span><span><kbd>X</kbd>Borrar</span><span><kbd>Clic dcho.</kbd>Quitar</span><span><kbd>R</kbd>Repetir</span><span><kbd>Esc</kbd>Vestíbulo</span>');
     this.redimensionar(this.ctx.escala());
   }
 
@@ -695,7 +695,8 @@ export class Ruleta implements PantallaCasino {
 
   private pintarTotal() {
     const t = this.total;
-    this.totalEl.innerHTML = `En la mesa<b>${fmt(t)}</b>${this.apuestas.size} apuesta${this.apuestas.size === 1 ? '' : 's'}`;
+    if (this.estado === 'resultado') this.totalEl.innerHTML = `Última tirada<b>${fmt(t)}</b>Espacio: repetir`;
+    else this.totalEl.innerHTML = `En la mesa<b>${fmt(t)}</b>${this.apuestas.size} apuesta${this.apuestas.size === 1 ? '' : 's'}`;
     const d = this.ctx.cartera.disponible() - t;
     this.fichasEl.forEach((f) => f.classList.toggle('no', Number(f.dataset.valor) > d));
   }
@@ -780,6 +781,7 @@ export class Ruleta implements PantallaCasino {
     c.refrescar();
     this.estado = 'resultado';
     this.botGirar.disabled = false;
+    this.pintarTotal();
     this.relBola = this.tray ? this.tray.relFinal : this.relBola;
     // número y texto
     const col = colorDe(n);

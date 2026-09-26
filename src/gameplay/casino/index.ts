@@ -336,7 +336,8 @@ export class Casino {
     e.stopPropagation();
     this.sonido.despertar();
     if (e.metaKey || e.ctrlKey || e.altKey) return; // atajos del navegador
-    if (e.code === 'Escape') {
+    if (e.code === 'Escape' || (e.code === 'KeyE' && this.actual === 'vestibulo')) {
+      // Esc (o E en el vestíbulo, como en las tiendas): atrás / salir
       e.preventDefault();
       if (!e.repeat) this.atras();
       return;
