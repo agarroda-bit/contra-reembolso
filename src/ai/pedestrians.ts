@@ -37,11 +37,23 @@ export class Pedestrians implements System {
   private roads: Roads;
   private rng = new Rng('peatones');
   private spawnTimer = 0;
+  /**
+   * Por nodo (cruce): metros antes del centro del cruce donde se acaba la acera, es decir, donde empieza
+   * la calzada de las calles que cruzan. El peatón cambia de calle ahí, no en mitad del cruce.
+   */
+  private clear: Float32Array;
   enabled = true;
 
   constructor(private game: Game) {
     game.mod.pedestrians = this;
     this.roads = (game.mod.traffic?.roads as Roads) ?? new Roads(game.world);
+    const g = this.roads.g;
+    this.clear = new Float32Array(g.nodes.length);
+    for (let n = 0; n < g.nodes.length; n++) {
+      let half = 0;
+      for (const eid of g.adjacency[n] ?? []) half = Math.max(half, g.edges[eid].width / 2);
+      this.clear[n] = half + 1.2;
+    }
     // pánico con tiros, explosiones y atropellos
     const scare = (pos: THREE.Vector3, radius: number) => this.panicAt(pos, radius);
     game.events.on('explosion', (e) => scare(e.pos, 45));
@@ -180,7 +192,20 @@ export class Pedestrians implements System {
       return;
     }
     if (p.state === 'flee') p.setState('walk');
-    // pausa (mirar el móvil, charlar)
+    // dónde está: tramo de su calle y si pisa la calzada (cruzando) o la acera
+    const R = this.roads;
+    let e = R.g.edges[b.edge];
+    let len = R.length(b.edge) || 1;
+    const a = R.startOf(e, b.dir), bb = R.endOf(e, b.dir);
+    const abx = bb.x - a.x, abz = bb.z - a.z;
+    const rx = p.position.x - a.x, rz = p.position.z - a.z;
+    const along = (rx * abx + rz * abz) / (len * len);
+    const lateral = Math.abs(rx * abz - rz * abx) / len;
+    let startT = Math.min(0.45, this.clear[b.dir === 1 ? e.a : e.b] / len);
+    let endT = Math.max(0.55, 1 - this.clear[b.dir === 1 ? e.b : e.a] / len);
+    // en la acera de su calle, lejos de los cruces (en la calzada o en un cruce no se para nunca)
+    const onSidewalk = lateral > e.width / 2 + 0.3 && along > startT && along < endT;
+    // pausa (mirar el móvil, charlar): solo en la acera
     if (b.pause > 0) {
       b.pause -= dt;
       p.target = null;
@@ -188,30 +213,32 @@ export class Pedestrians implements System {
         p.customPose = rnd.next() < 0.6 ? 'phone' : 'normal';
         p.setState('custom');
       }
-      if (b.pause <= 0) p.setState('walk');
+      if (b.pause <= 0 || !onSidewalk) {
+        b.pause = 0;
+        p.setState('walk');
+      }
       return;
     }
-    if (rnd.next() < dt * 0.02) {
+    if (onSidewalk && rnd.next() < dt * 0.02) {
       b.pause = 2 + rnd.next() * 5;
       return;
     }
-    // pasear por la acera
-    const e = this.roads.g.edges[b.edge];
-    const len = this.roads.length(b.edge) || 1;
-    const [a, bb] = this.roads.ends(e, b.dir);
-    const abx = bb.x - a.x, abz = bb.z - a.z;
-    b.t = Math.max(b.t, ((p.position.x - a.x) * abx + (p.position.z - a.z) * abz) / (len * len));
-    if (b.t >= 0.97) {
-      const n = this.roads.nextEdge(b.edge, b.dir, false);
+    // pasear por la acera; al llegar al final de la acera (antes del cruce) pasa a la siguiente calle,
+    // cruzando por el paso de cebra si hace falta (sin pararse en medio)
+    b.t = Math.max(b.t, along);
+    if (b.t >= endT - 1 / len) {
+      const n = R.nextEdge(b.edge, b.dir, false);
       b.edge = n.edge;
       b.dir = n.dir;
-      b.t = 0;
       if (rnd.next() < 0.3) b.side = (b.side === 1 ? -1 : 1) as 1 | -1;
+      e = R.g.edges[b.edge];
+      len = R.length(b.edge) || 1;
+      startT = Math.min(0.45, this.clear[b.dir === 1 ? e.a : e.b] / len);
+      endT = Math.max(0.55, 1 - this.clear[b.dir === 1 ? e.b : e.a] / len);
+      b.t = startT;
     }
-    const e2 = this.roads.g.edges[b.edge];
-    const len2 = this.roads.length(b.edge) || 1;
-    const tt = Math.min(1, b.t + 3 / len2);
-    const target = this.roads.lanePoint(b.edge, b.dir, tt, b.side * (e2.width / 2 + 1.2), tmpT);
+    const tt = Math.min(endT, b.t + 3 / len);
+    const target = R.lanePoint(b.edge, b.dir, tt, b.side * (e.width / 2 + 1.2), tmpT);
     p.goTo(target, false);
   }
 }
