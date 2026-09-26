@@ -15,7 +15,7 @@ import { registerSaveSections } from './gameplay/saveSections';
 import type { WorldData } from './core/contracts';
 
 /** Fase publicada: los sistemas de fases posteriores no se activan todavía. */
-export const FASE = 7;
+export const FASE = 8;
 
 async function boot() {
   const loading = new LoadingScreen();
