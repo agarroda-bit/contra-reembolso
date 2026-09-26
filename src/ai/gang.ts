@@ -141,6 +141,9 @@ export class Gang implements System {
   ambush(pos: THREE.Vector3, count = 3, weapon?: WeaponId): Npc[] {
     const out: Npc[] = [];
     const refY = this.game.world.heightAt(pos.x, pos.z);
+    // si el jugador está lejos (p. ej. la misión de la guarida empieza en la oficina), esperan apostados
+    // en su sitio hasta que llegues; si no, cruzarían media isla (o se borrarían por estar lejos)
+    const posted = this.game.mod.player.position.distanceTo(pos) > 90;
     for (let i = 0; i < count; i++) {
       // un sitio a 7-14 m, fuera de los edificios y, si se puede, donde no se vea aparecer
       let p: THREE.Vector3 | null = null;
@@ -155,9 +158,11 @@ export class Gang implements System {
       }
       p ??= fallback ?? pos.clone();
       p.y = this.game.world.heightAt(p.x, p.z);
-      out.push(this.spawnMember(p, weapon, true));
+      const m = this.spawnMember(p, weapon, !posted);
+      if (posted) (m.brain as CombatBrain).home = p.clone();
+      out.push(m);
     }
-    this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
+    if (!posted) this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
     return out;
   }
 
@@ -253,7 +258,9 @@ export class Gang implements System {
         this.members.splice(i, 1);
         continue;
       }
-      if (m.position.distanceTo(p.position) > 200 && !m.vehicle) {
+      // lejos se retiran (los apostados esperando en su sitio aguantan más)
+      const farLimit = (m.brain as CombatBrain)?.home ? 420 : 200;
+      if (m.position.distanceTo(p.position) > farLimit && !m.vehicle) {
         this.npcs.remove(m);
         this.members.splice(i, 1);
         continue;
