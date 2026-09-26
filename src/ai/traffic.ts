@@ -210,8 +210,11 @@ export class Traffic implements System {
       const dist = hit.distance;
       const owner: any = hit.owner;
       blockedByPlayer = owner === this.game.mod.player || owner === this.vm.current;
-      const safe = Math.max(0, dist - 2.5);
-      wantSpeed = Math.min(wantSpeed, safe * 0.9);
+      // en persecución, al jugador se le embiste
+      if (!(brain.mode === 'chase' && blockedByPlayer)) {
+        const safe = Math.max(0, dist - 2.5);
+        wantSpeed = Math.min(wantSpeed, safe * 0.9);
+      }
     }
 
     // atascado: marcha atrás un momento
