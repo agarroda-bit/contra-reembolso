@@ -120,9 +120,9 @@ class RadioSystem implements System, Radio {
   private chain: RadioChain | null = null;
   private st: Station[] = [];
   private jobs: Spec[] = [];
-  private lowJobs: Spec[] = [];
+  /** Preparación en segundo plano, una cola por emisora (la que suena va primero). */
+  private low: Spec[][] = [[], [], []];
   private outOn = false;
-  private warmed = false;
   // distorsión
   private distTarget = 0;
   private dist = 0;
@@ -234,7 +234,12 @@ class RadioSystem implements System, Radio {
       new ElectroStation(rs, this.chain.music, this.chain.reverb, seed + 2),
       new RumbaStation(rs, this.chain.music, this.chain.reverb, seed + 3),
     ];
-    for (const s of this.st) s.enqueue = (j) => this.jobs.push(...j);
+    // ir preparando las tres emisoras en segundo plano (worker) desde ya, sin prisa
+    this.st.forEach((s, i) => {
+      s.enqueue = (j) => this.low[i].push(...j);
+      s.warm();
+      s.enqueue = (j) => this.jobs.push(...j);
+    });
   }
 
   private audio(paused: boolean, realDt: number) {
@@ -265,16 +270,10 @@ class RadioSystem implements System, Radio {
     // sin worker, se generan aquí como mucho 3 ms por frame
     rs.pumpJobs(3);
     // pocos encargos a la vez: así lo de la emisora que suena va siempre primero
-    while (rs.busy < 3 && (this.jobs.length || this.lowJobs.length)) rs.prefetch((this.jobs.length ? this.jobs : this.lowJobs).shift()!);
-    // en cuanto la emisora elegida está lista, preparar las otras sin prisa
-    if (!this.warmed && !this.jobs.length && rs.busy === 0 && this.playing >= 0) {
-      this.warmed = true;
-      for (const s of this.st) {
-        if (s === this.st[this.playing]) continue;
-        s.enqueue = (j) => this.lowJobs.push(...j);
-        s.warm();
-        s.enqueue = (j) => this.jobs.push(...j);
-      }
+    while (rs.busy < 3) {
+      const q = this.jobs.length ? this.jobs : this.playing >= 0 && this.low[this.playing].length ? this.low[this.playing] : this.low.find((l) => l.length);
+      if (!q) break;
+      rs.prefetch(q.shift()!);
     }
   }
 
@@ -427,9 +426,11 @@ class RadioSystem implements System, Radio {
     if (this.hudTimer <= 0 || (newSong && this.shownSong !== '' && this.sinceText > 10)) {
       this.hudTimer = 30 + Math.random() * 15;
       if (newSong) {
-        // canción nueva (o la que suena al sintonizar)
+        // canción nueva (o la que suena al sintonizar): el locutor la presenta sobre la intro
+        const changed = this.shownSong !== '';
         this.shownSong = np!.title;
         this.setText(`🎵 Ahora suena: «${np!.title}», de ${np!.artist}`);
+        if (changed) this.speak(false);
         return;
       }
       const t = STATION_TEXTS[i];

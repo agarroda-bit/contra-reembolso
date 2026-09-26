@@ -213,7 +213,7 @@ export class ElectroStation extends Station<ElectroSong> {
     // ── bombo + bombeo ──
     if (s % 4 === 0) {
       const lastBeatFill = fill && s === 12 && st.lastBar;
-      if (kickOn && !lastBeatFill && !(k === 'outro' && barInSec >= sec.bars - 2)) {
+      if (kickOn && !lastBeatFill && !(k === 'outro' && st.lastBar && s >= 8)) {
         hit(ch.kick, 'el:kick', s === 0 ? 1 : 0.92);
         rs.pump(this.pumpG.gain, t, drop ? 0.7 : 0.55, stepDur * 3.2);
       }
@@ -265,6 +265,7 @@ export class ElectroStation extends Station<ElectroSong> {
       if (drop) rs.pad(ch.pad.input, t, v, st.barDur * 0.98, 0.75, { cutoff: 3000, attack: 0.01, release: 0.2, voices: song.padVoices, detune: 14 });
       else if (k === 'break' && barInSec % 2 === 0) rs.pad(ch.pad.input, t, v, st.barDur * 2, 0.9, { cutoff: 1500, attack: 0.9, release: 1.2, voices: song.padVoices, detune: 16, sweep: 1.8 });
       else if (k === 'build' && barInSec >= sec.bars / 2) rs.pad(ch.pad.input, t, v, st.barDur, 0.55, { cutoff: 1200, attack: 0.2, release: 0.3, voices: 2, sweep: 2.5 });
+      else if (k === 'outro' && barInSec >= 4 && barInSec % 2 === 0) rs.pad(ch.pad.input, t, v, st.barDur * 2, 0.8, { cutoff: 1400, attack: 0.6, release: 1, voices: song.padVoices, detune: 16 });
     }
 
     // ── arpegio ──

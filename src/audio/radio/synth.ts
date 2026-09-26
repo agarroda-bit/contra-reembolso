@@ -238,6 +238,18 @@ export class RadioSynth {
   string(midi: number, variant: StringVariant): AudioBuffer {
     return this.need(this.stringSpec(midi, variant));
   }
+  /**
+   * Cuerda punteada sin bloquear: si no está lista y hay worker, la encarga y devuelve
+   * undefined (esa nota no suena); sin worker, se genera ya.
+   */
+  maybeString(midi: number, variant: StringVariant): AudioBuffer | undefined {
+    const sp = this.stringSpec(midi, variant);
+    const b = this.maybe(sp.key);
+    if (b) return b;
+    if (!this.worker) return this.need(sp);
+    this.prefetch(sp);
+    return undefined;
+  }
 
   // ─────────── seguimiento de nodos ───────────
 

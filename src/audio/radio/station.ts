@@ -77,6 +77,7 @@ export abstract class Station<S extends Song = Song> {
   private ready = false;
   private timeline = false;
   private resumed = false;
+  private upcoming: S | null = null;
   private st!: Step<S>;
 
   constructor(readonly rs: RadioSynth, dest: AudioNode, revIn: AudioNode, readonly seed: number) {
@@ -160,20 +161,28 @@ export abstract class Station<S extends Song = Song> {
 
   private advanceSong(prepare: boolean) {
     this.songIndex++;
-    this.load(this.makeSong(this.songIndex), prepare);
+    const up = this.upcoming;
+    this.upcoming = null;
+    // si la siguiente ya estaba preparada, sus muestras ya se encargaron
+    if (up && up.index === this.songIndex) this.load(up, false);
+    else this.load(this.makeSong(this.songIndex), prepare);
   }
 
   /** Prepara canales, muestras y la primera canción sin sonar (para que el cambio sea instantáneo). */
   warm() {
+    const specs: Spec[] = [];
     if (!this.ready) {
       this.setup();
       this.ready = true;
-      this.enqueue(this.prepJobs());
+      specs.push(...this.prepJobs());
     }
     if (!this.song) {
       this.load(this.makeSong(this.songIndex), false);
-      this.enqueue(this.songJobs(this.song));
+      specs.push(...this.songJobs(this.song));
     }
+    // primero lo rápido y necesario (batería, notas); las voces, que tardan más, al final
+    const slow = (sp: Spec) => sp.fn === 'renderChoir';
+    if (specs.length) this.enqueue([...specs.filter((sp) => !slow(sp)), ...specs.filter(slow)]);
   }
 
   /** Arranca en `t`, entrando por donde vaya la canción. */
@@ -292,6 +301,11 @@ export abstract class Station<S extends Song = Song> {
     }
     const st = this.fillStep(this.stepPos);
     const grid = this.nextTime;
+    // en el último cuarto de la canción, encargar ya las muestras de la siguiente
+    if (st.s === 0 && !this.upcoming && st.bar >= this.song.bars * 0.75) {
+      this.upcoming = this.makeSong(this.songIndex + 1);
+      this.enqueue(this.songJobs(this.upcoming));
+    }
     if (st.s === 0) {
       const c0 = this.cutoff(st.sec, st.barInSec, 0), c1 = this.cutoff(st.sec, st.barInSec, 1);
       const fp = this.filter.frequency;

@@ -87,7 +87,7 @@ export function kick(sr: number, o: KickOpts): Float32Array {
     s += lp.run(nz()) * o.click * Math.exp(-t / 0.003);
     out[i] = Math.tanh(s * o.drive) / td;
   }
-  return fadeEdges(out, sr, 0.03);
+  return normalize(fadeEdges(out, sr, 0.03), 0.95) as Float32Array;
 }
 
 export interface SnareOpts { tone: number; td: number; nd: number; hp: number; lp: number; len: number; toneAmt: number; noiseAmt: number }

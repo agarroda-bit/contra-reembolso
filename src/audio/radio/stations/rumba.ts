@@ -6,7 +6,7 @@ import { spec, type Spec } from '../render';
 import { chantSpec, chantKey, sungSpec, quejioSpec, type ChantName } from '../voices';
 import {
   makeRng, pick, chance, irand, prog, chordPcs, guitarVoicing, scaleFor, scaleStep, snapToPcs,
-  makeMotif, varyMotif, tuneRate, ftom, type Chord, type MotifNote,
+  makeMotif, varyMotif, tuneRate, ftom, MINOR, type Chord, type MotifNote,
 } from '../theory';
 import { RUMBA_SONGS } from '../texts';
 
@@ -80,9 +80,13 @@ export class RumbaStation extends Station<RumbaSong> {
         if (seen.has(id)) continue;
         seen.add(id);
         for (const m of guitarVoicing(key, c)) jobs.push(rs.stringSpec(m, 'open'), rs.stringSpec(m, 'mute'));
-        jobs.push(rs.stringSpec(this.bassMidi(key, c), 'bass'));
       }
     }
+    // bajo: todas las notas de su registro (incluye las de paso cromáticas)
+    for (let m = 33; m <= 45; m++) jobs.push(rs.stringSpec(m, 'bass'));
+    // notas del requinto: la escala (con sensible) entre do4 y re6
+    const scale = new Set([...MINOR, 11].map((i) => (key + i) % 12));
+    for (let m = 60; m <= 86; m++) if (scale.has(m % 12)) jobs.push(rs.stringSpec(m, 'bright'));
     jobs.push(quejioSpec(rs.sr, `ru:quejio:${song.index}`, song.quejio));
     const base = 52 + ((key - 4 + 12) % 12);
     jobs.push(sungSpec(rs.sr, `ru:jingle:${key}`, [[['R', 0.1], ['u', 0.22], ['m', 0.08]], [['b', 0.04], ['a', 0.6]]], [base + 7, base + 12], 4, { fscale: 1, vib: 0.2 }));
@@ -152,7 +156,8 @@ export class RumbaStation extends Station<RumbaSong> {
       const s = i + off;
       const prev = this.strings[s];
       if (prev) rs.choke(prev, tt, mute ? 0.012 : 0.03);
-      const buf = rs.string(v[i], mute ? 'mute' : 'open');
+      const buf = rs.maybeString(v[i], mute ? 'mute' : 'open');
+      if (!buf) return;
       // las graves en los golpes hacia abajo suenan más; hacia arriba, las agudas
       const w = dir === 'U' ? 0.75 : i < 2 ? 1 : 0.85;
       const voice = rs.play(ch, tt, buf, vel * w * (0.8 + Math.random() * 0.3) * 0.5);
@@ -168,8 +173,10 @@ export class RumbaStation extends Station<RumbaSong> {
 
   private note(t: number, midi: number, vel: number) {
     const rs = this.rs;
+    const buf = rs.maybeString(midi, 'bright');
+    if (!buf) return;
     if (this.reqV) rs.choke(this.reqV, t, 0.02);
-    this.reqV = rs.play(this.ch.requinto.input, t, rs.string(midi, 'bright'), vel);
+    this.reqV = rs.play(this.ch.requinto.input, t, buf, vel);
   }
 
   private realize(st: Step<RumbaSong>) {
@@ -282,9 +289,10 @@ export class RumbaStation extends Station<RumbaSong> {
       else if (s === 8) { m = root + 7 > 45 ? root - 5 : root + 7; vel = 0.75; }
       else if (s === 14 && nextRoot !== root) { m = nextRoot + (nextRoot < root ? 1 : -1); vel = 0.65; }
       else if (s === 14) { m = root + 12 > 45 ? root : root + 12; vel = 0.55; }
-      if (m !== null) {
+      const bb = m !== null ? rs.maybeString(m, 'bass') : undefined;
+      if (bb) {
         if (this.bassV) rs.choke(this.bassV, t, 0.03);
-        this.bassV = rs.play(ch.bass.input, t, rs.string(m, 'bass'), vel);
+        this.bassV = rs.play(ch.bass.input, t, bb, vel);
       }
     }
 
@@ -330,7 +338,11 @@ export class RumbaStation extends Station<RumbaSong> {
       if (b) rs.play(ch.vox.input, t + 0.15, b, 0.8);
     }
     if (st.barInSec === 0 && st.s === 8) this.strum(t, st.chord, key, 'D', 0.8);
+    if (st.barInSec === 0 && st.s === 12) this.strum(t, st.chord, key, 'M', 0.7);
+    if (st.barInSec === 0 && st.s === 14) this.strum(t, st.chord, key, 'U', 0.5);
     if (st.barInSec === 1) {
+      // la guitarra sigue marcando el compás mientras entra la siguiente
+      for (const [ss, dir, v] of SPARSE) if (ss === st.s) this.strum(t, st.chord, key, dir, v * 0.8);
       // palmas que llaman a la siguiente
       if (st.s % 4 === 0 || st.s >= 12) {
         const b = rs.maybe('ru:pc' + (st.s % 3));

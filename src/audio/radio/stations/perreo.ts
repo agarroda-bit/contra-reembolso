@@ -221,7 +221,8 @@ export class PerreoStation extends Station<PerreoSong> {
     const { sec, song, barInSec } = st;
     if ((sec.kind === 'chorus' || sec.kind === 'intro' || (sec.kind === 'outro' && barInSec < 2)) && barInSec % 2 === 0) this.realize(st);
     if (st.fill) this.fillKind = (st.bar * 7 + song.index) % 3;
-    // subida de ruido antes del estribillo
+    // subida de ruido al final de la intro y antes del estribillo
+    if (sec.kind === 'intro' && st.lastBar) this.rs.sweep(this.ch.fx.input, t, st.barDur, 600, 6000, 0.4, true, 1.5);
     if (sec.kind === 'pre' && barInSec === 0) this.rs.sweep(this.ch.fx.input, t, st.barDur * sec.bars, 400, 7000, 0.5, true, 1.5);
     if (sec.kind === 'chorus' && barInSec === 0) {
       const cr = this.rs.maybe('crash');
@@ -244,7 +245,7 @@ export class PerreoStation extends Station<PerreoSong> {
     if (k === 'jingle') return this.jingle(st, t);
 
     const full = k === 'chorus' || (k === 'outro' && barInSec < 2);
-    const drums = k !== 'intro' || barInSec >= 2;
+    const drums = k !== 'intro' || barInSec >= 1;
     const breakdown = k === 'bridge' && barInSec < sec.bars / 2;
     const fill = st.fill && k !== 'intro';
     const preRoll = k === 'pre' && st.lastBar && s >= 8;
@@ -321,8 +322,9 @@ export class PerreoStation extends Station<PerreoSong> {
       }
     }
     // pad en estribillo y puente
-    if (s === 0 && (full || k === 'bridge' || (k === 'pre' && barInSec >= 2))) {
-      rs.pad(ch.pad.input, t, voiceChord(key, chord, 60, 4), st.barDur, k === 'bridge' ? 0.8 : 0.6, { cutoff: k === 'bridge' ? 1100 : 1600, attack: k === 'bridge' ? 0.5 : 0.12, release: 0.5, voices: 2, detune: 10 });
+    if (s === 0 && (full || k === 'bridge' || k === 'intro' || (k === 'pre' && barInSec >= 2))) {
+      const soft = k === 'bridge' || k === 'intro';
+      rs.pad(ch.pad.input, t, voiceChord(key, chord, 60, 4), st.barDur, soft ? 0.8 : 0.6, { cutoff: soft ? 1100 : 1600, attack: soft ? 0.5 : 0.12, release: 0.5, voices: 2, detune: 10 });
     }
 
     // ── melodía (gancho del estribillo) ──

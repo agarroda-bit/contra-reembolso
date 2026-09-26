@@ -9,6 +9,11 @@ import { buildPlaceholderWorld } from '../world/placeholder';
 import { AudioEngine } from '../audio/audio';
 import { installRadio, renderStationOffline, type Radio } from '../audio/radio';
 import * as RR from '../audio/radio/render';
+import { RadioSynth } from '../audio/radio/synth';
+import { buildChain } from '../audio/radio';
+import { PerreoStation } from '../audio/radio/stations/perreo';
+import { ElectroStation } from '../audio/radio/stations/electro';
+import { RumbaStation } from '../audio/radio/stations/rumba';
 
 const CSS = `
 .rp{position:fixed;left:18px;top:18px;width:470px;max-height:calc(100vh - 36px);overflow:auto;background:#fff7e6;border:4px solid #1b1030;border-radius:24px;
@@ -215,6 +220,47 @@ async function main() {
     await analyze(Number(an), Number(params.get('seg') ?? 20), params.has('cancion') ? Number(params.get('cancion')) : undefined, Number(params.get('desde') ?? 0), (params.get('mute') ?? '').split(',').filter(Boolean));
   }
 }
+
+/**
+ * Revisa TODAS las muestras que piden las emisoras (varias canciones de cada una):
+ * que no haya NaN, que no saturen y que no estén mudas.
+ */
+(window as any).__sanity = (songs = 6) => {
+  const off = new OfflineAudioContext(2, 44100, 44100);
+  const rs = new RadioSynth(off);
+  const chain = buildChain(off, off.destination, true, false);
+  const specs = new Map<string, RR.Spec>();
+  const add = (l: RR.Spec[]) => l.forEach((sp) => specs.set(sp.key, sp));
+  for (const Cls of [PerreoStation, ElectroStation, RumbaStation]) {
+    const st: any = new Cls(rs, chain.music, chain.reverb, 99);
+    st.enqueue = add;
+    st.warm();
+    for (let i = 0; i < songs; i++) add(st.songJobs(st.makeSong(i)));
+  }
+  add([RR.spec('talk', 'renderTalk', 44100, 2.5, 130, 1, 1, 1.2), RR.spec('ad', 'renderTalk', 44100, 2.5, 150, 1.06, 1.35, 1.5)]);
+  const bad: string[] = [];
+  let worstPeak = 0, quietest = 0, n = 0;
+  for (const sp of specs.values()) {
+    const out = RR.runSpec(sp);
+    const chans = Array.isArray(out) ? out : [out];
+    let pk = 0, sq = 0, len = 0, nan = false;
+    for (const c of chans) {
+      for (let i = 0; i < c.length; i++) {
+        const v = c[i];
+        if (!Number.isFinite(v)) nan = true;
+        pk = Math.max(pk, Math.abs(v));
+        sq += v * v;
+      }
+      len += c.length;
+    }
+    const rms = 10 * Math.log10(sq / len + 1e-12);
+    n++;
+    worstPeak = Math.max(worstPeak, pk);
+    quietest = Math.min(quietest, rms);
+    if (nan || pk > 1 || rms < -45) bad.push(`${sp.key}: pico ${pk.toFixed(2)} rms ${rms.toFixed(1)}${nan ? ' NaN' : ''}`);
+  }
+  return { muestras: n, peorPico: +worstPeak.toFixed(2), rmsMasBajo: +quietest.toFixed(1), malas: bad };
+};
 
 /** Cuánto tarda cada generador de muestras (ms), para vigilar tirones. */
 (window as any).__bench = () => {
