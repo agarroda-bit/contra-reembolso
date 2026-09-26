@@ -4,7 +4,10 @@ import { esc, formatMoney } from './format';
 const NOTIF_MAX = 3;
 const NOTIF_TIME = 5000;
 const TOAST_TIME = 2500;
-const DISTRICT_TIME = 3000;
+/** Lo que dura el cartel del barrio (debe coincidir con la animación hud-barrio de hud.css). */
+const DISTRICT_TIME = 2600;
+/** Un barrio no se vuelve a anunciar si se anunció hace menos de esto (bordes entre barrios). */
+const DISTRICT_REPEAT_MS = 30000;
 
 interface Toast { text: string; color?: string; time?: number }
 
@@ -18,6 +21,8 @@ export class Notifications {
   private toastEl: HTMLElement | null = null;
   private toastTimer = 0;
   private districtTimer = 0;
+  private districtUntil = 0;
+  private districtShown = new Map<string, number>();
   /** Límite inferior (px) para la pila de notificaciones: lo fija el HUD (encima del arma/vehículo). */
   bottomLimit: () => number = () => window.innerHeight - 20;
   appName = 'Paquetín';
@@ -96,7 +101,9 @@ export class Notifications {
   private nextToast() {
     const p = this.toastQueue.shift();
     if (!p) return;
-    const el = div('hud-toast');
+    // los textos largos, más pequeños (y los muy largos, sin mayúsculas: se leen mejor)
+    const len = p.text.length;
+    const el = div('hud-toast' + (len > 48 ? ' hud-toast--largo hud-toast--frase' : len > 26 ? ' hud-toast--largo' : ''));
     el.innerHTML = `<span class="hud-toast__texto">${esc(p.text)}</span>`;
     if (p.color) el.style.setProperty('--toast-color', p.color);
     this.toastBox.appendChild(el);
@@ -134,8 +141,13 @@ export class Notifications {
     for (const el of [this.notifList, this.toastBox, this.districtBox, this.moneyBox]) el.textContent = '';
   }
 
-  // ───────────── Cartel del barrio (título de película) ─────────────
-  district(name: string, color: string) {
+  // ───────────── Cartel del barrio (título de película, arriba al centro) ─────────────
+  /** Devuelve false si no se ha enseñado (ese barrio ya se anunció hace poco). */
+  district(name: string, color: string): boolean {
+    const now = performance.now();
+    const last = this.districtShown.get(name);
+    if (last !== undefined && now - last < DISTRICT_REPEAT_MS) return false;
+    this.districtShown.set(name, now);
     window.clearTimeout(this.districtTimer);
     this.districtBox.innerHTML = `
       <div class="hud-barrio__cartel">
@@ -144,9 +156,21 @@ export class Notifications {
         <div class="hud-barrio__linea"></div>
       </div>`;
     (this.districtBox.firstElementChild as HTMLElement).style.setProperty('--barrio-color', color);
-    this.districtTimer = window.setTimeout(() => {
-      this.districtBox.innerHTML = '';
-    }, DISTRICT_TIME);
+    this.districtUntil = now + DISTRICT_TIME;
+    this.districtTimer = window.setTimeout(() => this.clearDistrict(), DISTRICT_TIME);
+    return true;
+  }
+
+  /** Quita el cartel del barrio ya (al entrar o salir de un interior, al abrir el mapa...). */
+  clearDistrict() {
+    window.clearTimeout(this.districtTimer);
+    this.districtUntil = 0;
+    this.districtBox.textContent = '';
+  }
+
+  /** true mientras se ve el cartel del barrio. */
+  districtVisible(): boolean {
+    return performance.now() < this.districtUntil;
   }
 
   // ───────────── Dinero que salta ─────────────

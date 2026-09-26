@@ -82,7 +82,7 @@
   gap: 16px;
 }
 .hud-dinero__etq {
-  font: 900 11px/1 var(--cr-fuente);
+  font: 900 12px/1 var(--cr-fuente);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   padding: 5px 7px 4px;
@@ -145,7 +145,7 @@
 .hud-salto--mas .hud-salto__cifra { color: var(--cr-verde); }
 .hud-salto--menos .hud-salto__cifra { color: var(--cr-rojo); }
 .hud-salto__motivo {
-  font: 800 11px/1 var(--cr-fuente);
+  font: 800 12px/1 var(--cr-fuente);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 4px 7px 3px;
@@ -204,7 +204,7 @@
   text-shadow: 1px 1px 0 var(--cr-noche);
 }
 .hud-fama__txt {
-  font: 900 11px/1 var(--cr-fuente);
+  font: 900 12px/1 var(--cr-fuente);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #ffc2d4;
@@ -373,7 +373,7 @@
 .hud-encargo__pct {
   min-width: 36px;
   text-align: right;
-  font: 800 12px/1 var(--cr-fuente);
+  font: 800 13px/1 var(--cr-fuente);
   opacity: 0.92;
 }
 
@@ -424,6 +424,51 @@
   font: 900 12px/1 var(--cr-fuente);
   will-change: transform;
 }
+/* dentro de un interior: cartel con el sitio en lugar del mapa */
+.hud-minimapa__dentro {
+  --dentro-color: var(--cr-amarillo);
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 22px;
+  text-align: center;
+  background:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.04) 0 10px, rgba(255, 255, 255, 0) 10px 20px),
+    radial-gradient(circle at 50% 38%, var(--cr-noche-2), var(--cr-noche) 75%);
+}
+.hud-minimapa__dentro-ico {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 4px;
+  font-size: 30px;
+  border-radius: 50%;
+  background: var(--dentro-color);
+  border: 4px solid var(--cr-noche);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18), 3px 4px 0 rgba(0, 0, 0, 0.45);
+}
+.hud-minimapa__dentro small {
+  font: 800 12px/1 var(--cr-fuente);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #cfc3ea;
+}
+.hud-minimapa__dentro b {
+  max-width: 100%;
+  font: 900 17px/1.1 var(--cr-fuente);
+  color: var(--cr-crema);
+  text-shadow: 2px 2px 0 var(--cr-noche);
+  overflow-wrap: break-word;
+}
+.hud-minimapa--dentro .hud-minimapa__dentro { display: flex; }
+.hud-minimapa--dentro .hud-minimapa__norte,
+.hud-minimapa--dentro .hud-minimapa__destino { display: none !important; }
+
 .hud-minimapa__destino {
   position: absolute;
   left: 50%;
@@ -597,7 +642,7 @@
   right: 0;
   bottom: 13px;
   text-align: center;
-  font: 900 11px/1 var(--cr-fuente);
+  font: 900 12px/1 var(--cr-fuente);
   letter-spacing: 0.1em;
   color: var(--cr-amarillo);
 }
@@ -625,7 +670,7 @@
 }
 .hud-vehiculo__radio {
   min-width: 0;
-  font: 700 12px/1.1 var(--cr-fuente);
+  font: 700 13px/1.1 var(--cr-fuente);
   color: #bfe9ff;
   white-space: nowrap;
   overflow: hidden;
@@ -732,7 +777,10 @@
   font: 800 18px/1.15 var(--cr-fuente);
   white-space: nowrap;
 }
-.hud-pista > span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.hud-pista { max-width: min(56vw, 820px); }
+.hud-pista__seg { display: inline-flex; align-items: center; gap: 10px; min-width: 0; }
+.hud-pista__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hud-pista__sep { flex: none; width: 3px; height: 26px; margin: 0 4px; border-radius: 2px; background: rgba(255, 246, 224, 0.28); }
 .hud-pista .cr-tecla {
   font-size: 17px;
   min-width: 34px;
@@ -753,6 +801,8 @@
   left: 50%;
   width: 0;
   height: 0;
+  /* por encima de los bocadillos y los números de dinero (capa z-index 15 de bubbles.ts) */
+  z-index: 16;
 }
 .hud-toast {
   --toast-color: var(--cr-amarillo);
@@ -760,22 +810,29 @@
   left: 0;
   top: 0;
   width: max-content;
-  max-width: 78vw;
-  padding: 9px 28px 11px;
+  /* solo el hueco del centro: sin pisar los encargos (izquierda) ni el dinero y las
+     notificaciones (derecha) */
+  max-width: max(340px, min(760px, calc(100vw - 740px)));
+  padding: 9px 26px 11px;
   text-align: center;
-  background: var(--cr-panel);
+  background: var(--cr-panel-solido);
   border: 4px solid var(--cr-noche);
   border-radius: 20px;
   box-shadow: 6px 6px 0 var(--toast-color);
   animation: hud-toast-entra 0.55s var(--cr-rebote) both;
 }
 .hud-toast__texto {
-  font: 900 clamp(24px, 3vw, 42px)/1.05 var(--cr-fuente);
+  display: block;
+  font: 900 clamp(26px, 2.9vw, 42px)/1.05 var(--cr-fuente);
   letter-spacing: -0.01em;
   text-transform: uppercase;
   color: var(--toast-color);
   text-shadow: 3px 3px 0 var(--cr-noche);
+  overflow-wrap: break-word;
 }
+.hud-toast--largo { padding: 8px 20px 10px; }
+.hud-toast--largo .hud-toast__texto { font-size: clamp(20px, 1.9vw, 28px); line-height: 1.12; }
+.hud-toast--frase .hud-toast__texto { text-transform: none; letter-spacing: 0; }
 .hud-toast--sale { animation: hud-toast-sale 0.3s ease-in both; }
 @keyframes hud-toast-entra {
   0% { transform: translateX(-50%) scale(0.2) rotate(-12deg); opacity: 0; }
@@ -788,61 +845,64 @@
   to { transform: translateX(-50%) translateY(-24px) scale(0.8) rotate(3deg); opacity: 0; }
 }
 
+/* cartel del barrio: arriba al centro, pequeño y breve (no tapa al personaje ni la rueda
+   de armas ni las pistas de abajo; cabe por encima de los toasts) */
 .hud-barrio {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 22%;
+  top: 8px;
   display: flex;
   justify-content: center;
+  pointer-events: none;
 }
 .hud-barrio__cartel {
   --barrio-color: var(--cr-amarillo);
-  padding: 18px 60px;
+  padding: 6px 40px 8px;
   text-align: center;
-  background: radial-gradient(closest-side, rgba(27, 16, 48, 0.45), rgba(27, 16, 48, 0));
-  animation: hud-barrio 3s ease both;
+  background: radial-gradient(closest-side, rgba(27, 16, 48, 0.5), rgba(27, 16, 48, 0));
+  animation: hud-barrio 2.6s ease both;
 }
 .hud-barrio__arriba {
-  padding-left: 0.5em;
-  margin-bottom: 8px;
-  font: 800 14px/1 var(--cr-fuente);
-  letter-spacing: 0.5em;
+  padding-left: 0.45em;
+  margin-bottom: 5px;
+  font: 800 13px/1 var(--cr-fuente);
+  letter-spacing: 0.45em;
   text-transform: uppercase;
   color: var(--cr-crema);
   text-shadow: 2px 2px 0 var(--cr-noche);
 }
 .hud-barrio__nombre {
-  font: italic 900 clamp(42px, 6.4vw, 84px)/0.95 var(--cr-fuente);
+  font: italic 900 clamp(34px, 3.9vw, 58px)/0.95 var(--cr-fuente);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: #fff;
   text-shadow:
     -3px -3px 0 var(--cr-noche), 3px -3px 0 var(--cr-noche), -3px 3px 0 var(--cr-noche), 3px 3px 0 var(--cr-noche),
     0 -3px 0 var(--cr-noche), 0 3px 0 var(--cr-noche), -3px 0 0 var(--cr-noche), 3px 0 0 var(--cr-noche),
-    8px 8px 0 var(--barrio-color), 11px 11px 0 var(--cr-noche);
+    6px 6px 0 var(--barrio-color), 8px 8px 0 var(--cr-noche);
   transform: rotate(-2deg);
-  animation: hud-barrio-letras 3s var(--cr-suave) both;
+  animation: hud-barrio-letras 2.6s var(--cr-suave) both;
   white-space: nowrap;
 }
 .hud-barrio__linea {
   width: 62%;
-  height: 8px;
-  margin: 16px auto 0;
+  height: 7px;
+  margin: 10px auto 0;
   border-radius: 99px;
   background: var(--barrio-color);
   border: 2px solid var(--cr-noche);
   transform: rotate(-2deg) scaleX(0);
-  animation: hud-barrio-linea 3s var(--cr-suave) both;
+  animation: hud-barrio-linea 2.6s var(--cr-suave) both;
 }
 @keyframes hud-barrio {
-  0% { opacity: 0; transform: scale(1.18); }
-  14% { opacity: 1; transform: scale(1); }
-  80% { opacity: 1; transform: scale(1); }
-  100% { opacity: 0; transform: translateY(-14px) scale(0.98); }
+  0% { opacity: 0; transform: translateY(-18px) scale(1.1); }
+  12% { opacity: 1; transform: none; }
+  80% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.98); }
 }
 @keyframes hud-barrio-letras {
-  0% { letter-spacing: 0.22em; }
+  0% { letter-spacing: 0.12em; }
   30%, 100% { letter-spacing: 0.02em; }
 }
 @keyframes hud-barrio-linea {
@@ -891,7 +951,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font: 800 10.5px/1 var(--cr-fuente);
+  font: 800 11.5px/1 var(--cr-fuente);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #7a6a99;
@@ -912,13 +972,15 @@
 .hud-notif__titulo { margin-top: 3px; font: 900 15px/1.15 var(--cr-fuente); }
 .hud-notif__texto {
   margin-top: 2px;
-  font: 600 13px/1.25 var(--cr-fuente);
+  font: 600 13.5px/1.25 var(--cr-fuente);
   color: #3d2e5c;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* la más nueva enseña un poco más de texto (los mensajes del tutorial son largos) */
+.hud-notif:first-child .hud-notif__texto { -webkit-line-clamp: 3; }
 /* sin sitio (p. ej. en coche con pantalla baja): las antiguas se quedan en cabecera + título */
 .hud-notifs--compacta .hud-notif + .hud-notif { align-items: center; padding-top: 6px; padding-bottom: 6px; }
 .hud-notifs--compacta .hud-notif + .hud-notif .hud-notif__texto { display: none; }
@@ -1044,7 +1106,7 @@
 .hud-mapa__leyenda-ayuda {
   margin: 5px 0 8px;
   padding-left: 4px;
-  font: 700 11.5px/1.3 var(--cr-fuente);
+  font: 700 12.5px/1.3 var(--cr-fuente);
   color: #cfc3ea;
 }
 .hud-mapa__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }

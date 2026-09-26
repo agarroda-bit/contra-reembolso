@@ -52,6 +52,7 @@ export class Minimap {
   private g: CanvasRenderingContext2D;
   private north: HTMLElement;
   private wpEl: HTMLElement;
+  private insideEl: HTMLElement;
   private dpr = 1;
   private cssSize = 200;
   private radiusM = MIN_RADIUS_M;
@@ -78,6 +79,7 @@ export class Minimap {
     this.el.innerHTML = `
       <div class="hud-minimapa__marco">
         <canvas class="hud-minimapa__canvas"></canvas>
+        <div class="hud-minimapa__dentro"><span class="hud-minimapa__dentro-ico cr-emoji"></span><small>Estás en</small><b></b></div>
         <div class="hud-minimapa__brillo"></div>
       </div>
       <div class="hud-minimapa__norte">N</div>
@@ -86,6 +88,7 @@ export class Minimap {
     this.g = this.canvas.getContext('2d')!;
     this.north = this.el.querySelector('.hud-minimapa__norte')!;
     this.wpEl = this.el.querySelector('.hud-minimapa__destino')!;
+    this.insideEl = this.el.querySelector('.hud-minimapa__dentro')!;
     if (typeof ResizeObserver !== 'undefined') {
       this.ro = new ResizeObserver(this.onWinResize);
       this.ro.observe(this.canvas);
@@ -95,6 +98,18 @@ export class Minimap {
   dispose() {
     this.ro?.disconnect();
     window.removeEventListener('resize', this.onWinResize);
+  }
+
+  /**
+   * Dentro de un interior: en vez del mapa (que ahí enseñaría mar) sale un cartel con el sitio.
+   * null = fuera. Solo toca el DOM al entrar o salir.
+   */
+  setInside(place: { icon: string; color: string; name: string } | null) {
+    this.el.classList.toggle('hud-minimapa--dentro', !!place);
+    if (!place) return;
+    (this.insideEl.firstElementChild as HTMLElement).textContent = place.icon;
+    this.insideEl.style.setProperty('--dentro-color', place.color);
+    this.insideEl.querySelector('b')!.textContent = place.name;
   }
 
   /** Olvida lo cacheado del mapa (llamar si el mundo repinta su mapCanvas). */
