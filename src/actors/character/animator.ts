@@ -29,6 +29,9 @@ export const NCH = NB3 + 12;
 /** Canales del tronco para arriba (capa de apuntado). */
 const UPPER = [B.spine, B.neck, B.head, B.armL, B.foreL, B.handL, B.armR, B.foreR, B.handR];
 const RIGHT_ARM = [B.armR, B.foreR, B.handR, B.head, B.neck];
+const ARMS = [B.armL, B.foreL, B.handL, B.armR, B.foreR, B.handR];
+const LEFT_ARM = [B.armL, B.foreL, B.handL];
+const R_ARM = [B.armR, B.foreR, B.handR];
 
 const clamp01 = (x: number) => (x < 0 ? 0 : x > 1 ? 1 : x);
 const clamp = (x: number, a: number, b: number) => (x < a ? a : x > b ? b : x);
@@ -156,8 +159,11 @@ const _mp = new Matrix4();
 const _px = new Vector3();
 const _py = new Vector3();
 const _pz = new Vector3();
-/** Gira el hueso del móvil para que la pantalla (+X) mire a la cara y el lado largo (+Y) vaya hacia delante. */
-function phoneFacing(o: Float32Array) {
+/**
+ * Gira el hueso del móvil para que la pantalla (+X) mire a la cara y el lado largo (+Y) vaya hacia delante.
+ * landscape = en horizontal delante de la cara, como quien graba un vídeo.
+ */
+function phoneFacing(o: Float32Array, landscape = false) {
   // orientación de la mano derecha en el espacio del pecho
   _eu.set(o[B.armR * 3], o[B.armR * 3 + 1], o[B.armR * 3 + 2], 'XYZ');
   _qp.setFromEuler(_eu);
@@ -166,8 +172,13 @@ function phoneFacing(o: Float32Array) {
   _eu.set(o[B.handR * 3], o[B.handR * 3 + 1], o[B.handR * 3 + 2], 'XYZ');
   _qp.multiply(_qp2.setFromEuler(_eu));
   // orientación deseada en el espacio del pecho
-  _px.set(0.1, 0.85, -0.5).normalize();
-  _py.set(0, 0.45, 0.9);
+  if (landscape) {
+    _px.set(0, 0.15, -1).normalize();
+    _py.set(-1, 0, 0);
+  } else {
+    _px.set(0.1, 0.85, -0.5).normalize();
+    _py.set(0, 0.45, 0.9);
+  }
   _py.addScaledVector(_px, -_py.dot(_px)).normalize();
   _pz.crossVectors(_px, _py);
   _mp.makeBasis(_px, _py, _pz);
@@ -268,6 +279,53 @@ const BLEND: Record<CharacterPose, number> = {
   enter_car: 0.2, pull_out: 0.2, pulled: 0.15, sit: 0.35, phone: 0.3, hands_up: 0.25, taped: 0.25, stunned: 0.25,
 };
 
+// ─────────────── gestos (capa por encima de andar/parado) ───────────────
+/**
+ * Gestos cortos que se ponen encima de la pose normal: celebrar, aburrirse, señalar...
+ * Parado se hacen con todo el cuerpo; andando, solo de cintura para arriba.
+ */
+export type Gesture =
+  | 'cheer' // puño arriba (cobrar una entrega)
+  | 'celebrate' // saltito, bailecito y vuelta (algo grande)
+  | 'shrug' // encogerse de hombros
+  | 'wave' // saludar
+  | 'watch' // mirar el reloj (aburrido)
+  | 'yawn' // bostezar y estirarse
+  | 'scratch' // rascarse la cabeza
+  | 'arms' // brazos cruzados y pie impaciente
+  | 'point' // señalar y gritar
+  | 'film' // grabar con el móvil
+  | 'fist' // agitar el puño (enfadado)
+  | 'flail' // huir con los brazos en alto
+  | 'cover' // cubrirse la cabeza (tiros)
+  | 'lookback'; // correr mirando hacia atrás
+const GEST: Record<Gesture, { dur: number; prio: number; idle?: boolean }> = {
+  cheer: { dur: 1.3, prio: 2 },
+  celebrate: { dur: 3.3, prio: 3 },
+  shrug: { dur: 1.2, prio: 2 },
+  wave: { dur: 1.6, prio: 2 },
+  watch: { dur: 3.2, prio: 1, idle: true },
+  yawn: { dur: 2.7, prio: 1, idle: true },
+  scratch: { dur: 2.3, prio: 1, idle: true },
+  arms: { dur: 3.4, prio: 1, idle: true },
+  point: { dur: 1.8, prio: 2 },
+  film: { dur: 2.6, prio: 2 },
+  fist: { dur: 2, prio: 2 },
+  flail: { dur: 2, prio: 2 },
+  cover: { dur: 2, prio: 2 },
+  lookback: { dur: 2, prio: 2 },
+};
+/** Gestos de aburrimiento (parado mucho rato). */
+const FIDGETS: Gesture[] = ['watch', 'yawn', 'arms', 'scratch'];
+/** Canales de la cara. */
+const FACE = [CH.eye, CH.mouth, CH.mouthW, CH.brow, CH.angry, CH.phone];
+/** Duración del puñetazo (s). */
+const PUNCH = 0.36;
+/** Preparación del salto (s): se agacha un poco antes de despegar. */
+export const JUMP_WINDUP = 0.07;
+/** Número de bailes distintos (0-5 los de siempre del club; 6-9, nuevos). */
+export const DANCE_COUNT = 10;
+
 // ─────────────── fotogramas clave precalculados ───────────────
 function standPose(o: Float32Array) {
   neutral(o);
@@ -342,6 +400,8 @@ const KF_LEGIN = new Float32Array(NCH);
 const KF_REACH = new Float32Array(NCH);
 const KF_GRAB = new Float32Array(NCH);
 const KF_PULL = new Float32Array(NCH);
+const KF_YANK = new Float32Array(NCH);
+const KF_EXIT = new Float32Array(NCH);
 (function buildKeyframes() {
   standPose(KF_STAND);
   lyingPose(KF_LYING);
@@ -418,14 +478,46 @@ const KF_PULL = new Float32Array(NCH);
   p[CH.angry] = 1;
   p[CH.mouth] = 0.7;
   p[CH.mouthW] = 1.1;
+  // tirón final: el cuerpo echado atrás del todo y los brazos pegados al pecho
+  const y = KF_YANK;
+  y.set(p);
+  y[CH.hz] = -0.14;
+  R(y, B.hips, -0.22, 0.25, 0);
+  R(y, B.spine, -0.42, 0.3, 0);
+  arm(y, 1, -0.2, 0, -0.05, -1.9);
+  arm(y, -1, -0.35, 0, 0.1, -1.7);
+  legs(y, 0.06, 0.3, 0, -0.03, -0.22, 0);
+  y[CH.mouth] = 1;
+
+  // salir del coche: agachado, todavía con un pie dentro y la mano en el marco de la puerta
+  const e = KF_EXIT;
+  neutral(e);
+  e[CH.hy] = 0.72 + HIPJ;
+  e[CH.hx] = -0.05;
+  R(e, B.hips, 0.25, -0.35, 0);
+  legs(e, 0.05, 0.06, 0, -0.18, -0.06, 0.28);
+  R(e, B.spine, 0.42, 0, 0);
+  R(e, B.head, -0.3, 0, 0);
+  arm(e, -1, -2.25, 0, 0.35, -0.45);
+  arm(e, 1, -0.75, 0, 0.35, -0.6);
 })();
 
 // secuencias (constantes: sin reservar memoria por frame)
 const SEQ_GETUP = [KF_LYING, KF_SITUP, KF_CROUCH, KF_STAND];
 const T_GETUP = [0, 0.35, 0.68, 1.0];
-const T_ENTER = [0, 0.3, 0.65, 1.0];
-const SEQ_PULL = [KF_REACH, KF_GRAB, KF_PULL, KF_PULL, KF_REACH];
-const T_PULL = [0, 0.3, 0.7, 1.05, 1.3];
+/** Subir al coche: dura lo mismo que el paso del gestor de vehículos (0,45 s). */
+const T_ENTER = [0, 0.14, 0.31, 0.45];
+/** Robar el coche (1 s): llega a la puerta, agarra, tira, pega el tirón y se mete. */
+const SEQ_PULL = [KF_REACH, KF_REACH, KF_GRAB, KF_PULL, KF_YANK, KF_DUCK];
+const T_PULL = [0, 0.36, 0.5, 0.66, 0.8, 1.0];
+const SEQ_EXIT = [KF_EXIT, KF_DUCK, KF_STAND];
+const T_EXIT = [0, 0.2, 0.46];
+
+/** Tres fotogramas clave del salto (despegue, arriba, cayendo): valor según la fase guardada en PL. */
+const PL = { ph: 0, a: 0, b: 0 };
+function pl(x0: number, x1: number, x2: number) {
+  return PL.ph <= 1 ? lerp(x0, x1, PL.a) : lerp(x1, x2, PL.b);
+}
 
 /** Aleatorio fijo por número (para el baile del robot). */
 function hash01(n: number, seed: number) {
@@ -484,6 +576,36 @@ export class Animator {
   private wobbleS = 0;
   private swingL = 0; // fase de vuelo de cada pie (0..1) para inclinar la puntera
   private swingR = 0;
+  /** Aceleración suavizada (m/s²): se inclina al arrancar y se echa atrás al frenar. */
+  private accS = 0;
+  private lastSpeedS = 0;
+  /** Giro suavizado (rad/s, + = a la izquierda): se inclina hacia dentro de la curva. */
+  private turnS = 0;
+  private lastHeading = NaN;
+  /** Rumbo del personaje (lo escribe su dueño antes de update; NaN = no inclinarse en las curvas). */
+  heading = NaN;
+  /** Agachado (lo pide el dueño) y su peso suavizado. */
+  crouch = false;
+  private crouchW = 0;
+  /** Tiempo desde que empezó a prepararse para saltar (>= JUMP_WINDUP: nada). */
+  private windT = 1;
+  /** Puñetazo: tiempo desde el golpe y mano (+1 izquierda, -1 derecha). */
+  private punchT = 1;
+  private punchSide = 1;
+  /** Tiempo desde que se bajó de un vehículo (salir agachado por la puerta). */
+  private exitT = 1;
+  /** Gesto en curso (null = ninguno). */
+  gest: Gesture | null = null;
+  gestT = 0;
+  private gestDur = 0;
+  private gestFullW = 0;
+  /** Segundos parado sin hacer nada; al pasar de fidgetAfter hace un gesto de aburrimiento (0 = nunca). */
+  private idleT = 0;
+  fidgetAfter: number;
+  private fidgetN: number;
+  /** Los bailarines que no son el jugador cambian de baile de vez en cuando (el jugador baila el que elige). */
+  danceMix = true;
+  private danceKey = -1;
 
   gait: Gait = GAITS.normal;
   /** Escala del cuerpo (look.height): corrige asientos, volante y manillar, que no se escalan. */
@@ -499,12 +621,48 @@ export class Animator {
   constructor(seed: number, kind?: CharacterKind, emblem?: string | null) {
     this.seed = seed;
     this.configure(kind, emblem);
-    this.danceStyle = seed % 6;
+    this.danceStyle = seed % DANCE_COUNT;
     this.phase = (seed % 1000) / 1000;
     this.t = (seed % 997) * 0.37;
     this.blinkT = 1 + (seed % 7) * 0.4;
+    // cada uno se aburre a su ritmo (el jugador lo ajusta a 10 s)
+    this.fidgetAfter = 7 + (seed % 11);
+    this.fidgetN = seed % FIDGETS.length;
     standPose(this.cur);
     this.setScale(1);
+  }
+
+  /**
+   * Empieza un gesto encima de la pose normal (celebrar, señalar, aburrirse...). `dur` en segundos
+   * (Infinity = hasta stopGesture). No quita un gesto más importante que esté a medias.
+   */
+  gesture(g: Gesture, dur?: number): boolean {
+    const d = GEST[g];
+    if (!d) return false;
+    const cur = this.gest;
+    if (cur && this.gestDur - this.gestT > 0.3 && GEST[cur].prio > d.prio) return false;
+    if (cur === g && this.gestDur === Infinity && dur === Infinity) return true;
+    if (cur) {
+      // cambiar de un gesto a otro sin saltos: mezcla desde la pose de ahora
+      this.from.set(this.cur);
+      this.blendT = 0;
+      this.blendDur = 0.2;
+    }
+    this.gest = g;
+    this.gestT = 0;
+    this.gestDur = dur ?? d.dur;
+    this.idleT = 0;
+    return true;
+  }
+
+  /** Termina el gesto en curso (se deshace suave en `fade` segundos). */
+  stopGesture(fade = 0.25) {
+    if (this.gest && this.gestDur - this.gestT > fade) this.gestDur = this.gestT + fade;
+  }
+
+  /** Se agacha un momento antes de saltar (el salto de verdad llega JUMP_WINDUP s después). */
+  jumpWindup() {
+    this.windT = 0;
   }
 
   /** Escala del cuerpo (la llama el personaje al cambiar la altura). */
@@ -550,7 +708,18 @@ export class Animator {
       else sub = grounded && this.groundTime > 0.1 && inKnock && this.poseT > 0.1 ? 'k1' : 'k0';
     }
     if (sub !== this.sub) {
-      if (pose !== this.pose) this.poseT = 0;
+      const prev = this.pose;
+      if (pose !== prev) {
+        this.poseT = 0;
+        // al bajarse de un vehículo sale agachado por la puerta
+        if (pose === 'normal' && (prev === 'drive' || prev === 'ride')) this.exitT = 0;
+        // levantarse estando sentado (sacado del coche, de una silla): se salta la parte de estar tumbado
+        if (pose === 'getup' && (prev === 'pulled' || prev === 'sit')) this.poseT = T_GETUP[1];
+        if (pose !== 'normal') {
+          this.gest = null;
+          this.idleT = 0;
+        }
+      }
       this.from.set(this.cur);
       this.blendT = 0;
       this.blendDur = BLEND[pose] ?? 0.25;
@@ -559,7 +728,25 @@ export class Animator {
     } else this.poseT += dt;
 
     const speed = Math.max(0, p.speed || 0);
+    this.lastSpeedS = this.speedS;
     this.speedS += (speed - this.speedS) * Math.min(1, dt * 9);
+    if (dt > 0) this.accS += ((this.speedS - this.lastSpeedS) / dt - this.accS) * Math.min(1, dt * 6);
+    // giro (para inclinarse en las curvas)
+    let turn = 0;
+    const h = this.heading;
+    if (h === h && dt > 0) {
+      if (this.lastHeading === this.lastHeading) {
+        let d = h - this.lastHeading;
+        d = Math.atan2(Math.sin(d), Math.cos(d));
+        turn = clamp(d / dt, -8, 8);
+      }
+      this.lastHeading = h;
+    }
+    this.turnS += (turn - this.turnS) * Math.min(1, dt * 7);
+    this.crouchW += ((this.crouch && pose === 'normal' ? 1 : 0) - this.crouchW) * Math.min(1, dt * 10);
+    if (this.crouchW < 0.001) this.crouchW = 0;
+    this.windT += dt;
+    this.exitT += dt;
     const wob = p.wobble !== undefined && Number.isFinite(p.wobble) ? clamp01(p.wobble) : 0;
     this.wobbleS += (wob - this.wobbleS) * Math.min(1, dt * 3);
     const canAim = pose === 'normal' || pose === 'drive' || pose === 'ride';
@@ -569,13 +756,20 @@ export class Animator {
     const pitchIn = p.aimPitch;
     this.aimPitch += ((pitchIn !== undefined && Number.isFinite(pitchIn) ? pitchIn : 0) - this.aimPitch) * Math.min(1, dt * 20);
     if (p.weapon) this.weapon = p.weapon;
-    if (p.shot) this.recoil = 1;
+    this.punchT += dt;
+    if (p.shot && this.weapon === 'none') {
+      // con los puños: puñetazo (alternando las manos)
+      this.punchT = 0;
+      this.punchSide = -this.punchSide;
+      this.recoil = 0;
+    } else if (p.shot) this.recoil = 1;
     else this.recoil = Math.max(0, this.recoil - dt / (this.weapon === 'throw' ? 0.45 : 0.14));
 
     const vy = p.vy !== undefined && Number.isFinite(p.vy) ? p.vy : 0;
     this.vy = vy;
     const air = pose === 'normal' && !grounded && (this.airTime > 0.1 || vy > 1.5) ? 1 : 0;
-    this.airW += (air - this.airW) * Math.min(1, dt * (air ? 10 : 18));
+    // (al despegar de un salto entra rápido, para que se vea el impulso)
+    this.airW += (air - this.airW) * Math.min(1, dt * (air ? (vy > 3 ? 22 : 10) : 18));
 
     // parpadeo
     this.blinkT -= dt;
@@ -612,12 +806,18 @@ export class Animator {
         keyframes(o, this.seqEnter, T_ENTER, this.poseT);
         break;
       case 'pull_out': {
-        const tt = this.poseT % 1.3;
+        const tt = this.poseT;
         keyframes(o, SEQ_PULL, T_PULL, tt);
-        if (tt > 0.6 && tt < 1.1) {
-          const sh = Math.sin(this.t * 40) * 0.04;
+        if (tt < 0.36) {
+          // llega a la puerta a zancadas, con los brazos por delante
+          const st = Math.sin(tt * 26);
+          legs(o, 0.02, 0.25 + st * 0.12, Math.max(0, st) * 0.1, -0.02, -0.18 - st * 0.12, Math.max(0, -st) * 0.1);
+        } else if (tt > 0.5 && tt < 0.84) {
+          // forcejeo
+          const sh = Math.sin(this.t * 40) * 0.06;
           AR(o, B.armL, sh, 0, 0);
           AR(o, B.armR, -sh, 0, 0);
+          AR(o, B.spine, 0, sh * 0.8, 0);
         }
         break;
       }
@@ -636,9 +836,20 @@ export class Animator {
         break;
     }
 
+    if (pose === 'normal') {
+      // bajarse del vehículo: sale agachado (se corta si echa a andar)
+      if (this.exitT < T_EXIT[2]) {
+        keyframes(this.tmpA, SEQ_EXIT, T_EXIT, this.exitT);
+        const k = 1 - smooth(this.speedS / 1.6);
+        if (k > 0) lerpInto(o, o, this.tmpA, k * (1 - smooth((this.exitT - 0.3) / 0.16)));
+      }
+      this.gestureLayer(o, dt);
+    }
+
     // capa de apuntado (tronco y brazos)
     if (this.aimW > 0) this.aimLayer(o, pose);
     if (this.recoil > 0) this.recoilLayer(o);
+    if (this.punchT < PUNCH && (pose === 'normal' || pose === 'phone')) this.punchLayer(o);
 
     // mezcla con la pose anterior
     this.blendT += dt;
@@ -737,19 +948,21 @@ export class Animator {
     const g = this.gait;
     const t = this.t;
     const v = speed;
-    const run = clamp01((v - 2.2) / 3.3);
+    const cw = this.crouchW;
+    const run = clamp01((v - 2.2) / 3.3) * (1 - cw);
     const mw = smooth(this.speedS / 0.7);
+    const idle = 1 - mw;
     let C: number;
     if (v <= 2) C = 1.25 * Math.sqrt(Math.max(0.3, v / 2));
     else if (v <= 6) C = 1.25 + 1.25 * ((v - 2) / 4);
     else C = 2.5 * Math.pow(v / 6, 0.6);
-    C *= g.stride;
+    C *= g.stride * (1 - 0.35 * cw);
     // el root avanza en metros del mundo y el cuerpo va escalado: el paso también
     this.phase = (this.phase + (v * dt) / (C * this.bodyScale)) % 1;
     const ph = this.phase;
     const s = lerp(0.58, 0.36, run);
     const S = C * s;
-    const lift = lerp(0.1, 0.3, run) + wob * 0.09;
+    const lift = lerp(0.1, 0.3, run) * (1 - 0.25 * cw) + wob * 0.09;
 
     // trayectoria de cada pie
     let zL = 0, yL = 0, zR = 0, yR = 0;
@@ -771,86 +984,143 @@ export class Animator {
     const half = Math.max(0.05, S / 2);
     const nL = clamp(zL / half, -1.2, 1.2), nR = clamp(zR / half, -1.2, 1.2);
 
-    // cadera
-    const bobW = -0.028 * (0.5 + 0.5 * Math.cos(TAU * 2 * (ph - 0.04)));
-    const bobR = 0.045 * Math.cos(TAU * 2 * (ph - 0.43));
-    const idleH = 0.885 + Math.sin(t * 1.7) * 0.004;
+    // parado: respira, carga el peso en una pierna y luego en la otra, y mira a su alrededor
+    const br = Math.sin(t * 1.9 + this.seed) * idle;
+    const ws = clamp(Math.sin(t * 0.37 + this.seed * 1.3) * 2.2, -1, 1) * idle * (1 - cw);
+    const seg = (t + (this.seed % 97) * 0.31) / 2.7;
+    const si = Math.floor(seg);
+    const turnK = smooth((seg - si - 0.72) / 0.2);
+    const lookY = lerp(hash01(si, this.seed) - 0.5, hash01(si + 1, this.seed) - 0.5, turnK) * 1.25;
+    const lookX = lerp(hash01(si + 57, this.seed), hash01(si + 58, this.seed), turnK) * 0.18 - 0.07;
+
+    // cadera: rebote al andar (de dibujo animado) y más al correr
+    const bobW = -0.036 * (0.5 + 0.5 * Math.cos(TAU * 2 * (ph - 0.04)));
+    const bobR = 0.05 * Math.cos(TAU * 2 * (ph - 0.43));
+    const idleH = 0.885 + br * 0.004 - Math.abs(ws) * 0.012;
     const moveH = lerp(0.845, 0.8, run) + lerp(bobW, bobR, run) * g.bounce;
     let H = lerp(idleH, moveH, mw);
-    // aterrizaje: flexión rápida
+    // agachado (parado, en cuclillas; andando, de puntillas como un ladrón de dibujos)
+    H -= cw * lerp(0.32, 0.25, mw);
+    // aceleración: se echa hacia delante al arrancar y hacia atrás al frenar en seco
+    const acc = clamp(this.accS * 0.022, -0.26, 0.16) * smooth(this.speedS / 2.5);
+    // curvas: se inclina hacia dentro (más cuanto más rápido)
+    const bank = clamp(-this.turnS * 0.045 * clamp01(this.speedS / 5), -0.24, 0.24) * mw;
+    let spineX = 0, headX = 0, armFwd = 0, armOutX = 0;
+    // preparación del salto: flexiona las rodillas y echa los brazos atrás
+    if (this.windT < JUMP_WINDUP) {
+      const u = smooth(this.windT / JUMP_WINDUP);
+      H -= 0.1 * u;
+      spineX += 0.22 * u;
+      headX -= 0.12 * u;
+      armFwd += 0.7 * u;
+    }
+    // aterrizaje: flexión rápida (más fuerte cuanto más alto venía)
     if (this.landT < 1) {
       const u = this.landT;
-      const f = u < 0.25 ? u / 0.25 : 1 - (u - 0.25) / 0.75;
-      H -= 0.15 * this.landAmt * f;
-      AR(o, B.spine, 0.25 * this.landAmt * f, 0, 0);
-      AR(o, B.head, -0.15 * this.landAmt * f, 0, 0);
+      const f = u < 0.2 ? smooth(u / 0.2) : 1 - smooth((u - 0.2) / 0.8);
+      const k = this.landAmt * f;
+      H -= 0.17 * k;
+      spineX += 0.3 * k;
+      headX -= 0.18 * k;
+      armOutX += 0.45 * k;
+      armFwd -= 0.35 * k;
     }
     H -= wob * (0.03 + 0.02 * Math.sin(t * 2.3));
-    const idle = 1 - mw;
-    const shift = Math.sin(t * 0.45 + this.seed) * 0.012 * idle;
+    const shift = ws * 0.035 + Math.sin(t * 0.45 + this.seed) * 0.006 * idle;
     o[CH.hx] = shift + wob * 0.09 * Math.sin(t * 1.4);
     o[CH.hy] = H + HIPJ;
-    o[CH.hz] = 0;
+    o[CH.hz] = -0.03 * cw;
     R(
       o, B.hips,
-      0.1 * run * mw,
-      -0.11 * nL * mw * (1 + g.swagger * 0.8),
-      (0.04 * Math.sin(TAU * ph) * (1 - run) * mw + shift * 1.5) * (1 + g.swagger) + wob * 0.14 * Math.sin(t * 1.7),
+      0.1 * run * mw + 0.32 * cw,
+      -0.12 * nL * mw * (1 + g.swagger * 0.8),
+      (0.06 * Math.sin(TAU * ph) * (1 - run) * mw) * (1 + g.swagger) + ws * 0.07 + wob * 0.14 * Math.sin(t * 1.7) + bank,
     );
 
     // pies (al pararse vuelven a su sitio). Al apuntar parado: pie izquierdo adelantado.
+    // Con el peso en una pierna, la otra se adelanta un poco y se abre.
     const st = this.aimW * idle;
-    const splay = wob * 0.08;
-    this.fxL = splay + st * 0.03;
-    this.fzL = zL * mw + st * 0.13;
+    const splay = wob * 0.08 + cw * 0.05;
+    const freeL = Math.max(0, -ws), freeR = Math.max(0, ws);
+    this.fxL = splay + st * 0.03 + freeL * 0.03;
+    this.fzL = zL * mw + st * 0.13 + freeL * 0.08;
     this.fyL = yL * mw;
-    this.fxR = -splay - st * 0.02;
-    this.fzR = zR * mw - st * 0.1;
+    this.fxR = -splay - st * 0.02 - freeR * 0.03;
+    this.fzR = zR * mw - st * 0.1 + freeR * 0.08;
     this.fyR = yR * mw;
     legs(o, this.fxL, this.fzL, this.fyL, this.fxR, this.fzR, this.fyR);
     // puntera caída al levantar el pie
     AR(o, B.footL, this.swingL * 0.35 * mw, 0, 0);
     AR(o, B.footR, this.swingR * 0.35 * mw, 0, 0);
 
-    // brazos (contrarios a las piernas)
-    const amp = lerp(0.42, 0.95, run) * mw * g.swing;
-    const out = 0.07 + 0.1 * run + g.armOut + wob * 0.45;
-    const breathe = Math.sin(t * 1.7) * 0.02 * idle;
+    // brazos (contrarios a las piernas); el antebrazo va un poco por detrás del brazo
+    const amp = lerp(0.55, 0.95, run) * mw * g.swing;
+    const out = 0.07 + 0.1 * run + g.armOut + wob * 0.45 + br * 0.025 + armOutX;
     const flap = wob * 0.55 * Math.sin(t * 3.1);
     const aL = -amp * nR, aR = -amp * nL;
-    arm(o, 1, aL + flap, 0, out + breathe, -(0.14 + 1.3 * run * mw + Math.max(0, -aL) * 0.45));
-    arm(o, -1, aR - flap, 0, out + breathe, -(0.14 + 1.3 * run * mw + Math.max(0, -aR) * 0.45));
+    const relax = 0.1 * idle + (this.seed % 5) * 0.012 * idle;
+    arm(o, 1, aL + flap + armFwd, 0, out, -(0.14 + relax + 1.3 * run * mw + Math.max(0, -aL) * 0.6), 0, 0.1 * idle, 0);
+    arm(o, -1, aR - flap + armFwd, 0, out, -(0.14 + relax + 1.3 * run * mw + Math.max(0, -aR) * 0.6), 0, 0.1 * idle, 0);
+    if (cw > 0) {
+      // de puntillas: manos delante del pecho, como un ladrón de dibujos
+      const sw = Math.sin(TAU * ph) * 0.25 * mw;
+      const a = this.tmpB;
+      a.set(o);
+      arm(a, 1, -0.75 + sw, 0, 0.3, -1.75, 0.3, 0, 0);
+      arm(a, -1, -0.75 - sw, 0, 0.3, -1.75, 0.3, 0, 0);
+      lerpBones(o, a, ARMS, cw);
+    }
 
-    // tronco y cabeza
-    const lean = lerp(0.03, 0.28, run) * mw + g.hunch;
-    R(o, B.spine, lean + breathe * 0.8 + wob * 0.14 * Math.sin(t * 0.9), 0.2 * nL * amp, -shift * 1.2 + wob * 0.28 * Math.sin(t * 1.3));
-    const look = wave(t * 0.35, this.seed) * 0.45 * idle;
-    R(o, B.head, -lean * 0.75 + Math.sin(t * 0.6 + this.seed) * 0.04 * idle, look - 0.12 * nL * amp, wob * 0.35 * Math.sin(t * 1.7 + 1));
+    // tronco y cabeza (el tronco gira un poco contra la cadera al andar; cabeza estable)
+    const lean = lerp(0.03, 0.3, run) * mw + g.hunch + acc + 0.38 * cw + spineX;
+    R(
+      o, B.spine,
+      lean - br * 0.025 + wob * 0.14 * Math.sin(t * 0.9),
+      0.28 * nL * amp + lookY * 0.2 * idle,
+      -ws * 0.1 - bank * 0.5 + wob * 0.28 * Math.sin(t * 1.3),
+    );
+    const nod = 0.035 * Math.sin(TAU * 2 * ph) * mw * (1 - run);
+    const walkLook = wave(t * 0.3, this.seed + 5) * 0.22 * mw * (1 - run);
+    R(
+      o, B.head,
+      -(lean - spineX) * 0.75 + headX + lookX * idle + nod - 0.3 * cw,
+      lookY * 0.8 * idle + walkLook - 0.16 * nL * amp,
+      ws * 0.05 + bank * 0.3 + wob * 0.35 * Math.sin(t * 1.7 + 1),
+    );
+    o[B.neck * 3] = br * 0.02;
   }
 
   // ─────────── salto y caída ───────────
   private airPose(o: Float32Array, vy: number) {
-    const k = clamp01(-vy / 6);
     const t = this.t;
+    // fase del salto: 0 = despegue (estirado), 1 = arriba del todo (recogido), 2 = cayendo (piernas abajo)
+    const ph = vy > 0 ? clamp01(1 - vy / 7.8) : 1 + clamp01(-vy / 8.5);
+    PL.ph = ph;
+    PL.a = smooth((Math.min(ph, 1) - 0.12) / 0.8);
+    PL.b = smooth(Math.max(0, ph - 1));
+    // caída larga (de un tejado, del coche...): pataleo y brazos como aspas
+    const k = clamp01((this.airTime - 0.8) / 0.45) * clamp01(-vy / 5);
     neutral(o);
     this.face(o);
-    // recogido (subiendo)
-    const tuckA = 1 - k;
-    R(o, B.thighL, lerp(-1.15, -0.4 + Math.sin(t * 11) * 0.5, k), 0, 0.08);
-    R(o, B.shinL, lerp(1.55, 0.7 + Math.sin(t * 11 + 1) * 0.4, k), 0, 0);
-    R(o, B.thighR, lerp(-0.5, -0.4 - Math.sin(t * 11) * 0.5, k), 0, -0.08);
-    R(o, B.shinR, lerp(1.0, 0.7 - Math.sin(t * 11 + 1) * 0.4, k), 0, 0);
-    R(o, B.footL, 0.3, 0, 0);
-    R(o, B.footR, 0.3, 0, 0);
-    arm(o, 1, lerp(-0.8, -2.6 + Math.sin(t * 15) * 0.35, k), 0, lerp(0.75, 0.55 + Math.sin(t * 12) * 0.25, k), lerp(-0.6, -0.35, k));
-    arm(o, -1, lerp(-0.3, -2.6 + Math.sin(t * 15 + 2) * 0.35, k), 0, lerp(0.9, 0.55 + Math.sin(t * 12 + 1) * 0.25, k), lerp(-0.5, -0.35, k));
-    R(o, B.spine, lerp(0.12, -0.15, k), 0, 0);
-    R(o, B.head, lerp(-0.1, -0.2, k), 0, 0);
-    o[CH.mouth] = lerp(0.3, 1.1, k) * (0.5 + 0.5 * tuckA + k * 0.5);
-    o[CH.mouthW] = lerp(1, 0.7, k);
-    o[CH.brow] = k;
-    o[CH.eye] = lerp(1, 1.3, k);
-    o[CH.angry] = lerp(this.baseAngry, -0.7, k);
+    const sw = Math.sin(t * 11), sw2 = Math.sin(t * 11 + 1);
+    R(o, B.thighL, lerp(pl(0.1, -1.25, -0.75), -0.4 + sw * 0.5, k), 0, 0.08);
+    R(o, B.shinL, lerp(pl(0.15, 1.7, 0.55), 0.7 + sw2 * 0.4, k), 0, 0);
+    R(o, B.thighR, lerp(pl(0.25, -0.7, -0.15), -0.4 - sw * 0.5, k), 0, -0.08);
+    R(o, B.shinR, lerp(pl(0.35, 1.25, 0.3), 0.7 - sw2 * 0.4, k), 0, 0);
+    R(o, B.footL, pl(0.65, 0.35, 0.1), 0, 0);
+    R(o, B.footR, pl(0.7, 0.35, 0.15), 0, 0);
+    // brazos: arriba al despegar, abiertos para equilibrarse arriba, en alto al caer
+    const fl = Math.sin(t * 15) * 0.35, fl2 = Math.sin(t * 15 + 2) * 0.35;
+    arm(o, 1, lerp(pl(-2.6, -1.0, -1.8), -2.6 + fl, k), 0, lerp(pl(0.3, 0.95, 0.85), 0.55 + Math.sin(t * 12) * 0.25, k), lerp(pl(-0.3, -0.75, -0.4), -0.35, k));
+    arm(o, -1, lerp(pl(-2.4, -0.8, -1.6), -2.6 + fl2, k), 0, lerp(pl(0.3, 1.05, 0.95), 0.55 + Math.sin(t * 12 + 1) * 0.25, k), lerp(pl(-0.3, -0.7, -0.4), -0.35, k));
+    R(o, B.spine, lerp(pl(-0.14, 0.14, 0.02), -0.15, k), 0, 0);
+    R(o, B.head, lerp(pl(-0.25, -0.05, 0.12), -0.2, k), 0, 0);
+    // cara: «¡hop!» al saltar, «¡uuuh!» al caer de alto
+    o[CH.mouth] = lerp(pl(0.55, 0.35, 0.6), 1.15, k);
+    o[CH.mouthW] = lerp(pl(0.8, 1.1, 0.8), 0.7, k);
+    o[CH.brow] = lerp(pl(0.5, 0.3, 0.6), 1, k);
+    o[CH.eye] = lerp(pl(1.1, 1.0, 1.2), 1.35, k);
+    o[CH.angry] = lerp(this.baseAngry * 0.5, -0.7, k);
   }
 
   // ─────────── apuntar ───────────
@@ -892,6 +1162,13 @@ export class Animator {
       } else if (w === 'heavy') {
         aimPut(a, -1, -0.17, -0.4, 0.22, -1, 0, -0.6); // a la cadera
         aimPut(a, 1, -0.03, -0.33, 0.44, 0.6, -1, 0);
+      } else if (w === 'none') {
+        // puños: guardia de boxeo (puños a la altura de la barbilla, codos abajo)
+        const bob = Math.sin(this.t * 7) * 0.012;
+        aimPut(a, -1, -0.1, 0.1 + bob, 0.26, -0.5, -1, 0.1);
+        aimPut(a, 1, 0.07, 0.13 - bob, 0.31, 0.5, -1, 0.1);
+        AR(a, B.spine, 0.1, 0, 0);
+        AR(a, B.head, -0.1, 0, 0);
       } else {
         // pistola a dos manos
         aimPut(a, -1, -0.04, -0.02, 0.475, -0.6, -1, -0.2);
@@ -904,27 +1181,399 @@ export class Animator {
   private recoilLayer(o: Float32Array) {
     const k = this.recoil * this.recoil;
     const aw = 0.5 + 0.5 * this.aimW;
+    const ka = k * aw;
     switch (this.weapon) {
       case 'rifle':
-        AR(o, B.spine, -0.08 * k * aw, 0.06 * k * aw, 0);
-        AR(o, B.armR, -0.1 * k * aw, 0, 0);
-        AR(o, B.armL, -0.1 * k * aw, 0, 0);
-        AR(o, B.head, -0.05 * k * aw, 0, 0);
+        // culatazo en el hombro: el tronco se va atrás y el cañón sube
+        AR(o, B.spine, -0.13 * ka, 0.08 * ka, 0);
+        AR(o, B.armR, -0.14 * ka, 0, 0);
+        AR(o, B.armL, -0.16 * ka, 0, 0);
+        AR(o, B.handR, -0.2 * ka, 0, 0);
+        AR(o, B.head, -0.08 * ka, 0.05 * ka, 0);
+        o[CH.hz] -= 0.03 * ka;
         break;
-      case 'heavy':
-        AR(o, B.spine, -0.07 * k * aw, 0, 0);
-        AR(o, B.armR, (-0.15 + Math.sin(this.t * 70) * 0.06) * k * aw, 0, 0);
-        AR(o, B.armL, -0.12 * k * aw, 0, 0);
+      case 'heavy': {
+        const sh = Math.sin(this.t * 70);
+        AR(o, B.spine, (-0.08 + sh * 0.025) * ka, sh * 0.03 * ka, 0);
+        AR(o, B.armR, (-0.15 + sh * 0.07) * ka, 0, 0);
+        AR(o, B.armL, (-0.12 - sh * 0.05) * ka, 0, 0);
+        AR(o, B.head, sh * 0.04 * ka, 0, 0);
         break;
+      }
       case 'throw':
         break;
       default:
-        AR(o, B.armR, -0.38 * k * aw, 0, 0);
-        AR(o, B.foreR, -0.15 * k * aw, 0, 0);
-        AR(o, B.armL, -0.3 * k * aw * this.aimW, 0, 0);
-        AR(o, B.spine, -0.05 * k * aw, 0, 0);
+        // pistola: el arma salta hacia arriba (muñeca y brazo) y el hombro se va atrás
+        AR(o, B.armR, -0.38 * ka, 0, 0);
+        AR(o, B.foreR, -0.15 * ka, 0, 0);
+        AR(o, B.handR, -0.45 * ka, 0, 0);
+        AR(o, B.armL, -0.3 * ka * this.aimW, 0, 0);
+        AR(o, B.spine, -0.06 * ka, 0.05 * ka, 0);
+        AR(o, B.head, -0.04 * ka, 0, 0);
         break;
     }
+    if (this.weapon !== 'throw') {
+      // guiño y mueca con cada disparo
+      o[CH.eye] = lerp(o[CH.eye], 0.5, k);
+      o[CH.angry] = lerp(o[CH.angry], 0.75, k);
+      o[CH.mouth] = lerp(o[CH.mouth], -0.3, k);
+      o[CH.mouthW] = lerp(o[CH.mouthW], 1.3, k);
+    }
+  }
+
+  // ─────────── puñetazo ───────────
+  /** Directo con recorrido: carga atrás, golpe con giro de tronco y paso adelante, y vuelta a la guardia. */
+  private punchLayer(o: Float32Array) {
+    const u = this.punchT;
+    const side = this.punchSide;
+    let ext: number;
+    if (u < 0.07) ext = -0.5 * smooth(u / 0.07);
+    else if (u < 0.14) ext = lerp(-0.5, 1, smooth((u - 0.07) / 0.07));
+    else if (u < 0.2) ext = 1;
+    else ext = 1 - smooth((u - 0.2) / (PUNCH - 0.2));
+    const w = u < PUNCH - 0.08 ? 1 : 1 - smooth((u - (PUNCH - 0.08)) / 0.08);
+    const a = this.tmpB;
+    a.set(o);
+    const e = Math.max(0, ext);
+    // tronco: el hombro del golpe va hacia delante
+    R(a, B.spine, a[B.spine * 3] + 0.12 + 0.08 * e, side * (-0.5 * e + 0.25 * Math.max(0, -ext)), 0);
+    R(a, B.head, -0.12, -side * 0.35 * e, 0);
+    // puño que golpea: de la barbilla a brazo estirado a la altura del hombro
+    const gx = side * 0.1, gy = 0.42, gz = 0.2 + 0.08 * Math.min(0, ext);
+    armIK(a, side, lerp(gx, side * 0.03, e), lerp(gy, 0.36, e), lerp(gz, 0.62, e), side * 0.6, -1, -0.2);
+    // el otro, en guardia
+    armIK(a, -side, -side * 0.08, 0.4, 0.22, -side * 0.5, -1, 0.1);
+    lerpBones(o, a, UPPER, w);
+    // un paso adelante con el golpe
+    o[CH.hz] += 0.05 * e * w;
+    AR(o, B.hips, 0, side * -0.18 * e * w, 0);
+    o[CH.angry] = lerp(o[CH.angry], 0.9, w);
+    o[CH.mouth] = lerp(o[CH.mouth], 0.35 + 0.4 * e, w);
+    o[CH.mouthW] = lerp(o[CH.mouthW], 0.8, w);
+    o[CH.eye] = lerp(o[CH.eye], 0.8, w);
+  }
+
+  // ─────────── gestos ───────────
+  private gestureLayer(o: Float32Array, dt: number) {
+    const moving = this.speedS > 0.35 || this.airW > 0.05;
+    // aburrimiento: parado un buen rato sin hacer nada
+    const still = !moving && this.aimW < 0.01 && this.wobbleS < 0.05 && this.crouchW < 0.05 && this.punchT >= PUNCH && this.landT >= 1;
+    if (!this.gest) {
+      if (still && this.fidgetAfter > 0) {
+        this.idleT += dt;
+        if (this.idleT > this.fidgetAfter) {
+          this.gesture(FIDGETS[this.fidgetN++ % FIDGETS.length]);
+          // el siguiente, un rato después
+          this.idleT = this.fidgetAfter - 5 - hash01(this.fidgetN, this.seed) * 6;
+        }
+      } else this.idleT = 0;
+      this.gestFullW = 0;
+      return;
+    }
+    const g = this.gest;
+    const def = GEST[g];
+    // apuntar, agacharse o pegar cortan el gesto; andar corta los de aburrimiento
+    if (this.aimW > 0.2 || this.crouchW > 0.3 || this.punchT < PUNCH || (def.idle && moving)) this.stopGesture(0.15);
+    // una celebración larga se acorta si echa a andar
+    else if (g === 'celebrate' && moving) this.stopGesture(0.6);
+    this.gestT += dt;
+    if (this.gestT >= this.gestDur) {
+      this.gest = null;
+      return;
+    }
+    const env = smooth(this.gestT / 0.18) * smooth((this.gestDur - this.gestT) / 0.25);
+    this.gestFullW += ((moving ? 0 : 1) - this.gestFullW) * Math.min(1, dt * 8);
+    const a = this.tmpA;
+    a.set(o);
+    this.gesturePose(a, g, this.gestT, this.gestDur);
+    // parado, con todo el cuerpo; andando, de cintura para arriba
+    const fw = env * this.gestFullW;
+    if (fw > 0.001) lerpInto(o, o, a, fw);
+    const k = fw < 0.999 ? (env - fw) / (1 - fw) : 0;
+    if (k > 0.001) {
+      lerpBones(o, a, UPPER, k);
+      for (let i = 0; i < FACE.length; i++) o[FACE[i]] += (a[FACE[i]] - o[FACE[i]]) * k;
+    }
+  }
+
+  /** Pose de cada gesto (sobre una copia de la pose normal). t = segundos desde que empezó. */
+  private gesturePose(o: Float32Array, g: Gesture, t: number, dur: number) {
+    const T = this.t;
+    switch (g) {
+      case 'cheer': {
+        // ¡toma! puño derecho al cielo dos veces, el izquierdo tira hacia abajo
+        const up = smooth(t / 0.16);
+        const pump = up * (0.75 + 0.25 * Math.cos(Math.max(0, t - 0.16) * 15));
+        arm(o, -1, lerp(-1.1, -2.95, pump), 0, 0.22, lerp(-1.7, -0.3, pump));
+        arm(o, 1, -0.35, 0, 0.12, -2.0 + 0.3 * Math.sin(t * 15), 0.2, 0, 0);
+        AR(o, B.spine, -0.1 * up, 0.12 * up, 0.08 * up);
+        R(o, B.head, -0.3 * up, 0.1, 0.1 * up);
+        // saltito
+        o[CH.hy] += 0.05 * Math.max(0, Math.sin(Math.min(1, t / 0.5) * PI)) - 0.03 * smooth((t - 0.5) / 0.2) * (1 - smooth((t - 0.8) / 0.3));
+        this.legsFromCurrent(o);
+        this.happyFace(o, 1);
+        break;
+      }
+      case 'celebrate': {
+        this.happyFace(o, 1);
+        if (t < 0.7) {
+          // salto con los dos puños arriba: ¡SÍÍÍ!
+          const u = t / 0.7;
+          const hop = Math.max(0, Math.sin(clamp01((u - 0.12) / 0.7) * PI));
+          const crouch = u < 0.12 ? smooth(u / 0.12) : 1 - smooth((u - 0.12) / 0.1);
+          o[CH.hy] += 0.22 * hop - 0.1 * crouch;
+          legs(o, 0.06, 0.02, hop * 0.2, -0.06, 0.02, hop * 0.2);
+          if (hop > 0) {
+            AR(o, B.thighL, -0.6 * hop, 0, 0);
+            AR(o, B.shinL, 1.0 * hop, 0, 0);
+            AR(o, B.thighR, -0.6 * hop, 0, 0);
+            AR(o, B.shinR, 1.0 * hop, 0, 0);
+          }
+          const armsUp = smooth(u / 0.25);
+          arm(o, 1, lerp(0.3, -2.95, armsUp), 0, 0.42, -0.35);
+          arm(o, -1, lerp(0.3, -2.95, armsUp), 0, 0.42, -0.35);
+          R(o, B.spine, -0.12 * armsUp + 0.15 * crouch, 0, 0);
+          R(o, B.head, -0.35 * armsUp, 0, 0);
+          o[CH.mouth] = 1.2;
+        } else if (t < 1.9) {
+          // bailecito: molinillo con las manos y cadera de lado a lado
+          const u = t - 0.7;
+          const b = u * 4.2;
+          const sway = Math.sin(b * PI * 0.5);
+          o[CH.hx] += sway * 0.06;
+          o[CH.hy] -= 0.03 * Math.abs(Math.sin(b * PI));
+          R(o, B.hips, 0, sway * 0.15, -sway * 0.1);
+          legs(o, 0.1, 0, 0, -0.1, 0, 0);
+          const r = u * 16;
+          armIK(o, 1, 0.04 + Math.cos(r) * 0.07, 0.2 + Math.sin(r) * 0.07, 0.3, 1, -1, 0);
+          armIK(o, -1, -0.04 + Math.cos(r + PI) * 0.07, 0.2 + Math.sin(r + PI) * 0.07, 0.3, -1, -1, 0);
+          R(o, B.spine, 0.05, -sway * 0.2, sway * 0.12);
+          R(o, B.head, 0.1 * Math.abs(Math.sin(b * PI)), sway * 0.3, -sway * 0.15);
+        } else if (t < 2.6) {
+          // vuelta completa con los brazos abiertos
+          const u = smooth((t - 1.9) / 0.7);
+          R(o, B.hips, 0, u * TAU, 0);
+          legs(o, 0.05, 0, 0.12 * Math.sin(u * PI), -0.05, 0, 0);
+          arm(o, 1, -0.2, 0, 1.45, -0.15);
+          arm(o, -1, -0.2, 0, 1.45, -0.15);
+          R(o, B.spine, -0.08, 0, 0);
+          R(o, B.head, -0.2, 0, 0);
+        } else {
+          // pose final: pulgar arriba y mano en la cadera
+          const u = smooth((t - 2.6) / 0.15);
+          R(o, B.hips, 0, 0, 0.08 * u);
+          o[CH.hx] += 0.03 * u;
+          this.legsFromCurrent(o);
+          arm(o, -1, lerp(-0.2, -1.35, u), 0, lerp(1.45, 0.05, u), lerp(-0.15, -1.4, u), 0, 0, 0);
+          arm(o, 1, lerp(-0.2, 0.25, u), 0, lerp(1.45, 0.55, u), lerp(-0.15, -1.9, u), 0, 0, 0);
+          R(o, B.spine, -0.05, 0.15 * u, -0.08 * u);
+          R(o, B.head, -0.1, -0.15 * u, 0.15 * u);
+          o[CH.eye] = 0.65; // guiño de satisfacción
+        }
+        break;
+      }
+      case 'shrug': {
+        // ¿y yo qué sé?
+        const u = t < 0.25 ? smooth(t / 0.25) : 1 - smooth((t - dur + 0.4) / 0.35);
+        arm(o, 1, -0.2 * u, 0, 0.1 + 0.45 * u, -0.2 - 1.3 * u, 0, -0.9 * u, 0);
+        arm(o, -1, -0.2 * u, 0, 0.1 + 0.45 * u, -0.2 - 1.3 * u, 0, -0.9 * u, 0);
+        AR(o, B.spine, -0.05 * u, 0, 0);
+        R(o, B.head, 0.05 * u, 0, 0.28 * u);
+        o[CH.mouth] = -0.35;
+        o[CH.mouthW] = 1.2;
+        o[CH.brow] = 0.9 * u;
+        o[CH.angry] = -0.6 * u;
+        break;
+      }
+      case 'wave': {
+        const u = smooth(t / 0.25);
+        arm(o, -1, lerp(0, -2.55, u), 0, lerp(0.07, 0.55, u), -0.5 + Math.sin(t * 13) * 0.45 * u);
+        R(o, B.head, -0.1, 0.1, 0.12 * u);
+        this.happyFace(o, 0.8);
+        break;
+      }
+      case 'watch': {
+        // mira el reloj, le da golpecitos, se lo acerca a la oreja y resopla
+        const raise = smooth(t / 0.4);
+        const ear = t > 1.7 && t < 2.35 ? smooth((t - 1.7) / 0.2) * (1 - smooth((t - 2.15) / 0.2)) : 0;
+        const tap = t > 1.0 && t < 1.65 ? Math.max(0, Math.sin((t - 1.0) * 28)) : 0;
+        armIK(o, 1, lerp(0.2, 0.04, raise) + ear * 0.12, lerp(-0.2, 0.22, raise) + ear * 0.3, lerp(0.05, 0.3, raise) - ear * 0.2, 1, -1, -0.3);
+        if (t > 0.8 && t < 1.8) {
+          const k = smooth((t - 0.8) / 0.2) * (1 - smooth((t - 1.6) / 0.2));
+          const a = this.tmpB;
+          a.set(o);
+          armIK(a, -1, 0.02, 0.28 + tap * 0.03, 0.33, -1, -1, 0);
+          lerpBones(o, a, ARMS, k);
+        }
+        R(o, B.head, lerp(0, 0.5, raise) - ear * 0.3, lerp(0, 0.35, raise) + ear * 0.2, ear * 0.3);
+        AR(o, B.spine, 0.05 * raise, 0.1 * raise, 0);
+        // pie impaciente
+        if (t > 2.35) {
+          const k = smooth((t - 2.35) / 0.2);
+          AR(o, B.footR, -0.35 * Math.max(0, Math.sin(T * 14)) * k, 0, 0);
+          o[CH.mouth] = -0.3;
+          o[CH.angry] = 0.35;
+        } else {
+          o[CH.brow] = 0.5 * raise;
+          o[CH.mouth] = 0.1;
+        }
+        break;
+      }
+      case 'yawn': {
+        // se estira con los brazos arriba, boca enorme y ojos cerrados; luego se tapa la boca
+        const up = t < 1.3 ? smooth(t / 0.5) : 1 - smooth((t - 1.3) / 0.4);
+        const k = smooth((t - 1.4) / 0.3) * (1 - smooth((t - dur + 0.45) / 0.3));
+        arm(o, 1, lerp(o[B.armL * 3], -2.9, up), 0, lerp(0.07, 0.55, up), lerp(-0.2, -0.9, up));
+        arm(o, -1, lerp(o[B.armR * 3], -2.9, up), 0, lerp(0.07, 0.55, up), lerp(-0.2, -0.9, up));
+        if (k > 0) {
+          const a = this.tmpB;
+          a.set(o);
+          armIK(a, -1, -0.04, 0.43, 0.21, -0.4, -1, 0.5);
+          lerpBones(o, a, ARMS, k);
+        }
+        AR(o, B.spine, -0.2 * up, 0, 0);
+        R(o, B.head, -0.45 * up + 0.1 * k, 0, 0.1 * up);
+        o[CH.hy] += 0.02 * up;
+        this.legsFromCurrent(o);
+        const open = t < 1.5 ? smooth(t / 0.4) : 1 - smooth((t - 1.5) / 0.6);
+        o[CH.mouth] = lerp(0, 1.3, open);
+        o[CH.mouthW] = lerp(1, 0.75, open);
+        o[CH.eye] = lerp(1, 0.08, open);
+        o[CH.brow] = 0.6 * open;
+        break;
+      }
+      case 'scratch': {
+        // ¿dónde iba yo? se rasca la cabeza
+        const u = smooth(t / 0.35);
+        const sc = Math.sin(T * 26) * 0.025 * u;
+        armIK(o, -1, lerp(-0.25, -0.1, u), lerp(-0.2, 0.68, u) + sc, lerp(0, 0.03, u), -1, 0.3, 0.5, 0.4, 0, 0);
+        R(o, B.head, 0.05, -0.15 * u, -0.2 * u);
+        AR(o, B.spine, 0, 0, 0.06 * u);
+        o[CH.eye] = 0.75;
+        o[CH.mouth] = -0.2;
+        o[CH.mouthW] = 0.6;
+        o[CH.angry] = -0.45;
+        o[CH.brow] = 0.3;
+        break;
+      }
+      case 'arms': {
+        // brazos cruzados y golpecitos con el pie
+        const u = smooth(t / 0.35);
+        const a = this.tmpB;
+        a.set(o);
+        armIK(a, 1, -0.12, 0.13, 0.2, 1, -0.4, 0.3);
+        armIK(a, -1, 0.12, 0.17, 0.23, -1, -0.4, 0.3);
+        lerpBones(o, a, ARMS, u);
+        AR(o, B.spine, -0.05 * u, 0, 0);
+        R(o, B.head, -0.05, Math.sin(T * 0.9) * 0.35 * u, 0.06);
+        AR(o, B.footR, -0.35 * Math.max(0, Math.sin(T * 13)) * smooth((t - 0.6) / 0.2), 0, 0);
+        o[CH.angry] = 0.4;
+        o[CH.mouth] = -0.35;
+        break;
+      }
+      case 'point': {
+        // ¡¡MIRA ESO!! señala con el brazo estirado y se lleva la otra mano a la cabeza
+        const u = smooth(t / 0.2);
+        const jab = Math.sin(T * 17) * 0.06 * u;
+        arm(o, -1, lerp(o[B.armR * 3], -1.55, u) + jab, 0, lerp(0.07, -0.05, u), -0.04, -0.25 * u, 0, 0);
+        const a = this.tmpB;
+        a.set(o);
+        armIK(a, 1, 0.12, 0.66, 0.04, 1, 0.3, 0.5, 0.4, 0, 0);
+        lerpBones(o, a, LEFT_ARM, u);
+        AR(o, B.spine, 0.12 * u, -0.12 * u, 0);
+        R(o, B.head, -0.12 * u, -0.08, 0);
+        this.scaredFace(o, u);
+        o[CH.mouth] = 1.1 + Math.sin(T * 20) * 0.15;
+        break;
+      }
+      case 'film': {
+        // lo graba todo con el móvil en alto (en horizontal), sin perderse detalle
+        const u = smooth(t / 0.3);
+        const sway = Math.sin(T * 1.7) * 0.025;
+        const a = this.tmpB;
+        a.set(o);
+        armIK(a, -1, -0.27 + sway, 0.72, 0.3, -1, -0.5, 0);
+        phoneFacing(a, true);
+        lerpBones(o, a, R_ARM, u);
+        o[B.phone * 3] = a[B.phone * 3];
+        o[B.phone * 3 + 1] = a[B.phone * 3 + 1];
+        o[B.phone * 3 + 2] = a[B.phone * 3 + 2];
+        o[CH.phone] = u;
+        R(o, B.head, -0.12 * u, sway * 2 - 0.1 * u, 0);
+        o[CH.mouth] = 0.45;
+        o[CH.mouthW] = 0.7;
+        o[CH.eye] = 1.25;
+        o[CH.brow] = 0.8;
+        break;
+      }
+      case 'fist': {
+        // enfadado: agita el puño junto a la cabeza
+        const u = smooth(t / 0.2);
+        const sh = Math.sin(T * 16);
+        const a = this.tmpB;
+        a.set(o);
+        armIK(a, -1, -0.35, 0.55 + sh * 0.03, 0.25 + sh * 0.07, -0.5, -1, 0.2, -0.3, 0, 0);
+        lerpBones(o, a, R_ARM, u);
+        AR(o, B.spine, 0.06 * u, 0.1 * u, 0);
+        R(o, B.head, -0.05 + sh * 0.04 * u, 0.1 * u, 0);
+        o[CH.angry] = 1;
+        o[CH.mouth] = 0.75 + Math.sin(T * 11) * 0.2;
+        o[CH.mouthW] = 0.9;
+        o[CH.brow] = -0.2;
+        break;
+      }
+      case 'flail': {
+        // ¡socorro! huye con los brazos en alto
+        const u = smooth(t / 0.2);
+        arm(o, 1, lerp(o[B.armL * 3], -2.75 + Math.sin(T * 17) * 0.4, u), 0, 0.35 + Math.sin(T * 13) * 0.25, -0.3);
+        arm(o, -1, lerp(o[B.armR * 3], -2.75 + Math.sin(T * 17 + 2.2) * 0.4, u), 0, 0.35 + Math.sin(T * 13 + 1.1) * 0.25, -0.3);
+        AR(o, B.spine, -0.12 * u, 0, 0);
+        R(o, B.head, -0.25 * u, Math.sin(T * 5) * 0.3, 0);
+        this.scaredFace(o, u);
+        break;
+      }
+      case 'cover': {
+        // tiros: se tapa la cabeza con las manos y corre agachado
+        const u = smooth(t / 0.15);
+        const a = this.tmpB;
+        a.set(o);
+        AR(a, B.spine, 0.35, 0, 0);
+        armIK(a, 1, 0.12, 0.67, 0.03, 0.6, 0.2, 1);
+        armIK(a, -1, -0.12, 0.67, 0.03, -0.6, 0.2, 1);
+        R(a, B.head, 0.25, 0, 0);
+        lerpBones(o, a, UPPER, u);
+        o[CH.hy] -= 0.06 * u;
+        this.legsFromCurrent(o);
+        this.scaredFace(o, u);
+        o[CH.eye] = lerp(1, 0.25, u);
+        break;
+      }
+      case 'lookback': {
+        // corre mirando hacia atrás (¿me sigue?)
+        const u = smooth(t / 0.3);
+        const k = u * (0.6 + 0.4 * Math.sin(T * 2.3));
+        AR(o, B.spine, -0.05 * k, 0.55 * k, 0);
+        R(o, B.neck, 0, 0.4 * k, 0);
+        R(o, B.head, -0.1, 0.55 * k, 0);
+        this.scaredFace(o, u);
+        break;
+      }
+    }
+  }
+
+  private happyFace(o: Float32Array, k: number) {
+    o[CH.mouth] = lerp(o[CH.mouth], 1.0, k);
+    o[CH.mouthW] = lerp(o[CH.mouthW], 1.35, k);
+    o[CH.brow] = lerp(o[CH.brow], 0.7, k);
+    o[CH.angry] = lerp(o[CH.angry], -0.35, k);
+    o[CH.eye] = lerp(o[CH.eye], 1.15, k);
+  }
+  private scaredFace(o: Float32Array, k: number) {
+    o[CH.mouth] = lerp(o[CH.mouth], 1.15, k);
+    o[CH.mouthW] = lerp(o[CH.mouthW], 0.7, k);
+    o[CH.brow] = lerp(o[CH.brow], 1, k);
+    o[CH.angry] = lerp(o[CH.angry], -0.9, k);
+    o[CH.eye] = lerp(o[CH.eye], 1.35, k);
   }
 
   // ─────────── vehículos y asientos ───────────
