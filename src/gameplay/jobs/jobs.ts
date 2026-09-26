@@ -124,7 +124,8 @@ export class Jobs implements System {
   constructor(private game: Game) {
     game.mod.jobs = this;
     game.events.on('vehicle:impact' as any, (e: any) => this.onImpact(e.vehicle as Vehicle, e.dv as number));
-    game.events.on('vehicle:landed' as any, (e: any) => this.onLanded(e.vehicle as Vehicle, e.air as number));
+    // fall = velocidad de caída al tocar suelo (si algún aterrizaje no la trae, se estima por el tiempo en el aire)
+    game.events.on('vehicle:landed' as any, (e: any) => this.onLanded(e.vehicle as Vehicle, typeof e.fall === 'number' ? e.fall : (e.air ?? 0) * 5));
     game.events.on('player:died', () => this.abortScene());
     game.events.on('player:busted' as any, () => this.abortScene());
     game.events.on('player:hurt', (e) => {
@@ -311,8 +312,16 @@ export class Jobs implements System {
     }
   }
 
-  private onLanded(v: Vehicle, air: number) {
-    for (const j of this.carriedIn(v)) this.damage(j, air * (j.offer.type === 'fragil' ? 30 : 7));
+  /**
+   * Aterrizaje: el golpe depende de la velocidad de caída al tocar el suelo (m/s), no del tiempo en
+   * el aire (con la gravedad suave de los saltos, 1,5 s en el aire no es un golpe de 1,5 s). Medido
+   * con rampas de verdad: la furgoneta cae a ~7 m/s (FRÁGIL −9 %) y un deportivo que vuela 1,5 s, a
+   * ~11 m/s (FRÁGIL −23 %). Los demás paquetes, casi nada (−3 % y −8 %).
+   */
+  private onLanded(v: Vehicle, fall: number) {
+    const hit = Math.max(0, fall - 4.5);
+    if (!hit) return;
+    for (const j of this.carriedIn(v)) this.damage(j, hit * (j.offer.type === 'fragil' ? 3.5 : 1.2));
   }
 
   private damage(j: ActiveJob, loss: number) {
