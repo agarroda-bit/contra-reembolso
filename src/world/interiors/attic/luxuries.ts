@@ -116,7 +116,7 @@ export function buildTV(): TvCtl {
   glow.position.z = 0.02;
   g.add(glow);
 
-  let ch = 0, t = 0, acc = 1, noise = 0;
+  let ch = 0, t = 0, acc = 1, noise = 0, osd = 0;
   const draw = () => {
     const x = ctx;
     x.save();
@@ -252,7 +252,7 @@ export function buildTV(): TvCtl {
       x.fillRect(0, 0, W, 34);
       x.fillStyle = '#fff';
       x.font = '900 20px system-ui';
-      x.fillText('PUERTO PAQUETE 2 - 1 POLÍGONO F.C.   ' + String(Math.floor(60 + t / 2) % 90).padStart(2, '0') + "'", W / 2, 18);
+      x.fillText('PUERTO PAQUETE 2 - 1 POLÍGONO F.C.   ' + String(Math.floor(60 + t / 2) % 90).padStart(2, '0') + "'", W / 2 - 40, 18); // a la izquierda del logo
     } else if (ch === 3) {
       // documental
       const gr = x.createLinearGradient(0, 0, 0, H);
@@ -324,6 +324,18 @@ export function buildTV(): TvCtl {
     x.font = '900 14px system-ui';
     x.fillStyle = 'rgba(255,255,255,0.85)';
     x.fillText(CHANNELS[ch], W - 10, 12);
+    // al cambiar de canal: rótulo grande con el número (como las teles de verdad)
+    if (osd > 0) {
+      x.textAlign = 'left';
+      x.fillStyle = 'rgba(0,0,0,0.6)';
+      x.fillRect(14, H - 96, 300, 52);
+      x.font = '900 34px system-ui';
+      x.fillStyle = '#39ff14';
+      x.fillText(`${ch + 1}`, 26, H - 70);
+      x.font = '900 20px system-ui';
+      x.fillStyle = '#ffffff';
+      x.fillText(CHANNELS[ch], 66, H - 70, 240);
+    }
     x.restore();
     tex.needsUpdate = true;
   };
@@ -333,6 +345,7 @@ export function buildTV(): TvCtl {
     update(dt: number) {
       t += dt;
       noise = Math.max(0, noise - dt);
+      osd = Math.max(0, osd - dt);
       acc += dt;
       if (acc >= 0.1) {
         acc = 0;
@@ -342,6 +355,7 @@ export function buildTV(): TvCtl {
     next() {
       ch = (ch + 1) % CHANNELS.length;
       noise = 0.35;
+      osd = 2.2;
       acc = 1;
       return CHANNELS[ch];
     },

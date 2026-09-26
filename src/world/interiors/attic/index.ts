@@ -1005,9 +1005,10 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       run: () => seats.sit(toWorld(P.sofaSeat), Math.PI, toWorld(P.sofaStand), { hint: 'E o WASD — Levantarse del sofá' }) },
     {
       pos: V(8.75, 9.3), r: 1.5, on: () => attic.has('tele'), text: 'Cambiar de canal',
+      // el nombre del canal sale en la propia tele (un aviso por canal se amontonaba al zapear)
       run: () => {
-        const name = tv.next();
-        toast(game, `📺 ${name}`, '#5aa9ff', 1.6);
+        tv.next();
+        game.mod.audio?.play('click', { volume: 0.4, pitch: 1.4 });
       },
     },
     {

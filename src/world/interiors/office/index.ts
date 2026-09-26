@@ -379,10 +379,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     if (dirty) {
       // la mancha del techo sobre cada cubo
       b.box(1.1, 0.8, 0.02, '#e9e1cf', 12.6, 2.3, 0.04); // yeso levantado
-      for (const bk of P.buckets) {
-        b.cyl(0.9, 0.9, 0.02, 12, '#9a8a68', bk.x, H - 0.01, bk.z);
-        b.cyl(0.5, 0.5, 0.025, 10, '#7d6c4c', bk.x, H - 0.02, bk.z);
-      }
+      // (las manchas del techo sobre los cubos son calcas con la textura de humedad, más abajo)
     }
     const g = new THREE.Group();
     g.add(meshOf(b, lam, true, true));
@@ -849,6 +846,14 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     decal(2.6, 1.5, 4.2, 3.2, 0.04, 0);
     decal(1.4, 1.0, 15.5, 0.55, 0.04, 0);
     decal(1.8, 1.4, 17.2, 3.2, D - 0.04, Math.PI);
+    // manchas del techo justo encima de cada cubo (de ahí sale la gotera)
+    P.buckets.forEach((bk, i) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(2.2 + i * 0.4, 1.9 + i * 0.3), stainMat);
+      m.rotation.x = Math.PI / 2;
+      m.rotation.z = i * 1.3;
+      m.position.set(bk.x, H - 0.015, bk.z);
+      lv.only0.add(m);
+    });
     const b = new GeoBuilder();
     // sofá viejo con un muelle fuera
     const sx = 3.0, sz = 11.4;
@@ -1371,7 +1376,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
             d.mesh.visible = false;
             if (!d.mesh.userData.splashed) {
               d.mesh.userData.splashed = true;
-              game.mod.particles?.emit('water', toWorld(V(d.x, d.z, 0.34)), { count: 3, scale: 0.4, speed: 0.4 });
+              game.mod.particles?.emit('glass', toWorld(V(d.x, d.z, 0.34)), { count: 4, scale: 0.55, speed: 0.3, color: ['#9fdcff', '#dff6ff'] });
             }
           } else {
             d.mesh.visible = true;
