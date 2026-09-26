@@ -1,56 +1,35 @@
+// Arranque del juego.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { Game } from './core/game';
+import { installDebug } from './core/debug';
+import { LoadingScreen } from './ui/loading';
+import { buildPlaceholderWorld } from './world/placeholder';
 
-async function start() {
+async function boot() {
+  const loading = new LoadingScreen();
+  await loading.step(0.1, 'Despertando la física…');
   await RAPIER.init();
-  const world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
-  world.createCollider(RAPIER.ColliderDesc.cuboid(10, 0.1, 10));
-  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(0, 4, 0));
-  world.createCollider(RAPIER.ColliderDesc.cuboid(0.5, 0.5, 0.5), body);
+  const game = new Game(document.getElementById('app')!, document.getElementById('ui')!);
+  await loading.step(0.3, 'Levantando Puerto Paquete…');
+  game.world = buildPlaceholderWorld(game);
+  installDebug(game);
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.getElementById('app')!.appendChild(renderer.domElement);
+  // Luz y cámara provisionales (hasta integrar día/noche y jugador)
+  game.scene.add(new THREE.HemisphereLight('#fff2d0', '#5a3a7a', 1.2));
+  const sun = new THREE.DirectionalLight('#ffffff', 1.6);
+  sun.position.set(30, 50, 20);
+  game.scene.add(sun);
+  game.camera.position.set(30, 25, 40);
+  game.camera.lookAt(0, 0, 0);
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#ff9e6d');
-  const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
-  camera.position.set(3, 3, 5);
-  camera.lookAt(0, 1, 0);
-  scene.add(new THREE.HemisphereLight('#fff2d0', '#5a3a7a', 1.2));
-  const sun = new THREE.DirectionalLight('#ffffff', 1.5);
-  sun.position.set(5, 8, 3);
-  scene.add(sun);
-
-  const cube = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: '#ffd23f', flatShading: true }),
-  );
-  scene.add(cube);
-  const floor = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 20), new THREE.MeshStandardMaterial({ color: '#2ec4b6' }));
-  floor.position.y = -0.1;
-  scene.add(floor);
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  let frames = 0;
-  renderer.setAnimationLoop(() => {
-    world.step();
-    const p = body.translation();
-    cube.position.set(p.x, p.y, p.z);
-    cube.rotation.y += 0.02;
-    renderer.render(scene, camera);
-    frames++;
-    (window as any).__game = { ready: true, frames, cubeY: p.y };
-  });
+  await loading.step(1, '¡Listo!');
+  loading.hide();
+  game.start();
+  (window as any).__ready = true;
 }
 
-start().catch((e) => {
+boot().catch((e) => {
   console.error(e);
-  document.getElementById('info')!.textContent = 'Error: ' + e;
+  new LoadingScreen().error(String(e?.message ?? e));
 });
