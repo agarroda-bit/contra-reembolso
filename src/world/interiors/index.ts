@@ -148,6 +148,7 @@ export class Interiors implements System {
     const g = this.game;
     this.transition(() => {
       cur.inst.onExit?.();
+      cur.root.visible = false;
       this.current = null;
       const poi = this.returnPoi;
       const p = g.mod.player;
@@ -175,7 +176,24 @@ export class Interiors implements System {
     }, 380);
   }
 
+  private prebuildTimer = 10;
   update(dt: number) {
     for (const b of this.built.values()) b.inst.update?.(dt, b === this.current);
+    // precarga: a los 10 s de juego se construye un interior cada 2 s (oculto), para que la
+    // primera vez que entres no haya pantalla negra
+    if (this.current) return;
+    this.prebuildTimer -= dt;
+    if (this.prebuildTimer <= 0) {
+      this.prebuildTimer = 2;
+      const next = this.defs.find((d) => !this.built.has(d.id));
+      if (next) {
+        try {
+          const b = this.ensureBuilt(next);
+          b.root.visible = false;
+        } catch (e) {
+          console.warn('No se pudo precargar el interior', next.id, e);
+        }
+      }
+    }
   }
 }
