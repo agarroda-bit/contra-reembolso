@@ -48,6 +48,10 @@ export interface Ctx {
   pools: { x: number; z: number; hw: number; hd: number; rot: number }[];
   /** Zonas pavimentadas extra para el mapa (plazas, patios, muelles). */
   paved: { x: number; z: number; hw: number; hd: number; rot: number; color: string }[];
+  /** Puntos de color para el mapa (sombrillas de la playa, mesas de terraza, puestos...). */
+  mapDots: { x: number; z: number; r: number; color: string }[];
+  /** Rótulos pequeños para el mapa (parque, mercadillo, cancha...). */
+  mapLabels: { x: number; z: number; text: string; color: string }[];
   collectibles: THREE.Vector3[];
   ramps: WorldData['ramps'];
   breakables: WorldData['breakableSpots'];

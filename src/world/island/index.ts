@@ -44,6 +44,7 @@ import { planPoligono } from './poligono';
 import { planColina } from './colina';
 import { planViejo } from './viejo';
 import { deliverySpots, bayParking, shopPois } from './data';
+import { planDetalles } from './detalles';
 import { drawMap, MAP_PX } from './map';
 import { makeGlowTexture } from './materials';
 
@@ -73,6 +74,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const pc: PlanCtx = { layout, occ, net, rng: rng.fork('especiales'), shape, pads: extraPads, roadH };
   const specials: Special[] = [...planPort(pc), ...planCentro(pc), ...planPoligono(pc), ...planColina(pc), ...planViejo(pc)];
   fillGeneric(layout, net, rng);
+  // (fase 9) zonas para los detalles nuevos: solo celdas libres, después de los solares
+  const detalles = planDetalles(pc);
 
   if ((globalThis as any).__debugLots) {
     const d = layout.lots.map((l) => ({ id: l.special ?? l.kind, x: Math.round(l.x), z: Math.round(l.z), diff: +(shape.base(l.x, l.z) - l.h).toFixed(1) }));
@@ -113,6 +116,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     foot: [],
     pools: [],
     paved: [],
+    mapDots: [],
+    mapLabels: [],
     collectibles: [],
     ramps: [],
     breakables: [],
@@ -160,6 +165,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
 
   // ── mobiliario urbano y vegetación ──
   streetFurniture(ctx, out);
+  // ── detalles de fase 9: vida en los barrios, parque, obra, cancha y secretos ──
+  detalles.build(ctx, out, layout.lots);
 
   // ── terreno (al final: se omiten los triángulos que quedan tapados bajo edificios macizos) ──
   const N = HALF * 2;

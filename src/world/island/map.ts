@@ -123,6 +123,24 @@ export function drawMap(ctx: Ctx, districts: District[], props: { x: number; z: 
     g.arc(W(t.x), W(t.z), r / MAP_PX, 0, Math.PI * 2);
     g.fill();
   }
+  // 6b) puntos de color: sombrillas de las playas, terrazas, estanque, columpios...
+  for (const d of ctx.mapDots) {
+    g.fillStyle = d.color;
+    g.beginPath();
+    g.arc(W(d.x), W(d.z), Math.max(1.6, d.r / MAP_PX), 0, Math.PI * 2);
+    g.fill();
+  }
+  // 6c) rótulos pequeños de los sitios nuevos (parque, mercadillo, cancha...)
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  for (const l of ctx.mapLabels) {
+    g.font = `800 ${Math.round(4.2 / MAP_PX)}px ${FONT}`;
+    g.lineWidth = 1.6 / MAP_PX;
+    g.strokeStyle = 'rgba(255,255,255,0.9)';
+    g.strokeText(l.text, W(l.x), W(l.z));
+    g.fillStyle = l.color;
+    g.fillText(l.text, W(l.x), W(l.z));
+  }
   // 7) nombres de los barrios
   g.textAlign = 'center';
   g.textBaseline = 'middle';

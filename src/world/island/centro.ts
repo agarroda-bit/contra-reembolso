@@ -9,6 +9,7 @@ import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, awningCollide
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, shopSign, FONT_IMPACT, FONT, FONT_SCRIPT, FONT_SERIF, FONT_FUN } from './signs';
 import { makeBeamMaterial } from './materials';
+import { bankSecret } from './secretos';
 
 const GOLD = '#e8c25a';
 
@@ -492,7 +493,9 @@ function buildBank(ctx: Ctx, out: Out, lot: Lot) {
   const stone = '#e6d8ba', trim = '#cdbd98';
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, stone, SKIP.NY | SKIP.PY);
-  flatRoof(b, ctx, hw, hd, H, '#c9bfa8', trim, ctx.rng, false, 1.0);
+  // azotea secreta (pasaje, escalera de incendios y piscina de monedas); si no encaja, la de siempre
+  if (!bankSecret(ctx, out, lot, H)) flatRoof(b, ctx, hw, hd, H, '#c9bfa8', trim, ctx.rng, false, 1.0);
+  b.frame(lot.x, lot.h, lot.z, lot.rot);
   ctx.box(lot.x, lot.h + (y0 + H) / 2, lot.z, hw, (H - y0) / 2, hd, lot.rot);
   const { half } = facadeFrame(b, lot, 0);
   facadeFrame(w, lot, 0);

@@ -454,6 +454,10 @@ function buildPier(ctx: Ctx, out: Out) {
     { x: -118.3, z: 292, r: Math.PI - 0.05, c: '#f2a93b' },
     { x: -100, z: 266.5, r: Math.PI / 2 + 0.05, c: '#7c4dbb' },
     { x: -145, z: 266.8, r: -Math.PI / 2, c: '#1f9e9a' },
+    // (fase 9) más barcas amarradas a lo largo del muelle
+    { x: -70, z: 266.6, r: Math.PI / 2 - 0.04, c: '#e8394d' },
+    { x: -38, z: 266.9, r: -Math.PI / 2 + 0.06, c: '#ffd23f' },
+    { x: 12, z: 266.7, r: Math.PI / 2 + 0.03, c: '#2f7fcf' },
   ];
   const geo = boatGeo();
   const im = new THREE.InstancedMesh(geo, ctx.mat, boats.length);
