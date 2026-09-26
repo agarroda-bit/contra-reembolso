@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 
 const MAX = 10;
+/** Marcadores de este frame (lista reutilizada: nada de listas nuevas en cada frame). */
+const list: { x: number; z: number; color?: string; small?: boolean }[] = [];
 
 function makeColumnMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
@@ -60,7 +62,7 @@ export class Markers3D implements System {
     const hud = g.hud;
     const cam = g.camera.position;
     const t = g.time.elapsed;
-    const list: { x: number; z: number; color?: string }[] = [];
+    list.length = 0;
     if (hud.waypoint) list.push(hud.waypoint);
     for (const m of hud.markers) {
       if (list.length >= MAX) break;
@@ -91,9 +93,13 @@ export class Markers3D implements System {
       const pp = g.mod.player?.position;
       const dp = pp ? Math.hypot(m.x - pp.x, m.z - pp.z) : 99;
       const k = THREE.MathUtils.clamp((dp - 3) / 25, 0, 1);
-      s.column.visible = k > 0.02;
+      // «small»: algo pequeño que se mueve (la gallina, el ladrón): solo la flecha encima, sin columna ni aro
+      const small = !!m.small;
+      s.column.visible = !small && k > 0.02;
       s.column.scale.set(1, Math.max(0.05, k), 1);
+      s.ring.visible = !small;
       s.arrow.visible = dp > 1.5;
+      if (small) s.arrow.position.y = 2.2 + Math.sin(t * 5 + i) * 0.2;
       s.ring.scale.setScalar(1 + Math.sin(t * 4) * 0.08);
     }
   }
