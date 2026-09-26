@@ -389,6 +389,23 @@ const KF_PULL = new Float32Array(NCH);
   p[CH.mouthW] = 1.1;
 })();
 
+// secuencias (constantes: sin reservar memoria por frame)
+const SEQ_GETUP = [KF_LYING, KF_SITUP, KF_CROUCH, KF_STAND];
+const T_GETUP = [0, 0.35, 0.68, 1.0];
+const SEQ_ENTER = [KF_STAND, KF_DUCK, KF_LEGIN, KF_DRIVE];
+const T_ENTER = [0, 0.3, 0.65, 1.0];
+const SEQ_PULL = [KF_REACH, KF_GRAB, KF_PULL, KF_PULL, KF_REACH];
+const T_PULL = [0, 0.3, 0.7, 1.05, 1.3];
+
+/** Aleatorio fijo por número (para el baile del robot). */
+function hash01(n: number, seed: number) {
+  return (((Math.sin(n * 12.9898 + seed) * 43758.5453) % 1) + 1) % 1;
+}
+/** Postura del robot: valor i interpolado entre el paso anterior y el actual. */
+function robotV(step: number, i: number, snap: number, seed: number, k: number) {
+  return lerp(hash01(step - 1 + i * 7, seed), hash01(step + i * 7, seed), snap) * k;
+}
+
 /** Interpolación por fotogramas clave (suavizada). */
 function keyframes(o: Float32Array, frames: Float32Array[], times: number[], t: number) {
   if (t <= times[0]) return void o.set(frames[0]);
@@ -530,15 +547,15 @@ export class Animator {
         this.poseDead(o);
         break;
       case 'getup':
-        keyframes(o, [KF_LYING, KF_SITUP, KF_CROUCH, KF_STAND], [0, 0.35, 0.68, 1.0], this.poseT);
+        keyframes(o, SEQ_GETUP, T_GETUP, this.poseT);
         this.face(o);
         break;
       case 'enter_car':
-        keyframes(o, [KF_STAND, KF_DUCK, KF_LEGIN, KF_DRIVE], [0, 0.3, 0.65, 1.0], this.poseT);
+        keyframes(o, SEQ_ENTER, T_ENTER, this.poseT);
         break;
       case 'pull_out': {
         const tt = this.poseT % 1.3;
-        keyframes(o, [KF_REACH, KF_GRAB, KF_PULL, KF_PULL, KF_REACH], [0, 0.3, 0.7, 1.05, 1.3], tt);
+        keyframes(o, SEQ_PULL, T_PULL, tt);
         if (tt > 0.6 && tt < 1.1) {
           const sh = Math.sin(this.t * 40) * 0.04;
           AR(o, B.armL, sh, 0, 0);
@@ -866,7 +883,7 @@ export class Animator {
     o[CH.hy] = 0.75;
     o[CH.hz] = -0.02;
     R(o, B.hips, 0.2, 0, 0);
-    for (const side of [1, -1]) {
+    for (let side = 1; side >= -1; side -= 2) {
       R(o, side > 0 ? B.thighL : B.thighR, -1.2, 0, side * 0.3);
       R(o, side > 0 ? B.shinL : B.shinR, 1.25, 0, 0);
       R(o, side > 0 ? B.footL : B.footR, -0.25, 0, -side * 0.3);
@@ -934,13 +951,12 @@ export class Animator {
         const step = Math.floor(b * 2);
         const sf = (b * 2) % 1;
         const snap = Math.min(1, sf * 7);
-        const A = (n: number) => ((Math.sin(n * 12.9898 + this.seed) * 43758.5453) % 1 + 1) % 1;
-        const cur = (i: number, k: number) => lerp(A(step - 1 + i * 7) , A(step + i * 7), snap) * k;
+        const sd = this.seed;
         o[CH.hy] = 0.86 + HIPJ - 0.03 * (1 - snap);
-        arm(o, 1, -0.3 + cur(1, 0.6) - 0.3, 0, 1.35, -1.57 + cur(2, 1.2) * (step % 2 ? 1 : -1) * 0.6);
-        arm(o, -1, -0.3 + cur(3, 0.6) - 0.3, 0, 1.35, -1.57 + cur(4, 1.2) * (step % 2 ? -1 : 1) * 0.6);
-        R(o, B.spine, 0, (cur(5, 1) - 0.5) * 0.6, 0);
-        R(o, B.head, 0, (cur(6, 1) - 0.5) * 1.1, 0);
+        arm(o, 1, -0.3 + robotV(step, 1, snap, sd, 0.6) - 0.3, 0, 1.35, -1.57 + robotV(step, 2, snap, sd, 1.2) * (step % 2 ? 1 : -1) * 0.6);
+        arm(o, -1, -0.3 + robotV(step, 3, snap, sd, 0.6) - 0.3, 0, 1.35, -1.57 + robotV(step, 4, snap, sd, 1.2) * (step % 2 ? -1 : 1) * 0.6);
+        R(o, B.spine, 0, (robotV(step, 5, snap, sd, 1) - 0.5) * 0.6, 0);
+        R(o, B.head, 0, (robotV(step, 6, snap, sd, 1) - 0.5) * 1.1, 0);
         o[CH.mouth] = -0.3;
         o[CH.eye] = 1;
         break;

@@ -1,6 +1,7 @@
 // Página de prueba del kit de personajes: una fila de muñecos, cada uno con una pose.
 // Parámetros: ?pose=dance  ?speed=6  ?aim=pistol|rifle|heavy|throw  ?cara=1  ?giro=90  ?disparo=1
-//             ?aire=subir|caer  ?wobble=1  ?pitch=0.3
+//             ?aire=subir|caer  ?wobble=1  ?pitch=0.3  ?foco=N (primer plano del personaje N)
+//             ?seed=7 (otra tanda de aspectos)  ?foto=1 (sin parpadeo)
 import * as THREE from 'three';
 import type { CharacterAnimParams, CharacterPose } from '../core/contracts';
 import { Rng } from '../core/rng';
