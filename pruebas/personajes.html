@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Prueba de personajes — CONTRA REEMBOLSO</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1030; font-family: system-ui, -apple-system, sans-serif; }
+      canvas { display: block; }
+      #titulo { position: fixed; top: 10px; left: 14px; color: #fff; font-weight: 800; font-size: 18px; text-shadow: 2px 2px 0 #1b1030; }
+      #etiquetas div { position: fixed; transform: translate(-50%, 0); color: #fff; font-size: 12px; font-weight: 700;
+        background: rgba(27, 16, 48, .65); padding: 2px 6px; border-radius: 6px; white-space: pre; text-align: center; line-height: 1.25; }
+      #perf { position: fixed; bottom: 10px; left: 14px; color: #fff; font-size: 13px; background: rgba(27,16,48,.7); padding: 4px 8px; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div id="titulo">Personajes</div>
+    <div id="etiquetas"></div>
+    <div id="perf"></div>
+    <script type="module" src="/src/pruebas/personajes.ts"></script>
+  </body>
+</html>
