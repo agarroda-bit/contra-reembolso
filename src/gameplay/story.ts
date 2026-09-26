@@ -712,6 +712,7 @@ export class Story implements System {
 
   private readonly hudJob = { id: 'story', title: '', timeLeft: null as number | null, integrity: null as number | null, color: '#d4af37' };
   private readonly marker = { x: 0, z: 0, icon: '', color: '#d4af37', label: '', story: true };
+  private readonly wp = { x: 0, z: 0, label: '', color: '#d4af37', auto: true, story: true };
 
   update(dt: number) {
     const a = this.active;
@@ -751,12 +752,15 @@ export class Story implements System {
     if (k !== 0) hud.jobs.unshift(hj);
     const tgt = step.target ? step.target(c) : null;
     if (tgt) {
-      const wp = hud.waypoint as any;
-      if (wp && wp.story) {
+      // la misión manda sobre el GPS de los encargos normales (salvo que el jugador haya puesto uno a mano)
+      const cur = hud.waypoint as any;
+      if (!cur || cur.auto) {
+        const wp = this.wp;
         wp.x = tgt.x;
         wp.z = tgt.z;
         wp.label = a.m.title;
-      } else hud.waypoint = { x: tgt.x, z: tgt.z, label: a.m.title, color: '#d4af37', auto: true, story: true } as any;
+        hud.waypoint = wp;
+      }
       const mk = this.marker;
       mk.x = tgt.x;
       mk.z = tgt.z;

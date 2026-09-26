@@ -341,8 +341,26 @@ export class Jobs implements System {
     return loaded > 0;
   }
 
+  /** Vehículos que llevan (o llevaban) paquetes de encargos: solo se tocan esos. */
+  private pkgVehicles = new Set<Vehicle>();
+
+  /** Cuenta los paquetes de cada vehículo (cada frame, sin crear listas: solo recorre los encargos). */
   private updateVehiclePackages() {
-    for (const v of (this.game.mod.vehicles?.list ?? []) as Vehicle[]) v.packages = this.carriedIn(v).length;
+    const list = this.game.mod.vehicles?.list as Vehicle[] | undefined;
+    if (!list) return;
+    for (const v of this.pkgVehicles) v.packages = 0;
+    this.pkgVehicles.clear();
+    for (const j of this.active) {
+      if (j.state !== 'carry' || j.where !== 'vehicle' || j.vehicleId == null) continue;
+      let v: Vehicle | null = null;
+      for (let i = 0; i < list.length; i++) if (list[i].id === j.vehicleId) { v = list[i]; break; }
+      if (!v) continue;
+      if (!this.pkgVehicles.has(v)) {
+        v.packages = 0;
+        this.pkgVehicles.add(v);
+      }
+      v.packages++;
+    }
   }
 
   /** Pierde todos los paquetes que lleva (muerte). Devuelve cuántos. */
@@ -891,32 +909,61 @@ export class Jobs implements System {
     }
   }
 
+  // Lo que se pinta en el HUD se reutiliza de un frame a otro (antes se creaban listas y objetos nuevos cada frame).
+  private readonly hudList: { id: string; title: string; timeLeft: number | null; integrity: number | null; color?: string }[] = [];
+  private readonly hudViews = new Map<ActiveJob, { entry: { id: string; title: string; timeLeft: number | null; integrity: number | null; color?: string }; key: string; marker: any }>();
+  private readonly waypoint = { x: 0, z: 0, label: '', color: '', auto: true };
+
   private updateHud() {
     const g = this.game;
     const hud = g.hud;
-    hud.jobs = this.active
-      .filter((j) => j.state === 'pickup' || j.state === 'carry')
-      .map((j) => ({
-        id: String(j.offer.id),
-        title: `${TYPE_INFO[j.offer.type].label !== 'Normal' ? TYPE_INFO[j.offer.type].label + ' · ' : ''}${j.state === 'pickup' ? 'Recoger: ' + j.offer.pickupName : j.offer.client.name + ' · ' + j.offer.dest.label}`,
-        timeLeft: j.timeLeft,
-        integrity: j.state === 'carry' ? j.integrity : null,
-        color: j.color,
-      }));
-    // marcadores del minimapa (los de encargos se reescriben cada frame; los demás sistemas añaden los suyos después)
-    hud.markers = hud.markers.filter((m) => !(m as any).job);
+    const list = this.hudList;
+    list.length = 0;
+    // marcadores del minimapa: fuera los de encargos (sin crear lista nueva); los demás sistemas añaden los suyos después
+    const mk = hud.markers as any[];
+    let w = 0;
+    for (let i = 0; i < mk.length; i++) if (!mk[i].job) mk[w++] = mk[i];
+    mk.length = w;
+    let urgent: ActiveJob | null = null;
     for (const j of this.active) {
       if (j.state !== 'pickup' && j.state !== 'carry') continue;
+      let v = this.hudViews.get(j);
+      if (!v) {
+        v = { entry: { id: String(j.offer.id), title: '', timeLeft: 0, integrity: null, color: j.color }, key: '', marker: { x: 0, z: 0, icon: '', color: j.color, label: '', job: true } };
+        this.hudViews.set(j, v);
+      }
+      // el título solo se rehace si cambia el estado o el destino
+      const key = j.state + j.offer.dest.id;
+      if (v.key !== key) {
+        v.key = key;
+        const label = TYPE_INFO[j.offer.type].label;
+        v.entry.title = `${label !== 'Normal' ? label + ' · ' : ''}${j.state === 'pickup' ? 'Recoger: ' + j.offer.pickupName : j.offer.client.name + ' · ' + j.offer.dest.label}`;
+        v.marker.icon = j.state === 'pickup' ? '📦' : '🏠';
+        v.marker.label = j.state === 'pickup' ? j.offer.pickupName : j.offer.dest.label;
+      }
+      v.entry.timeLeft = j.timeLeft;
+      v.entry.integrity = j.state === 'carry' ? j.integrity : null;
+      list.push(v.entry);
       const t = this.targetOf(j);
-      hud.markers.push({ x: t.x, z: t.z, icon: j.state === 'pickup' ? '📦' : '🏠', color: j.color, label: j.state === 'pickup' ? j.offer.pickupName : j.offer.dest.label, job: true } as any);
+      v.marker.x = t.x;
+      v.marker.z = t.z;
+      mk.push(v.marker);
+      if (!urgent || j.timeLeft < urgent.timeLeft) urgent = j;
     }
+    // los encargos ya terminados dejan de tener vista
+    if (this.hudViews.size > list.length) for (const j of this.hudViews.keys()) if (!this.active.includes(j) || (j.state !== 'pickup' && j.state !== 'carry')) this.hudViews.delete(j);
+    hud.jobs = list;
     // GPS al encargo más urgente (si el jugador no ha puesto uno a mano)
-    const urgent = this.active.filter((j) => j.state === 'pickup' || j.state === 'carry').sort((a, b) => a.timeLeft - b.timeLeft)[0];
     const manual = hud.waypoint && !(hud.waypoint as any).auto;
     if (!manual) {
       if (urgent) {
         const t = this.targetOf(urgent);
-        hud.waypoint = { x: t.x, z: t.z, label: urgent.state === 'pickup' ? 'Recoger' : 'Entregar', color: urgent.color, auto: true } as any;
+        const wp = this.waypoint;
+        wp.x = t.x;
+        wp.z = t.z;
+        wp.label = urgent.state === 'pickup' ? 'Recoger' : 'Entregar';
+        wp.color = urgent.color;
+        hud.waypoint = wp;
       } else if (hud.waypoint) hud.waypoint = null;
     }
   }
