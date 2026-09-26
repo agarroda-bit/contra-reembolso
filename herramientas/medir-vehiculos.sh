@@ -1,6 +1,6 @@
 #!/bin/sh
 # Mide aceleración, frenada y giro de los vehículos (sin render).
-node herramientas/captura.mjs --page "pruebas/vehiculos.html?medir=${1:-van,scooter,compact,taxi,sports,suv,truck,police}" --port 5198 --shots '[{"wait":9000,"log":"window.__tuning"}]' 2>&1 | python3 -c "
+node herramientas/captura.mjs --page "pruebas/vehiculos.html?medir=${1:-van,scooter,compact,taxi,sports,suv,truck,police}" --port ${PORT:-5198} --shots '[{"wait":9000,"log":"window.__tuning"}]' 2>&1 | python3 -c "
 import sys,json
 for line in sys.stdin:
   if line.startswith('[log]'):

@@ -120,7 +120,8 @@ export class VehicleDamageFx implements System {
     v.mesh.body.material = burntMaterial;
     v.mesh.lights.visible = false;
     if (v.mesh.siren) v.mesh.siren.visible = false;
-    for (const c of v.mesh.group.children) if ((c as THREE.Mesh).isMesh && c !== v.mesh.body && c !== v.mesh.lights) (c as THREE.Mesh).visible = (c as THREE.Mesh).geometry.type !== 'PlaneGeometry';
+    // los carteles laterales se queman
+    for (const c of v.mesh.group.children) if ((c as THREE.Mesh).isMesh && (c.userData.decal || (c as THREE.Mesh).geometry.type === 'PlaneGeometry')) c.visible = false;
     // salto del chasis
     const m = v.spec.mass;
     v.body.applyImpulse({ x: (rnd.next() - 0.5) * m * 3, y: m * 7, z: (rnd.next() - 0.5) * m * 3 }, true);
