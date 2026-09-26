@@ -41,6 +41,7 @@ interface Projectile {
 }
 
 const nearList: Npc[] = [];
+const SHELL_DIR = new THREE.Vector3(1, 1, 0);
 
 const HIT_MASK = SOLID | G.NPC | G.VEHICLE | G.PLAYER | G.PROP;
 const tmpV = new THREE.Vector3();
@@ -76,6 +77,8 @@ export class Combat implements System {
   private gunMesh: THREE.Mesh | null = null;
   private projectiles: Projectile[] = [];
   private tracers: { mesh: THREE.Mesh; t: number }[] = [];
+  /** Trazadoras libres (se reutilizan: nada de mallas nuevas en cada disparo). */
+  private tracerPool: THREE.Mesh[] = [];
   private wheelTimer = 0;
   /** Segundos que le quedan al jugador con los pies precintados (cinta de la banda). */
   private tapedPlayer = 0;
@@ -396,7 +399,7 @@ export class Combat implements System {
       if (hit) this.applyHit(hit, def, shooter, d);
     }
     if (def.mode === 'hitscan' && shooter.kind === 'player' && this.gunMesh) {
-      this.particles?.emit('shell', muzzle, { count: 1, dir: new THREE.Vector3(1, 1, 0) });
+      this.particles?.emit('shell', muzzle, { count: 1, dir: SHELL_DIR });
     }
   }
 
@@ -408,11 +411,16 @@ export class Combat implements System {
   private tracer(from: THREE.Vector3, to: THREE.Vector3) {
     const len = from.distanceTo(to);
     if (len < 1) return;
-    const m = new THREE.Mesh(tracerGeo, tracerMat);
+    let m = this.tracerPool.pop();
+    if (!m) {
+      m = new THREE.Mesh(tracerGeo, tracerMat);
+      m.frustumCulled = false;
+      this.game.scene.add(m);
+    }
+    m.visible = true;
     m.position.lerpVectors(from, to, 0.5);
     m.lookAt(to);
     m.scale.set(1, 1, len);
-    this.game.scene.add(m);
     this.tracers.push({ mesh: m, t: 0 });
   }
 
@@ -422,7 +430,8 @@ export class Combat implements System {
       t.t += dt;
       t.mesh.scale.x = t.mesh.scale.y = Math.max(0.01, 1 - t.t / 0.07);
       if (t.t > 0.07) {
-        this.game.scene.remove(t.mesh);
+        t.mesh.visible = false;
+        this.tracerPool.push(t.mesh);
         this.tracers.splice(i, 1);
       }
     }
@@ -434,6 +443,11 @@ export class Combat implements System {
     const g = this.game;
     if (owner instanceof Npc) {
       if (shooter.kind === 'npc' && shooter.npc === owner) return;
+      // entre los de un mismo bando no se hacen daño (la bala se para en él, pero sin más)
+      if (shooter.kind === 'npc' && shooter.npc && owner.hostile && owner.police === shooter.npc.police && owner.role !== 'civil') {
+        this.particles?.emit('cardboard', hit.point, { count: 2, scale: 0.5 });
+        return;
+      }
       if (def.mode === 'stamp') {
         owner.stun(2.5);
         owner.hurt(def.damage, { cause: 'sellos', shooter }, dir, 0);

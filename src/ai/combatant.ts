@@ -225,6 +225,20 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
       if (b.mode === 'flank') tryShoot(game, npc, b, target, dist, combat, 0.5);
       break;
     case 'engage':
+      // con arma de fuego, a quemarropa no: se aparta unos pasos (disparando) y luego sigue
+      if (def.mode !== 'melee' && dist < 3.5) {
+        const away = new THREE.Vector3().copy(npc.position).sub(target).setY(0);
+        if (away.lengthSq() < 0.01) away.set(rnd.next() - 0.5, 0, rnd.next() - 0.5);
+        const side = tmpDir.set(-away.z, 0, away.x).normalize().multiplyScalar(rnd.next() < 0.5 ? -2 : 2);
+        away.normalize().multiplyScalar(3.5).add(side).add(npc.position);
+        if (reachable(game, npc.position, away)) {
+          away.y = game.world.heightAt(away.x, away.z);
+          b.mode = 'flank';
+          b.goal = away;
+          b.modeTimer = 1;
+          break;
+        }
+      }
       npc.stop();
       npc.face(target);
       npc.aiming = true;
