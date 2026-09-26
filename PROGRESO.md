@@ -6,6 +6,17 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 
 ## Fase actual: 8 — Pulido
 
+## Fase 8 — Pulido (en curso)
+Nota: el Mac se durmió de 08:12 a 14:20 y el trabajo se paró esas horas; ahora queda despierto con `caffeinate` mientras dura la sesión.
+
+Cinco agentes pulieron una parte cada uno y un sexto jugó la partida entera como un jugador, apuntando fallos:
+- **Conducción:** saltos más largos y aterrizando plano (rampa del Puerto: de 25 a 40 m), frenos más firmes (90 → 0 km/h en 24-32 m), freno de mano que gira sin trompo, sales volando de la moto en choques fuertes, cámara que tiembla en los choques y no se mete en las paredes. Tráfico que sigue su carril en las curvas, adelanta a los 7 s si algo le bloquea y no aparece delante de la cámara. Ruedas compartidas: los vehículos pasan de 132 a 52 draw calls.
+- **Combate:** los enemigos ya no atraviesan paredes, van por las calles y rodean; policía y furgonetas que se atascaban ahora maniobran; la búsqueda sube menos al defenderte (0,3 por disparo); con 1-2 sirenas no disparan. Sensaciones: arco rojo que señala de dónde te disparan, imán suave al apuntar, gritos de aviso antes de disparar, derribos con más vuelo y confeti. Arreglado un cuelgue al morir mientras disparaba un policía.
+- **Economía:** tiempos de los encargos calculados por el camino real (normal 90-100 s), 16 clientes nuevos (32 en total), fama por niveles nuevos (primera misión hacia el minuto 15-20, final de la historia en 1,5-2,5 h), tutorial que no se atasca y arreglos en las cinco misiones.
+- **Interfaz:** avisos que no se pisan, cartel del barrio arriba y breve, minimapa dentro de los edificios, números de dinero más vistosos, pantalla de controles con mando, **mando en los menús** (Start, cruceta, A/B), menús que caben en 720 px.
+- **Rendimiento:** medidor de tiempos con `?debug=1` (botón «⏱ tiempos»), CPU por fotograma de 3,6 a 2,5 ms en media, sin el parón de medio segundo del primer tiro (una sola luz de destello), shaders compilados al empezar, la mitad de objetos en la escena y peatones reciclados (de 48 a 5 creados por minuto conduciendo).
+- **Probador:** encontró 18 fallos (5 graves: la partida se machacaba desde el menú, bucle de muertes en la oficina, premio de la misión final perdido, puñetazos que contaban como disparos, error en el club). En arreglo ahora, con verificación de otro agente por cada área.
+
 ## Fase 7 — La historia del tablón ✅ (26/09, 06:53, publicada)
 - Tablón de encargos grandes en la oficina (dentro, en la pared), con cinco misiones que se desbloquean por fama y en orden:
   1. «El reloj de la señora Puri» (fama 2): reloj de oro de la joyería del Centro a la Colina, con dos furgonetas moradas persiguiéndote y emboscada al llegar; si el reloj se rompe, fallas.
