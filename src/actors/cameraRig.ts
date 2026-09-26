@@ -17,6 +17,7 @@ const CAM_GROUPS = groups(G.ALL, SOLID);
 /** Radio de la "bolita" de la cámara (más que el plano cercano: no se ve el interior de las paredes). */
 const CAM_RADIUS = 0.25;
 let camBall: RAPIER.Ball | null = null;
+let shoulderRay: RAPIER.Ray | null = null;
 /** Obstáculos finos que la cámara ignora (cilindros estrechos: farolas, árboles, postes, bolardos). */
 function solidEnough(c: RAPIER.Collider): boolean {
   return !(c.shapeType() === RAPIER.ShapeType.Cylinder && c.radius() < 0.5);
@@ -149,7 +150,20 @@ export class CameraRig implements System {
     const pivot = tmpV.copy(this.target);
     pivot.y += heightOff;
     const right = this.rightXZ(tmpV2);
-    pivot.addScaledVector(right, this.shoulder);
+    let shoulder = this.shoulder;
+    if (shoulder > 0.05) {
+      // hombro pegado a una pared: no desplazar el pivote dentro de ella
+      if (!shoulderRay) shoulderRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+      shoulderRay.origin.x = pivot.x;
+      shoulderRay.origin.y = pivot.y;
+      shoulderRay.origin.z = pivot.z;
+      shoulderRay.dir.x = right.x;
+      shoulderRay.dir.y = 0;
+      shoulderRay.dir.z = right.z;
+      const sh = g.physics.world.castRay(shoulderRay, shoulder + CAM_RADIUS, true, undefined, CAM_GROUPS, undefined, this.excludeBody ?? undefined, solidEnough);
+      if (sh) shoulder = Math.max(0, sh.timeOfImpact - CAM_RADIUS);
+    }
+    pivot.addScaledVector(right, shoulder);
 
     // Dirección desde el pivote hasta la cámara
     const cp = Math.cos(this.pitch);
