@@ -1,8 +1,9 @@
 // Puerto Paquete: genera la isla completa (terreno, calles, edificios, mobiliario, datos del contrato).
 //
 // Uso: const world = buildIsland(game); game.world = world;
-// Añade a game.scene todo lo visual y a game.physics todos los colisores. Al final da un paso de física
-// para que los rayos (raycast) funcionen desde el primer momento. No añade luces (las pone el ciclo día/noche).
+// Añade a game.scene todo lo visual y a game.physics todos los colisores. Da dos pasos de física (uno a mitad,
+// para descartar portales, plazas y rompibles tapados por colisores, y otro al final para que los rayos funcionen
+// desde el primer momento): hay que llamarla antes de crear cuerpos dinámicos. No añade luces (día/noche).
 //
 // Además del contrato, (world as any).extra trae datos útiles para otros módulos:
 //   officeVanBays: Vector3[]  plazas de furgoneta delante de la oficina (mirando a la calle, rumbo PI)
