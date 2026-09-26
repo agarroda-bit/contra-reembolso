@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import type { CharacterLook } from '../../../core/contracts';
 import { GeoBuilder, vertexColorMaterial } from '../../../core/geo';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { fx as rnd } from '../../../core/rng';
 import { makeCharacter } from '../../../actors/character';
 import { makeVehicleMesh } from '../../../vehicles/meshes';
@@ -164,10 +165,10 @@ export function buildTV(): TvCtl {
       x.fillRect(366, 134, 18, 3 + talk);
       // mesa
       x.fillStyle = '#ffd23f';
-      x.fillRect(250, 220, 260, 70);
+      x.fillRect(260, 196, 240, 58);
       x.fillStyle = '#1b1030';
-      x.font = '900 26px system-ui';
-      x.fillText('TP24', 380, 256);
+      x.font = '900 28px system-ui';
+      x.fillText('TP24', 380, 226);
       // titular
       x.fillStyle = '#e63946';
       x.fillRect(0, 22, 250, 40);
@@ -803,7 +804,12 @@ export function modelGeometry(kind: string, color: string): THREE.BufferGeometry
   if (g) return g;
   const spec = (VEHICLES as Record<string, (typeof VEHICLES)[VehicleKind]>)[kind];
   if (!spec) return null;
-  const vm = makeVehicleMesh(spec, color);
+  let vm: ReturnType<typeof makeVehicleMesh>;
+  try {
+    vm = makeVehicleMesh(spec, color);
+  } catch {
+    return null;
+  }
   const baked = bakeObject(vm.group);
   // la maqueta ya está fusionada: fuera lo que era solo de este coche
   vm.bodyGeo.dispose();
@@ -837,7 +843,7 @@ export interface GarageCtl {
 export function buildGarage(slots: THREE.Vector3[]): GarageCtl {
   const g = new THREE.Group();
   const b = new GeoBuilder();
-  const beams = new THREE.Group();
+  const beamGeos: THREE.BufferGeometry[] = [];
   const beamMat = beamMaterial('#fff4d0', 0.16);
   for (const s of slots) {
     b.cyl(0.62, 0.7, 0.95, 16, '#1b1030', s.x, 0.475, s.z);
@@ -845,11 +851,12 @@ export function buildGarage(slots: THREE.Vector3[]): GarageCtl {
     b.cyl(0.72, 0.72, 0.05, 16, '#d4af37', s.x, 0.025, s.z);
     // foco del techo
     b.cyl(0.14, 0.2, 0.3, 8, '#222228', s.x, 4.4, s.z);
-    const beam = new THREE.Mesh(new THREE.ConeGeometry(0.75, 3.35, 16, 1, true), beamMat);
-    beam.position.set(s.x, 1.0 + 3.35 / 2, s.z);
-    beams.add(beam);
+    beamGeos.push(new THREE.ConeGeometry(0.75, 3.35, 16, 1, true).translate(s.x, 1.0 + 3.35 / 2, s.z));
   }
   g.add(meshOf(b, lambert));
+  // todos los haces en una sola malla
+  const beams = new THREE.Mesh(mergeGeometries(beamGeos, false)!, beamMat);
+  for (const bg of beamGeos) bg.dispose();
   g.add(beams);
   const models: THREE.Mesh[] = [];
   const modelsGroup = new THREE.Group();

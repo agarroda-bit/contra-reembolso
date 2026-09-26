@@ -702,14 +702,18 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   const glowMesh = new THREE.Mesh(gl.build(), glowVC);
   root.add(glowMesh);
   // halos de las lámparas
-  const halos = new THREE.Group();
-  for (const [x, y, z, s] of [[5.95, 1.1, 6.9, 1.4], [11.55, 1.1, 6.9, 1.4], [ch.x, H - 1.1, ch.z, 3.4], [17.1, H - 1.9, 3.8, 1], [18.2, H - 1.9, 3.8, 1], [19.3, H - 1.9, 3.8, 1]]) {
-    const h = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTexture(), color: '#ffd9a0', transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
-    h.position.set(x, y, z);
-    h.scale.setScalar(s);
-    halos.add(h);
-  }
-  root.add(halos);
+  // halos de las lámparas: dos nubes de puntos (un draw call cada una)
+  const haloPts = (pts: number[][], size: number) => {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3));
+    const m = new THREE.Points(g, new THREE.PointsMaterial({
+      map: haloTexture(), color: '#ffd9a0', size, sizeAttenuation: true, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false,
+    }));
+    root.add(m);
+  };
+  haloPts([[5.95, 1.1, 6.9], [11.55, 1.1, 6.9], [17.1, H - 1.9, 3.8], [18.2, H - 1.9, 3.8], [19.3, H - 1.9, 3.8]], 1.3);
+  haloPts([[ch.x, H - 1.1, ch.z]], 3.4);
 
   // ── Zona de garaje (suelo, portón y cartel) ──
   const gFloorPlain = new THREE.Mesh(new THREE.PlaneGeometry(6.8, 5.6).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ map: garageFloorTexture(false) }));
@@ -1008,7 +1012,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       pos: P3(P.jacuzzi), r: 2.3, on: () => attic.has('jacuzzi'), text: 'Meterse en el jacuzzi',
       run: () => {
         const p = game.mod.player;
-        seats.sit(toWorld(V(P.jacuzzi.x + 0.75, P.jacuzzi.z)), -Math.PI / 2, toWorld(V(P.jacuzzi.x + 2.5, P.jacuzzi.z - 0.6)), { hint: 'E o WASD — Salir del jacuzzi' });
+        seats.sit(toWorld(V(P.jacuzzi.x + 0.75, P.jacuzzi.z, -0.3)), -Math.PI / 2, toWorld(V(P.jacuzzi.x + 0.3, P.jacuzzi.z - 2.45)), { hint: 'E o WASD — Salir del jacuzzi' });
         if (p) {
           p.stamina = 100;
           p.health = Math.min(p.maxHealth, p.health + 25);
@@ -1083,6 +1087,12 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       refreshStatue();
       garage.setCars((game.mod.shops?.owned as OwnedLike[] | undefined) ?? null);
       apply(false);
+      // compilar los shaders ahora, con la pantalla en negro (si no, tirón al aparecer)
+      try {
+        game.renderer.compile(root, game.camera, game.scene);
+      } catch {
+        /* no pasa nada: se compilarán al pintar */
+      }
     },
     onExit() {
       insideFog = false;

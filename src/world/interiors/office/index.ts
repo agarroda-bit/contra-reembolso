@@ -1171,7 +1171,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     {
       pos: V(P.chair.x - 1.0, P.chair.z), r: 1.2, on: () => owned.has('sillon') && !seats.busy, text: 'Sentarse en el sillón de jefe',
       run: () => {
-        seats.sit(toWorld(V(P.chair.x, P.chair.z + 0.08)), 0, toWorld(V(P.chair.x - 1.45, P.chair.z + 0.1)), { hint: 'E o WASD — Levantarse del sillón' });
+        seats.sit(toWorld(V(P.chair.x, P.chair.z + 0.08)), 0, toWorld(V(P.chair.x - 1.65, P.chair.z - 0.15)), { hint: 'E o WASD — Levantarse del sillón' });
         toast(game, 'Te sientas. Te sientes importante. Porque lo eres.', '#ffd23f', 2.6);
       },
     },
@@ -1211,6 +1211,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
 
   let t = 0;
   let flick = 0;
+  let sigT = 0;
   const inst: OfficeScene = {
     spawn: P.spawn.clone(),
     heading: Math.PI,
@@ -1221,6 +1222,11 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       root.visible = true;
       refresh(false);
       refreshPortrait();
+      try {
+        game.renderer.compile(root, game.camera, game.scene);
+      } catch {
+        /* se compilarán al pintar */
+      }
     },
     onExit() {
       if (seats.busy) seats.stand();
@@ -1230,9 +1236,13 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       if (!inside) return;
       t += dt;
       // si cambia la empresa estando dentro (tablón), se ve al momento
-      const st = companyState(game);
-      const sig = st.level + '|' + [...st.lux].sort().join(',');
-      if (sig !== lastSig) refresh(true);
+      sigT -= dt;
+      if (sigT <= 0) {
+        sigT = 0.25;
+        const st = companyState(game);
+        const sig = st.level + '|' + [...st.lux].sort().join(',');
+        if (sig !== lastSig) refresh(true);
+      }
       popper.update(dt);
       seats.update(dt);
       toni.update(dt, { speed: 0, grounded: true, pose: 'phone' });
