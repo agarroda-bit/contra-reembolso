@@ -177,8 +177,21 @@ export class Interiors implements System {
   }
 
   private prebuildTimer = 10;
+  /** Interiores cuyo fallo en update ya se avisó (para no llenar la consola cada frame). */
+  private warned = new Set<string>();
   update(dt: number) {
-    for (const b of this.built.values()) b.inst.update?.(dt, b === this.current);
+    for (const b of this.built.values()) {
+      // un fallo en los efectos de un interior no puede parar el juego entero (se congelaría la
+      // pantalla y las teclas se quedarían pulsadas): se avisa una vez y se sigue
+      try {
+        b.inst.update?.(dt, b === this.current);
+      } catch (e) {
+        if (!this.warned.has(b.def.id)) {
+          this.warned.add(b.def.id);
+          console.warn(`[interiores] Fallo al actualizar ${b.def.id} (se sigue jugando):`, e);
+        }
+      }
+    }
     // precarga: a los 10 s de juego se construye un interior cada 2 s (oculto), para que la
     // primera vez que entres no haya pantalla negra
     if (this.current) return;
