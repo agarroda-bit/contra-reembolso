@@ -17,6 +17,8 @@ export interface VehicleMesh {
    * Una entrada por pivote (null en las ruedas que no se dibujan, p. ej. las gemelas de la moto).
    */
   wheelSlots: (WheelSlot | null)[] | null;
+  /** Pieza que se mueve aparte (horquilla de la carretilla, paellera que gira). null = ninguna. */
+  part: THREE.Mesh | null;
 }
 
 // Materiales compartidos por todos los vehículos
@@ -216,6 +218,9 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
   let siren: THREE.Mesh | null = null;
   const bottom = -hy; // parte baja del chasis (local)
   const decals: THREE.Mesh[] = [];
+  /** Pieza móvil (se construye aparte y se añade al grupo). */
+  let partGeo: THREE.BufferGeometry | null = null;
+  const partPos = new THREE.Vector3();
 
   const lightsFront = (y: number, z: number, x: number, s = 0.22) => {
     L.box(s * 1.3, s * 0.8, 0.06, '#fff6c8', x, y, z);
@@ -362,6 +367,179 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
       lightsBack(bottom + 0.7, -hz - 0.02, hx * 0.8);
       break;
     }
+    case 'granny': {
+      // silla eléctrica de la yaya: base baja, sillón con cojín de ganchillo, cesta con la compra y banderín
+      const seatY = bottom + 0.5;
+      b.box(0.72, 0.12, 1.3, color, 0, bottom + 0.14, -0.02); // plataforma
+      b.box(0.74, 0.2, 0.34, color, 0, bottom + 0.2, 0.55); // morro
+      b.taperBox(0.5, 0.34, 0.36, color, 0, bottom + 0.42, 0.44, 0.12, 0, 0.04); // carenado del manillar
+      b.box(0.78, 0.06, 0.2, DARK, 0, bottom + 0.1, 0.72); // parachoques de goma
+      b.box(0.78, 0.06, 0.16, DARK, 0, bottom + 0.1, -0.7);
+      b.cyl(0.035, 0.035, 0.62, 6, DARK, 0, bottom + 0.82, 0.36, -0.45, 0, 0); // columna
+      b.box(0.56, 0.05, 0.05, DARK, 0, bottom + 1.08, 0.24); // manillar
+      b.box(0.08, 0.07, 0.12, '#ff4f81', 0.27, bottom + 1.08, 0.24); // puños rosas
+      b.box(0.08, 0.07, 0.12, '#ff4f81', -0.27, bottom + 1.08, 0.24);
+      b.box(0.2, 0.1, 0.06, '#333a44', 0, bottom + 1.0, 0.3); // marcador
+      b.cyl(0.05, 0.05, 0.3, 6, CHROME, 0, bottom + 0.34, -0.14); // pie del asiento
+      b.box(0.56, 0.14, 0.5, '#4a4e69', 0, seatY, -0.16); // asiento
+      b.box(0.5, 0.05, 0.44, '#ffafcc', 0, seatY + 0.09, -0.14); // cojín de ganchillo
+      for (let i = 0; i < 4; i++) b.box(0.07, 0.052, 0.07, i % 2 ? '#fcf6bd' : '#a0c4ff', -0.15 + i * 0.1, seatY + 0.1, -0.14);
+      b.box(0.54, 0.6, 0.12, '#4a4e69', 0, seatY + 0.36, -0.44); // respaldo
+      b.box(0.44, 0.18, 0.04, '#ffafcc', 0, seatY + 0.5, -0.37); // tapete
+      for (const sx of [1, -1]) {
+        b.box(0.06, 0.05, 0.42, DARK, sx * 0.3, seatY + 0.24, -0.14); // reposabrazos
+        b.box(0.04, 0.22, 0.04, DARK, sx * 0.3, seatY + 0.12, 0.02);
+      }
+      // cesta de mimbre con la compra: puerro, barra de pan y naranjas
+      b.box(0.46, 0.24, 0.3, '#c8a165', 0, bottom + 0.78, 0.6);
+      b.box(0.4, 0.02, 0.24, '#8d6b3a', 0, bottom + 0.9, 0.6);
+      b.cyl(0.045, 0.045, 0.62, 6, '#f1faee', 0.12, bottom + 1.0, 0.58, 0.35, 0, 0.25);
+      b.cyl(0.06, 0.035, 0.3, 6, '#57cc99', 0.2, bottom + 1.38, 0.72, 0.35, 0, 0.25);
+      b.box(0.1, 0.1, 0.55, '#e9c46a', -0.12, bottom + 0.98, 0.56, 0.5, 0.2, 0);
+      b.sphere(0.07, '#ff9f1c', -0.05, bottom + 0.95, 0.66);
+      b.sphere(0.07, '#ff9f1c', 0.05, bottom + 0.94, 0.52);
+      // mástil con banderín naranja (para que la vean los coches)
+      b.cyl(0.012, 0.012, 1.5, 4, '#dddddd', -0.3, bottom + 1.2, -0.62);
+      b.box(0.02, 0.2, 0.34, '#ff6b00', -0.3, bottom + 1.86, -0.8);
+      // retrovisor
+      b.cyl(0.01, 0.01, 0.3, 4, DARK, 0.3, bottom + 1.2, 0.24);
+      b.box(0.14, 0.1, 0.03, '#b8c0ff', 0.3, bottom + 1.36, 0.25);
+      L.box(0.16, 0.1, 0.05, '#fff6c8', 0, bottom + 0.3, 0.73);
+      lightsBack(bottom + 0.2, -0.72, 0.28, 0.1);
+      break;
+    }
+    case 'paella': {
+      // furgoneta de comida: cabina redondita, cocina con ventanilla y toldo, paellera gigante en el techo
+      const cabLen = 1.25;
+      const boxLen = D - cabLen;
+      const boxZ = -hz + boxLen / 2;
+      b.box(W, H * 0.86, boxLen, color, 0, bottom + H * 0.43 + 0.08, boxZ); // cocina
+      b.box(W * 0.98, H * 0.5, cabLen, color, 0, bottom + H * 0.25 + 0.06, hz - cabLen / 2); // cabina
+      b.taperBox(W * 0.94, H * 0.38, cabLen * 0.92, GLASS, 0, bottom + H * 0.68, hz - cabLen / 2 - 0.04, 0.5, 0, 0.05);
+      b.box(W * 0.96, 0.1, cabLen * 0.45, color, 0, bottom + H * 0.88, hz - cabLen * 0.78);
+      b.box(W * 1.01, 0.16, D * 0.99, '#f1faee', 0, bottom + H * 0.5, 0); // franja blanca
+      b.box(W * 1.02, 0.08, boxLen, '#e63946', 0, bottom + H * 0.58, boxZ);
+      b.box(W * 1.02, 0.24, 0.2, '#e63946', 0, bottom + 0.22, hz + 0.02); // parachoques rojos
+      b.box(W * 1.02, 0.24, 0.2, '#e63946', 0, bottom + 0.22, -hz - 0.02);
+      b.box(W * 0.5, 0.26, 0.05, CHROME, 0, bottom + 0.52, hz + 0.01); // rejilla cromada
+      b.box(0.08, 0.2, 0.14, DARK, hx + 0.06, bottom + H * 0.62, hz - 0.35);
+      b.box(0.08, 0.2, 0.14, DARK, -hx - 0.06, bottom + H * 0.62, hz - 0.35);
+      // ventanilla de servir (lado derecho, el de la acera), mostrador y toldo a rayas
+      b.box(0.03, 0.62, boxLen * 0.62, '#3a2e39', -hx - 0.005, bottom + H * 0.72, boxZ + 0.1);
+      b.box(0.28, 0.05, boxLen * 0.64, CHROME, -hx - 0.12, bottom + H * 0.55, boxZ + 0.1);
+      const stripes = 7;
+      for (let i = 0; i < stripes; i++) {
+        const zz = boxZ + 0.1 - (boxLen * 0.66) / 2 + ((i + 0.5) * boxLen * 0.66) / stripes;
+        b.box(0.62, 0.05, (boxLen * 0.66) / stripes + 0.01, i % 2 ? '#f1faee' : '#e63946', -hx - 0.28, bottom + H * 0.96, zz, 0, 0, 0.42);
+      }
+      // chimenea de la cocina y bombona de butano
+      b.cyl(0.08, 0.08, 0.5, 6, CHROME, 0.6, bottom + H + 0.2, -hz + 0.35);
+      b.cyl(0.11, 0.11, 0.08, 6, DARK, 0.6, bottom + H + 0.48, -hz + 0.35);
+      b.cyl(0.16, 0.16, 0.5, 8, '#ff7b54', 0.55, bottom + 0.55, -hz - 0.1);
+      // soporte de la paellera
+      b.cyl(0.08, 0.12, 0.3, 6, DARK, 0, bottom + H * 0.94 + 0.2, boxZ);
+      // puertas traseras con ventanucos y matrícula
+      b.box(0.04, H * 0.62, 0.02, shade(color, 0.7), 0, bottom + H * 0.5, -hz - 0.005);
+      for (const sx of [1, -1]) b.box(0.5, 0.34, 0.03, GLASS, sx * 0.42, bottom + H * 0.72, -hz - 0.01);
+      b.box(0.5, 0.14, 0.03, '#f1faee', 0, bottom + 0.44, -hz - 0.12);
+      decals.push(...sideDecals('PAELLA\nMÓVIL', 'Arroz de domingo, todos los días', '#ffd23f', '#c1121f', boxLen * 0.8, H * 0.34, hx + 0.012, bottom + H * 0.27, boxZ, live));
+      lightsFront(bottom + 0.55, hz + 0.02, hx * 0.7, 0.26);
+      lightsBack(bottom + 0.55, -hz - 0.02, hx * 0.78);
+      // paellera gigante (pieza aparte: gira cuando suena la música)
+      const pg = new GeoBuilder();
+      pg.cyl(0.98, 0.88, 0.14, 18, '#2b2d33', 0, 0, 0); // sartén
+      pg.cyl(0.9, 0.9, 0.05, 18, '#f4c430', 0, 0.06, 0); // arroz con azafrán
+      for (const sx of [1, -1]) pg.box(0.3, 0.05, 0.1, '#2b2d33', sx * 1.08, 0.04, 0); // asas
+      const tops: [number, number, string, number, number][] = [];
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        tops.push([Math.cos(a) * 0.62, Math.sin(a) * 0.62, '#ff7b54', 0.2, 0.08]); // gambas
+        tops.push([Math.cos(a + 0.4) * 0.35, Math.sin(a + 0.4) * 0.35, '#d62828', 0.3, 0.05]); // pimiento
+        tops.push([Math.cos(a + 0.2) * 0.8, Math.sin(a + 0.2) * 0.8, '#6a994e', 0.06, 0.06]); // guisantes
+      }
+      for (const [x, z, c, len, w] of tops) pg.box(len, 0.05, w, c, x, 0.1, z, 0, Math.atan2(z, x) + 1.2, 0);
+      for (let i = 0; i < 4; i++) {
+        const a = (i / 4) * Math.PI * 2 + 0.7;
+        pg.box(0.22, 0.06, 0.12, '#fff45a', Math.cos(a) * 0.45, 0.11, Math.sin(a) * 0.45, 0, a, 0); // limón
+        pg.box(0.16, 0.07, 0.1, '#1b1b2f', Math.cos(a + 0.8) * 0.72, 0.11, Math.sin(a + 0.8) * 0.72, 0, a, 0); // mejillones
+      }
+      pg.box(0.1, 0.05, 1.3, '#b08968', 0.2, 0.3, 0.1, 0.35, 0.5, 0); // cucharón de madera
+      pg.sphere(0.13, '#b08968', 0.47, 0.06, 0.52, 0, 1, 0.4, 1);
+      partGeo = pg.build();
+      partPos.set(0, bottom + H * 0.94 + 0.38, boxZ);
+      break;
+    }
+    case 'sofa': {
+      // sofá de tres plazas del rastro con motor de cortacésped, lámpara de pie y cartel de «SE REGALA»
+      const light = shade(color, 1.18);
+      b.box(W * 0.92, 0.26, D * 0.82, color, 0, bottom + 0.3, 0.02); // base
+      for (let i = -1; i <= 1; i++) b.box(0.52, 0.16, 0.62, light, i * 0.54, bottom + 0.5, 0.1, 0.03 * i, 0, 0); // cojines
+      b.box(W * 0.9, 0.62, 0.24, color, 0, bottom + 0.68, -hz + 0.26); // respaldo
+      for (let i = -1; i <= 1; i++) b.box(0.5, 0.4, 0.13, light, i * 0.54, bottom + 0.76, -hz + 0.42, -0.12, 0, 0);
+      for (const sx of [1, -1]) {
+        b.box(0.22, 0.46, D * 0.8, color, sx * (hx - 0.13), bottom + 0.52, 0.02); // brazos
+        b.cyl(0.14, 0.14, D * 0.8, 8, light, sx * (hx - 0.13), bottom + 0.76, 0.02, Math.PI / 2, 0, 0);
+        for (const sz of [1, -1]) b.box(0.08, 0.14, 0.08, '#6b4226', sx * (hx - 0.1), bottom + 0.14, sz * 0.36); // patas
+      }
+      b.box(0.34, 0.3, 0.12, '#ffd23f', 0.52, bottom + 0.72, -0.08, -0.2, 0.3, 0.15); // cojín suelto
+      b.box(0.3, 0.26, 0.1, '#06d6a0', -0.55, bottom + 0.7, -0.1, -0.2, -0.3, -0.1);
+      // motor de cortacésped atrás, con tubo de escape
+      b.box(0.44, 0.3, 0.26, '#e63946', -0.35, bottom + 0.34, -hz + 0.1);
+      b.box(0.3, 0.12, 0.2, '#2b2d33', -0.35, bottom + 0.54, -hz + 0.1);
+      b.cyl(0.04, 0.04, 0.36, 6, CHROME, -0.05, bottom + 0.6, -hz + 0.08, 0.3, 0, 0);
+      // lámpara de pie atada al brazo izquierdo (la pantalla brilla de noche)
+      b.cyl(0.02, 0.02, 1.2, 5, '#b08968', hx - 0.1, bottom + 1.2, -0.25);
+      b.cyl(0.14, 0.14, 0.03, 8, '#b08968', hx - 0.1, bottom + 0.62, -0.25);
+      L.add(new THREE.CylinderGeometry(0.13, 0.24, 0.28, 8), '#ffe8a3', hx - 0.1, bottom + 1.86, -0.25);
+      L.box(0.12, 0.08, 0.04, '#fff6c8', -hx + 0.13, bottom + 0.62, hz - 0.08);
+      L.box(0.12, 0.08, 0.04, '#fff6c8', hx - 0.13, bottom + 0.62, hz - 0.08);
+      lightsBack(bottom + 0.3, -hz - 0.01, 0.2, 0.1);
+      decals.push(...sideDecals('SE REGALA', 'Preguntar en el 3.º B', '#d4a373', '#3d2b1f', 0.62, 0.3, hx + 0.012, bottom + 0.5, 0.02, live));
+      break;
+    }
+    case 'forklift': {
+      // carretilla elevadora: contrapeso atrás, jaula de seguridad, mástil y horquilla con un palé (aparte)
+      const Y = '#ffc300';
+      b.box(W, 0.5, 1.9, color, 0, bottom + 0.38, -0.5); // chasis
+      b.box(W * 1.02, 0.72, 0.48, shade(color, 0.85), 0, bottom + 0.5, -hz + 0.24); // contrapeso
+      for (let i = 0; i < 5; i++) b.box(0.08, 0.5, 0.02, '#1b1b1b', -0.44 + i * 0.22, bottom + 0.5, -hz - 0.005, 0, 0, 0.6); // rayas de peligro
+      b.box(W * 0.96, 0.05, 1.3, '#2b2d33', 0, bottom + 0.65, -0.35); // suelo de la cabina
+      b.box(0.5, 0.12, 0.42, '#1b1b1b', 0, bottom + 0.8, -0.62); // asiento
+      b.box(0.5, 0.42, 0.1, '#1b1b1b', 0, bottom + 1.05, -0.86);
+      b.taperBox(0.6, 0.45, 0.35, color, 0, bottom + 0.85, 0.12, 0.14, 0, 0.04); // salpicadero
+      b.cyl(0.17, 0.17, 0.04, 10, '#1b1b1b', 0, bottom + 1.18, -0.08, -0.9, 0, 0); // volante
+      b.cyl(0.02, 0.02, 0.3, 4, '#1b1b1b', 0, bottom + 1.08, 0.0, -0.9, 0, 0);
+      b.box(0.04, 0.2, 0.04, '#e63946', 0.18, bottom + 1.2, 0.18); // palancas
+      b.box(0.04, 0.2, 0.04, '#06d6a0', 0.25, bottom + 1.2, 0.18);
+      // jaula de seguridad
+      for (const sx of [1, -1]) for (const sz of [0.28, -1.0]) b.box(0.07, 1.42, 0.07, '#2b2d33', sx * 0.52, bottom + 1.36, sz);
+      b.box(1.12, 0.06, 1.38, '#2b2d33', 0, bottom + 2.08, -0.36);
+      for (let i = 0; i < 4; i++) b.box(1.1, 0.05, 0.05, '#2b2d33', 0, bottom + 2.12, -0.9 + i * 0.36);
+      // mástil
+      for (const sx of [1, -1]) b.box(0.09, 2.2, 0.14, '#4a4e69', sx * 0.36, bottom + 1.28, 0.55);
+      b.box(0.8, 0.08, 0.1, '#4a4e69', 0, bottom + 2.34, 0.55);
+      b.cyl(0.05, 0.05, 1.2, 6, CHROME, 0, bottom + 0.95, 0.5); // pistón
+      for (const sx of [1, -1]) b.box(0.05, 0.3, 0.9, '#1b1b1b', sx * (hx - 0.02), bottom + 0.36, -0.1); // guardabarros
+      decals.push(...sideDecals('PUERTO\nPAQUETE', 'Carga · Descarga · Susto', Y, '#1b1b1b', 0.95, 0.42, hx + 0.012, bottom + 0.38, -0.55, live));
+      L.box(0.14, 0.12, 0.05, '#fff6c8', 0.52, bottom + 1.9, 0.32);
+      L.box(0.14, 0.12, 0.05, '#fff6c8', -0.52, bottom + 1.9, 0.32);
+      L.box(0.18, 0.14, 0.18, '#ff9f1c', 0.4, bottom + 2.2, -0.9); // rotativo naranja
+      lightsBack(bottom + 0.72, -hz - 0.01, hx * 0.72, 0.14);
+      // horquilla con palé y paquetes (pieza aparte: sube y baja)
+      const fg = new GeoBuilder();
+      fg.box(0.86, 0.5, 0.06, '#2b2d33', 0, 0.25, 0); // tablero
+      for (let i = 0; i < 4; i++) fg.box(0.05, 0.5, 0.04, '#1b1b1b', -0.3 + i * 0.2, 0.55, 0);
+      for (const sx of [1, -1]) fg.box(0.12, 0.05, 0.86, '#6c757d', sx * 0.24, 0.0, 0.44); // púas
+      fg.box(0.84, 0.12, 0.76, '#c8915a', 0, 0.09, 0.46); // palé
+      for (let i = 0; i < 3; i++) fg.box(0.84, 0.02, 0.1, '#8d6b3a', 0, 0.16, 0.18 + i * 0.28);
+      fg.box(0.4, 0.3, 0.34, '#c8915a', 0.2, 0.32, 0.3); // paquetes
+      fg.box(0.4, 0.04, 0.05, '#e9c46a', 0.2, 0.47, 0.3);
+      fg.box(0.34, 0.24, 0.3, '#b07b48', -0.2, 0.29, 0.62);
+      fg.box(0.3, 0.2, 0.26, '#d4a373', -0.18, 0.5, 0.25);
+      partGeo = fg.build();
+      partPos.set(0, bottom + 0.08, 0.62);
+      break;
+    }
     default: {
       // Turismos: compact, taxi, sports, suv, police
       const k = spec.kind;
@@ -439,6 +617,15 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
   group.add(lights);
   for (const d of decals) group.add(d);
   if (siren) group.add(siren);
+  let part: THREE.Mesh | null = null;
+  if (partGeo) {
+    part = new THREE.Mesh(live ? withGlow(partGeo, 0) : partGeo, vehicleBodyMaterial);
+    part.position.copy(partPos);
+    part.castShadow = true;
+    part.receiveShadow = true;
+    part.userData.rest = partPos.clone();
+    group.add(part);
+  }
 
   // ruedas
   const wheels: THREE.Object3D[] = [];
@@ -474,7 +661,7 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.
     wheels.push(pivot);
   });
 
-  return { group, body, wheels, lights, siren, bodyGeo, wheelSlots: pool ? slots : null };
+  return { group, body, wheels, lights, siren, bodyGeo, wheelSlots: pool ? slots : null, part };
 }
 
 /** Enciende faros de noche (material compartido). */

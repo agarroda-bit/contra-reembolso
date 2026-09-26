@@ -119,7 +119,7 @@ export class Vehicle {
       RAPIER.ColliderDesc.cuboid(hx, hy, hz)
         .setMassProperties(s.mass, { x: 0, y: -hy * 0.55, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 })
         .setFriction(0.4)
-        .setRestitution(0.1)
+        .setRestitution(s.restitution ?? 0.1)
         .setCollisionGroups(groups(G.VEHICLE, G.ALL & ~G.TRIGGER & ~G.PROP))
         .setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS),
       this.body,
@@ -143,7 +143,7 @@ export class Vehicle {
       c.setWheelSuspensionRelaxation(i, s.damping * 1.2);
       c.setWheelMaxSuspensionTravel(i, s.suspension * 1.2);
       c.setWheelFrictionSlip(i, s.friction);
-      c.setWheelSideFrictionStiffness(i, 1);
+      c.setWheelSideFrictionStiffness(i, (s.sideGrip ?? 1) * (i >= 2 ? s.rearGrip ?? 1 : 1));
       c.setWheelMaxSuspensionForce(i, s.mass * 60);
     }
     this.controller = c;
@@ -226,8 +226,14 @@ export class Vehicle {
     const steerLimit = (s.steer / (1 + Math.pow(absSpeed / 8, 1.7))) * (ctl.handbrake ? 1.5 : 1);
     const targetSteer = -ctl.steer * steerLimit;
     this.steerSmooth += (targetSteer - this.steerSmooth) * Math.min(1, dt * 8);
-    c.setWheelSteering(0, this.steerSmooth);
-    c.setWheelSteering(1, this.steerSmooth);
+    if (s.rearSteer) {
+      // carretilla: giran las de atrás (al revés), la cola barre hacia fuera
+      c.setWheelSteering(2, -this.steerSmooth);
+      c.setWheelSteering(3, -this.steerSmooth);
+    } else {
+      c.setWheelSteering(0, this.steerSmooth);
+      c.setWheelSteering(1, this.steerSmooth);
+    }
 
     // Motor, freno y marcha atrás
     let engine = 0;
@@ -259,18 +265,20 @@ export class Vehicle {
     }
     // Freno de mano: bloquea detrás y quita agarre (derrape)
     const grip = s.friction * (1 + up.tires * 0.12);
+    const side = s.sideGrip ?? 1;
+    const rearSide = side * (s.rearGrip ?? 1);
     if (ctl.handbrake) {
       c.setWheelBrake(2, s.brake * HANDBRAKE_K);
       c.setWheelBrake(3, s.brake * HANDBRAKE_K);
       c.setWheelFrictionSlip(2, grip * 0.35);
       c.setWheelFrictionSlip(3, grip * 0.35);
-      c.setWheelSideFrictionStiffness(2, 0.35);
-      c.setWheelSideFrictionStiffness(3, 0.35);
+      c.setWheelSideFrictionStiffness(2, 0.35 * rearSide);
+      c.setWheelSideFrictionStiffness(3, 0.35 * rearSide);
     } else {
       c.setWheelFrictionSlip(2, grip);
       c.setWheelFrictionSlip(3, grip);
-      c.setWheelSideFrictionStiffness(2, 1);
-      c.setWheelSideFrictionStiffness(3, 1);
+      c.setWheelSideFrictionStiffness(2, rearSide);
+      c.setWheelSideFrictionStiffness(3, rearSide);
       c.setWheelFrictionSlip(0, grip);
       c.setWheelFrictionSlip(1, grip);
     }
@@ -288,14 +296,16 @@ export class Vehicle {
     // (o al contravolantear) se frena el trompo, para que derrapar sea fácil de controlar.
     if (contacts >= 2 && !s.twoWheels) {
       const w = this.body.angvel();
-      if (ctl.handbrake && absSpeed > 5 && Math.abs(ctl.steer) > 0.1) {
+      // el sofá derrapa siempre, como si llevara el freno de mano echado
+      const drifting = ctl.handbrake || (s.drifty !== undefined && absSpeed > 3);
+      if (drifting && absSpeed > 3 && (s.drifty !== undefined || absSpeed > 5) && Math.abs(ctl.steer) > 0.1) {
         // volante a la derecha (steer > 0) = giro negativo alrededor de Y
-        const target = -(this.speed < 0 ? -1 : 1) * ctl.steer * 3 * THREE.MathUtils.clamp(1500 / s.mass, 0.35, 1);
+        const target = -(this.speed < 0 ? -1 : 1) * ctl.steer * (ctl.handbrake ? 3 : s.drifty ?? 3) * THREE.MathUtils.clamp(1500 / s.mass, 0.35, 1);
         if (Math.sign(w.y) !== Math.sign(target) || Math.abs(w.y) < Math.abs(target)) {
           this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, wake);
         }
       } else if (!ctl.handbrake && this.slip > 2.5 && ctl.steer * w.y >= 0) {
-        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * 2.5)), z: w.z }, wake);
+        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * (s.spinDamp ?? 2.5))), z: w.z }, wake);
       }
     }
 
@@ -401,11 +411,11 @@ export class Vehicle {
     this.onImpact?.(dv, this);
     this.game.events.emit('vehicle:impact' as any, { vehicle: this, dv } as any);
     // abolladura visual
-    if (dv > 8) this.dent(dv);
+    if (dv > 8 && !s.invulnerable) this.dent(dv);
   }
 
   damage(amount: number) {
-    if (this.destroyed) return;
+    if (this.destroyed || this.spec.invulnerable) return;
     this.health -= amount;
     if (this.health <= 0) {
       this.health = 0;
@@ -513,7 +523,7 @@ export class Vehicle {
       const pivot = this.mesh.wheels[i];
       const susp = c.wheelSuspensionLength(i) ?? s.suspension;
       pivot.position.y = s.wheelY - susp;
-      const steer = i < 2 ? c.wheelSteering(i) ?? 0 : 0;
+      const steer = (i < 2) !== !!s.rearSteer ? c.wheelSteering(i) ?? 0 : 0;
       this.wheelSpin[i] = (this.wheelSpin[i] + (this.speed / s.wheelRadius) * dt) % TWO_PI;
       const slot = slots?.[i];
       if (slot) {
@@ -548,6 +558,7 @@ export class Vehicle {
     this.mesh.bodyGeo.dispose();
     this.mesh.lights.geometry.dispose();
     this.mesh.siren?.geometry.dispose();
+    this.mesh.part?.geometry.dispose();
     // carteles laterales: la geometría es de este vehículo (la textura es compartida)
     for (const ch of this.mesh.group.children) if (ch.userData.decal && (ch as THREE.Mesh).isMesh) (ch as THREE.Mesh).geometry.dispose();
     g.physics.untag(this.collider);

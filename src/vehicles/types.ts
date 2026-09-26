@@ -17,7 +17,11 @@ export type VehicleKind =
   | 'garbage' // camión de la basura
   | 'golf' // carrito de golf del casino
   | 'crane' // grúa del puerto
-  | 'armored'; // camión blindado de El Devolución
+  | 'armored' // camión blindado de El Devolución
+  | 'granny' // silla eléctrica de la yaya (fase 9)
+  | 'paella' // paella-móvil (fase 9)
+  | 'sofa' // sofá con motor del rastro (fase 9)
+  | 'forklift'; // carretilla elevadora del puerto (fase 9)
 
 export interface VehicleSpec {
   kind: VehicleKind;
@@ -56,6 +60,20 @@ export interface VehicleSpec {
   colors: string[];
   price?: number; // en el concesionario
   heavy?: boolean; // admite paquetes PESADOS
+  /** Agarre lateral de las ruedas (1 = normal; más bajo = va de lado todo el rato). */
+  sideGrip?: number;
+  /** Agarre lateral de las de atrás respecto a las de delante (menos de 1 = la cola se va: derrapa). */
+  rearGrip?: number;
+  /** Cuánto frena el trompo la ayuda arcade al soltar el freno de mano (2,5 = normal). */
+  spinDamp?: number;
+  /** Derrapa siempre al girar, sin freno de mano: giro (rad/s) al que tiende con el volante a tope. */
+  drifty?: number;
+  /** Gira con las ruedas de atrás (carretilla elevadora). */
+  rearSteer?: boolean;
+  /** No recibe daño de nada (la silla de la yaya). */
+  invulnerable?: boolean;
+  /** Rebote del chasis contra lo que choca (0,1 = normal). */
+  restitution?: number;
 }
 
 const CIVIL_COLORS = ['#e63946', '#f1faee', '#457b9d', '#2a9d8f', '#e9c46a', '#f4a261', '#8d99ae', '#3d405b', '#81b29a', '#f2cc8f', '#6d597a', '#ff6b6b'];
@@ -221,6 +239,46 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     seat: { x: 0.55, y: 0.5, z: 2.4 }, pose: 'drive',
     colors: ['#4a2a8a'], heavy: true,
   },
+  granny: {
+    kind: 'granny', name: 'Silla eléctrica de la yaya',
+    half: { x: 0.42, y: 0.42, z: 0.72 }, mass: 380,
+    wheelX: 0.34, wheelZFront: 0.5, wheelZBack: -0.46, wheelY: -0.22, wheelRadius: 0.16,
+    suspension: 0.16, stiffness: 44, damping: 4.5, friction: 2.8,
+    engine: 300, maxSpeed: 6, reverseSpeed: 2.2, brake: 14, steer: 0.8, drive: 'rwd',
+    health: 1000, capacity: 1, camDistance: 4.6, camHeight: 2.0,
+    seat: { x: 0, y: 0, z: -0.12 }, pose: 'drive', invulnerable: true, tough: true,
+    colors: ['#e63946', '#7b2cbf', '#2a9d8f', '#3a86ff'],
+  },
+  paella: {
+    kind: 'paella', name: 'Paella-móvil',
+    half: { x: 0.95, y: 1.0, z: 2.1 }, mass: 1700,
+    wheelX: 0.86, wheelZFront: 1.35, wheelZBack: -1.3, wheelY: -0.6, wheelRadius: 0.38,
+    suspension: 0.36, stiffness: 26, damping: 3.2, friction: 2.4,
+    engine: 3900, maxSpeed: 26, reverseSpeed: 8, brake: 75, steer: 0.6, drive: 'rwd',
+    health: 1300, capacity: 4, camDistance: 8, camHeight: 3.0,
+    seat: { x: 0.42, y: 0.05, z: 0.95 }, pose: 'drive',
+    colors: ['#ff9f1c'],
+  },
+  sofa: {
+    kind: 'sofa', name: 'Sofá con motor del rastro',
+    half: { x: 0.95, y: 0.42, z: 0.5 }, mass: 260,
+    wheelX: 0.78, wheelZFront: 0.34, wheelZBack: -0.34, wheelY: -0.24, wheelRadius: 0.14,
+    suspension: 0.16, stiffness: 40, damping: 4.2, friction: 1.5,
+    engine: 700, maxSpeed: 16, reverseSpeed: 5, brake: 16, steer: 0.55, drive: 'rwd',
+    health: 600, capacity: 3, camDistance: 5.4, camHeight: 2.2,
+    seat: { x: 0, y: 0, z: -0.05 }, pose: 'drive', sideGrip: 0.08, rearGrip: 0.6, drifty: 2.2, spinDamp: 1.2,
+    colors: ['#7f5539', '#588157', '#bc4749', '#6d597a'],
+  },
+  forklift: {
+    kind: 'forklift', name: 'Carretilla elevadora del puerto',
+    half: { x: 0.62, y: 0.62, z: 1.45 }, mass: 2600,
+    wheelX: 0.5, wheelZFront: 0.42, wheelZBack: -0.95, wheelY: -0.3, wheelRadius: 0.28,
+    suspension: 0.2, stiffness: 55, damping: 5, friction: 2.4,
+    engine: 4200, maxSpeed: 11, reverseSpeed: 10, brake: 110, steer: 0.85, drive: 'fwd',
+    health: 3000, capacity: 2, tough: true, rearSteer: true, camDistance: 7, camHeight: 3.0,
+    seat: { x: 0, y: 0.1, z: -0.45 }, pose: 'drive',
+    colors: ['#ffc300'],
+  },
 };
 
 /**
@@ -239,3 +297,6 @@ export function seatTransform(s: VehicleSpec): { x: number; y: number; z: number
 
 /** Coches que aparecen como tráfico normal. */
 export const TRAFFIC_KINDS: VehicleKind[] = ['compact', 'compact', 'compact', 'taxi', 'sports', 'suv', 'truck', 'scooter'];
+
+/** Vehículos locos que de vez en cuando se ven circulando (poco frecuentes). */
+export const CRAZY_TRAFFIC_KINDS: VehicleKind[] = ['granny', 'paella', 'sofa', 'forklift', 'golf'];
