@@ -174,6 +174,11 @@ export class Company implements System {
     this.game.mod.messages?.receive('empresa', 'Contra Reembolso S.L.', '🏢', `Resumen del día: ${fmt(total)} ingresados en el banco.\n${lines.join('\n')}`);
   }
 
+  /** Vuelve a pintar lo que se ve de la empresa (tras cargar partida). */
+  refresh() {
+    this.refreshDecor();
+  }
+
   private refreshDecor() {
     const g = this.game;
     for (const o of this.decor) g.scene.remove(o);
