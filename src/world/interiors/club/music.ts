@@ -137,7 +137,8 @@ export class ClubMusic {
 
   /** Pulsos desde que empezó (con decimales), o null si no suena. */
   beat(): number | null {
-    if (!this.running || !this.ctx) return null;
+    // con el audio suspendido (sin gesto del usuario, Safari...) el reloj no avanza: que las luces sigan solas
+    if (!this.running || !this.ctx || this.ctx.state !== 'running') return null;
     return Math.max(0, (this.ctx.currentTime - this.t0) / (STEP * 4));
   }
 

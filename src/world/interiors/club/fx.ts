@@ -2,9 +2,11 @@
 // sus puntitos, humo bajo, pantalla LED, confeti, bengalas, chorros de CO2 y las luces reales (3).
 // Todo barato: instancias, mezcla aditiva y shaders cortos. Solo se actualiza mientras estás dentro.
 import * as THREE from 'three';
-import { ROOM, FLOOR, BALL, DJ, floorAt } from './layout';
+import { ROOM, FLOOR, BALL, DJ, VIP, floorAt } from './layout';
 import { BEAM_ORIGINS, BEAM_Y, type RoomParts } from './room';
-import { dotTexture, spotTexture, tileTexture, noiseTexture, ledTextTexture, drawLedText } from './textures';
+import {
+  dotTexture, spotTexture, tileTexture, noiseTexture, ledTextTexture, drawLedText, LED_CANVAS_W, LED_VISIBLE_PX,
+} from './textures';
 
 export interface FxState {
   /** Pulsos desde que empezó la música (con decimales). */
@@ -110,6 +112,8 @@ uniform float uBeat;
 uniform float uKick;
 uniform float uParty;
 uniform float uScroll;
+uniform float uSpan;
+uniform float uUsed;
 uniform sampler2D uText;
 uniform vec3 uColA;
 uniform vec3 uColB;
@@ -120,9 +124,13 @@ vec3 hsv(float h, float s, float v) {
 }
 void main() {
   vec2 grid = vec2(160.0, 60.0);
-  vec2 cell = floor(vUv * grid);
-  vec2 f = fract(vUv * grid) - 0.5;
-  float led = smoothstep(0.5, 0.3, length(f));
+  vec2 gp = vUv * grid;
+  vec2 cell = floor(gp);
+  vec2 f = fract(gp) - 0.5;
+  // puntitos del LED; de lejos se funden en una media para que no salga moiré
+  vec2 fw = fwidth(gp);
+  float blur = clamp(max(fw.x, fw.y) * 1.6 - 0.4, 0.0, 1.0);
+  float led = mix(smoothstep(0.5, 0.3, length(f)), 0.62, blur);
   vec2 c = (cell + 0.5) / grid;
   float w = sin(c.x * 9.0 + uTime * 1.3) + sin(c.y * 7.0 - uTime * 0.9) + sin((c.x + c.y) * 6.0 + uBeat * 1.5708);
   vec3 col = mix(uColA, uColB, 0.5 + 0.22 * w) * (0.16 + 0.14 * uKick + 0.1 * uParty);
@@ -131,9 +139,9 @@ void main() {
   float lvl = 0.2 + 0.55 * fract(sin(bi * 12.9898 + floor(uBeat * 2.0) * 78.233) * 43758.5453) * (0.45 + 0.55 * uKick);
   lvl *= 1.0 - smoothstep(0.35, 0.5, abs(c.x - 0.5)) * 0.4;
   if (c.y < lvl * 0.42) col = mix(col, hsv(0.92 - c.y * 1.4 + uParty * uTime * 0.2, 0.85, 1.0), 0.9);
-  // texto que pasa
-  float band = step(0.5, c.y) * step(c.y, 0.92);
-  vec2 tuv = vec2(c.x * 0.33 + uScroll, (c.y - 0.5) / 0.42);
+  // texto que pasa (letra de tamaño fijo: se ven unas 13 letras de una vez)
+  float band = step(0.47, c.y) * step(c.y, 0.95);
+  vec2 tuv = vec2(mod(c.x * uSpan + uScroll, uUsed), (c.y - 0.47) / 0.48);
   float txt = texture2D(uText, tuv).r * band;
   vec3 tc = mix(vec3(1.0, 0.82, 0.2), hsv(fract(uTime * 0.3 + c.x), 0.7, 1.0), uParty);
   col = mix(col, tc, txt);
@@ -186,6 +194,8 @@ export class ClubFx {
   private ledCanvas: HTMLCanvasElement;
   private ledTex: THREE.CanvasTexture;
   private ledScroll = 0;
+  /** Fracción del lienzo del LED que ocupa el texto actual. */
+  private ledUsed = 1;
   private confetti: Confetto[] = [];
   private confettiMesh: THREE.InstancedMesh;
   private rainTimer = 0;
@@ -360,6 +370,7 @@ export class ClubFx {
     // ── Pantalla LED detrás del DJ ──
     this.ledTex = ledTextTexture(LED_TEXT);
     this.ledCanvas = this.ledTex.image as HTMLCanvasElement;
+    this.ledUsed = drawLedText(this.ledCanvas.getContext('2d')!, LED_TEXT);
     this.led = new THREE.ShaderMaterial({
       vertexShader: LED_VERT,
       fragmentShader: LED_FRAG,
@@ -369,6 +380,8 @@ export class ClubFx {
         uKick: { value: 0 },
         uParty: { value: 0 },
         uScroll: { value: 0 },
+        uSpan: { value: LED_VISIBLE_PX / LED_CANVAS_W },
+        uUsed: { value: this.ledUsed },
         uText: { value: this.ledTex },
         uColA: { value: new THREE.Color('#6c3bd1') },
         uColB: { value: new THREE.Color('#ff2e88') },
@@ -459,7 +472,9 @@ export class ClubFx {
   }
 
   setLedText(text: string) {
-    drawLedText(this.ledCanvas.getContext('2d')!, text);
+    this.ledUsed = drawLedText(this.ledCanvas.getContext('2d')!, text);
+    this.led.uniforms.uUsed.value = this.ledUsed;
+    this.ledScroll = 0; // el mensaje nuevo empieza por el principio
     this.ledTex.needsUpdate = true;
   }
 
@@ -492,6 +507,21 @@ export class ClubFx {
     for (const j of this.jets) {
       j.t = 1.1;
       j.mesh.visible = true;
+    }
+  }
+
+  /** Quita confeti, chispas, bengalas y chorros a medias (al salir del club). */
+  clearTransient() {
+    for (const c of this.confetti) c.alive = false;
+    this.confettiMesh.count = 0;
+    for (const sp of this.sparks) sp.age = sp.life = 1;
+    this.sparkGeo.setDrawRange(0, 0);
+    this.emitters.length = 0;
+    this.rainTimer = 0;
+    this.flash = 0;
+    for (const j of this.jets) {
+      j.t = 0;
+      j.mesh.visible = false;
     }
   }
 
@@ -619,7 +649,7 @@ export class ClubFx {
     }
 
     // ── pantalla LED ──
-    this.ledScroll += dt * (0.05 + party * 0.05);
+    this.ledScroll = (this.ledScroll + (dt * (120 + party * 60)) / LED_CANVAS_W) % this.ledUsed;
     const u = this.led.uniforms;
     u.uTime.value = s.time;
     u.uBeat.value = s.beat;
@@ -637,9 +667,14 @@ export class ClubFx {
     L0.intensity = li;
     L1.intensity = li;
     L2.intensity = 22 + party * 18 + this.flash * 30;
-    // la luz cálida acompaña: en la barra si estás en el lado oeste, en la zona VIP si estás en el este
-    const atBar = !!s.player && s.player.x < -1.5;
-    tmpV.set(atBar ? -10.6 : 11.2, atBar ? 3.3 : 3.6, atBar ? -0.8 : -1.2);
+    // la luz cálida acompaña al jugador por zonas: barra, paquetería, reservados o portero/photocall
+    const pl = s.player;
+    if (!pl) tmpV.set(11.2, 3.6, -1.2);
+    else if (pl.x < -1.5) {
+      if (pl.z < 5.5) tmpV.set(-10.6, 3.3, -0.8);
+      else tmpV.set(-10.4, 3.2, 7.0);
+    } else if (pl.z > 3.2 && !(pl.x > VIP.x0 && pl.z < 3.8)) tmpV.set(9.6, 3.3, 6.4);
+    else tmpV.set(11.2, 3.6, -1.2);
     L2.position.lerp(tmpV, Math.min(1, dt * 1.2));
 
     // ── confeti, bengalas y CO2 ──

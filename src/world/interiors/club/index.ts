@@ -215,6 +215,7 @@ export class ClubInterior implements InteriorInstance {
     if (this.carry) this.carry.t = 0;
     this.carry = null;
     this.music.stop();
+    this.fx.clearTransient();
     this.fx.setActive(false);
     this.root.visible = false;
     if (this.lampGroup) this.lampGroup.visible = true;
@@ -484,6 +485,11 @@ export class ClubInterior implements InteriorInstance {
     const g = this.game;
     this.setRope(true);
     this.applyState(true, false);
+    if (!this.inside) {
+      // comprada desde fuera (p. ej. desde el móvil): nada de teletransportes ni planos de cine
+      g.events.emit('toast', { text: `🛋️ Mesa VIP reservada en el Club Reembolso para esta noche. +${CLUB_FAME.table} FAMA`, color: '#ffd23f', time: 4 });
+      return;
+    }
     g.mod.bubbles?.say(this.crowd.worldPos(this.crowd.portero), pick(PORTERO_YES), 3);
     this.fadeCut(() => {
       this.sitDown(true);
@@ -507,6 +513,11 @@ export class ClubInterior implements InteriorInstance {
   /** Botella: aparece en tu mesa con bengala, confeti, bocina y aplausos. */
   celebrateBottle() {
     const g = this.game;
+    if (!this.inside) {
+      this.showBottles(this.state.bottlesTonight - this.pending);
+      g.events.emit('toast', { text: `🍾 Botella reservada: te espera en tu mesa del Club Reembolso. +${CLUB_FAME.bottle} FAMA`, color: '#ffd23f', time: 3.5 });
+      return;
+    }
     // la camarera sale de la cava con la botella en alto y la bengala encendida
     const first = !this.crowd.delivering;
     this.pending++;
@@ -554,9 +565,10 @@ export class ClubInterior implements InteriorInstance {
   /** Te sientas en tu reservado (con fundido si vienes de lejos). */
   sitDown(instant: boolean) {
     const p = this.player;
-    if (!p) return;
+    if (!p || !this.inside) return;
     const seat = boothBackSeat(BOOTHS[MY_BOOTH], 0.15);
     const doIt = () => {
+      if (!this.inside || p.state !== 'foot') return; // por si has salido durante el fundido
       p.teleport(this.toWorld(seat), -Math.PI / 2);
       p.velocity?.set?.(0, 0, 0);
       p.pose = 'sit';
@@ -577,7 +589,7 @@ export class ClubInterior implements InteriorInstance {
   dance() {
     const g = this.game;
     const p = this.player;
-    if (!p) return;
+    if (!p || !this.inside) return;
     const st = this.state;
     const style = st.dances % 6;
     st.dances++;

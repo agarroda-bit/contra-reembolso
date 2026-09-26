@@ -193,7 +193,7 @@ export function neonCanvas(w: number, h: number, draw: (g: CanvasRenderingContex
 
 /** Texto para la pantalla LED (blanco sobre negro, se usa como máscara). */
 export function ledTextTexture(text: string): THREE.CanvasTexture {
-  const [c, g] = makeCanvas(2048, 128);
+  const [c, g] = makeCanvas(LED_CANVAS_W, LED_CANVAS_H);
   drawLedText(g, text);
   const t = tex(c, false);
   t.wrapS = THREE.RepeatWrapping;
@@ -202,21 +202,30 @@ export function ledTextTexture(text: string): THREE.CanvasTexture {
   return t;
 }
 
-export function drawLedText(g: CanvasRenderingContext2D, text: string) {
+/** Tamaño del lienzo de la pantalla LED y ancho (px) que se ve de una vez (unas 13 letras). */
+export const LED_CANVAS_W = 4096;
+export const LED_CANVAS_H = 96;
+export const LED_VISIBLE_PX = 540;
+
+/**
+ * Pinta el texto de la pantalla LED con letra de tamaño fijo (para que se lea igual siempre).
+ * Devuelve la fracción del lienzo que ocupa el texto (el shader da la vuelta ahí).
+ */
+export function drawLedText(g: CanvasRenderingContext2D, text: string): number {
   const w = g.canvas.width, h = g.canvas.height;
   g.fillStyle = '#000';
   g.fillRect(0, 0, w, h);
   g.fillStyle = '#fff';
   g.textBaseline = 'middle';
   g.textAlign = 'left';
-  let size = 92;
+  let size = 64;
   g.font = `900 ${size}px ${NEON_FONT}`;
-  // que quepa entero (el texto da la vuelta a la pantalla)
-  while (g.measureText(text).width > w - 40 && size > 40) {
-    size -= 4;
+  // si el texto es muy largo, se encoge un poco para que quepa
+  while (g.measureText(text).width > w - 60 && size > 36) {
+    size -= 2;
     g.font = `900 ${size}px ${NEON_FONT}`;
   }
   const tw = g.measureText(text).width;
-  // repartido para que el bucle sea continuo
-  g.fillText(text, (w - tw) / 2, h / 2 + 4);
+  g.fillText(text, 20, h / 2 + size * 0.06);
+  return Math.min(1, (tw + 40) / w);
 }

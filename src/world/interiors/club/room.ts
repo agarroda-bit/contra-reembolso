@@ -7,9 +7,9 @@ import { GeoBuilder, vertexColorMaterial, shade } from '../../../core/geo';
 import type { InteriorContext } from '../index';
 import {
   ROOM, FLOOR, DJ, BAR, STOOLS, VIP, STAIRS, BOOTHS, MY_BOOTH, BOOTH, PODIUMS, PODIUM_R, PODIUM_H,
-  HIGH_TABLES, BALL, FRIDGE,
+  HIGH_TABLES, BALL, FRIDGE, PORTERO_SPOT,
 } from './layout';
-import { neonCanvas, neonText, neonPath, SCRIPT_FONT, NEON_FONT } from './textures';
+import { neonCanvas, neonText, neonPath, spotTexture, SCRIPT_FONT, NEON_FONT } from './textures';
 
 export const C = {
   floor: '#1a1224',
@@ -392,6 +392,32 @@ export function buildRoom(ctx: InteriorContext): RoomParts {
     shiny.box(0.04, 0.5, 0.05, C.chrome, f.x + 0.3, f.y + 0.95, f.z - 0.36);
     glow.box(0.85, 0.04, 0.04, C.gold, f.x, f.y + 1.72, f.z - 0.3);
     ctx.addBox(f.x, f.y + 0.85, f.z, 0.43, 0.85, 0.31);
+  }
+
+  // atril del portero con la «lista VIP» y su lamparita (para que se le vea bien en la penumbra)
+  {
+    const x = PORTERO_SPOT.x - 0.75, z = PORTERO_SPOT.z + 0.85;
+    shiny.box(0.52, 0.04, 0.42, C.goldMetal, x, 0.02, z);
+    lit.box(0.4, 1.0, 0.3, '#1c1a24', x, 0.52, z);
+    glow.box(0.02, 0.16, 0.24, C.gold, x - 0.21, 0.78, z);
+    lit.box(0.56, 0.05, 0.44, '#15121e', x, 1.07, z, 0, 0, 0.28);
+    glow.box(0.3, 0.012, 0.34, '#fff1d6', x - 0.02, 1.1, z, 0, 0, 0.28);
+    // flexo dorado con bombilla cálida
+    shiny.cyl(0.012, 0.012, 0.42, 5, C.goldMetal, x + 0.2, 1.3, z + 0.12);
+    shiny.cyl(0.012, 0.012, 0.3, 5, C.goldMetal, x + 0.08, 1.54, z + 0.12, 0, 0, 1.1);
+    shiny.cyl(0.03, 0.075, 0.1, 8, C.goldMetal, x - 0.06, 1.52, z + 0.12);
+    glow.sphere(0.04, '#ffe2a8', x - 0.06, 1.47, z + 0.12, 1);
+    ctx.addBox(x, 0.55, z, 0.26, 0.55, 0.21);
+    // charco de luz cálida en el suelo, delante del portero
+    const pool = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.4, 3.4).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({
+        map: spotTexture(), color: '#8a4a1c', blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, toneMapped: false,
+      }),
+    );
+    pool.position.set(PORTERO_SPOT.x - 0.4, 0.03, PORTERO_SPOT.z + 0.2);
+    pool.renderOrder = 2;
+    root.add(pool);
   }
 
   // plantas entre reservados
