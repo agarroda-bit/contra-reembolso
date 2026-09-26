@@ -980,7 +980,7 @@
   overflow: hidden;
 }
 /* la más nueva enseña un poco más de texto (los mensajes del tutorial son largos) */
-.hud-notif:first-child .hud-notif__texto { -webkit-line-clamp: 3; }
+.hud-notif:first-child .hud-notif__texto { -webkit-line-clamp: 4; }
 /* sin sitio (p. ej. en coche con pantalla baja): las antiguas se quedan en cabecera + título */
 .hud-notifs--compacta .hud-notif + .hud-notif { align-items: center; padding-top: 6px; padding-bottom: 6px; }
 .hud-notifs--compacta .hud-notif + .hud-notif .hud-notif__texto { display: none; }

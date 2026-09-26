@@ -26,7 +26,7 @@ export class PhotoMode implements System {
     this.panel = document.createElement('div');
     this.panel.style.cssText =
       'position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:58;display:none;gap:8px;align-items:center;pointer-events:auto;' +
-      'background:rgba(27,16,48,.85);border:3px solid #ffd23f;border-radius:18px;padding:10px 14px;font:800 14px system-ui;color:#fff;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)';
+      'background:rgba(27,16,48,.88);border:3px solid #ffd23f;border-radius:18px;padding:10px 14px;font:800 15px system-ui;color:#fff;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)';
     game.ui.appendChild(this.panel);
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyK' && !(game as any).menuOpen && !game.mod.phone?.open) {
@@ -54,7 +54,7 @@ export class PhotoMode implements System {
   private button(text: string, fn: () => void) {
     const b = document.createElement('button');
     b.textContent = text;
-    b.style.cssText = 'font:800 14px system-ui;border:2px solid #1b1030;border-radius:10px;background:#ffd23f;color:#1b1030;padding:6px 10px;cursor:pointer';
+    b.style.cssText = 'font:800 15px system-ui;border:2px solid #1b1030;border-radius:10px;background:#ffd23f;color:#1b1030;padding:7px 11px;cursor:pointer';
     b.onclick = (e) => {
       e.stopPropagation();
       fn();
@@ -66,6 +66,7 @@ export class PhotoMode implements System {
   enter() {
     const g = this.game;
     this.active = true;
+    this.poseIdx = 0; // al salir se vuelve a la pose normal
     g.paused = true;
     g.input.exitPointerLock();
     this.hudWas = g.hud.visible;
@@ -76,22 +77,27 @@ export class PhotoMode implements System {
     this.target.y += 1.1;
     this.yaw = (g.mod.cameraRig?.yaw ?? 0);
     this.panel.innerHTML = '<span>📸 MODO FOTO · arrastra para girar, rueda para acercar</span>';
-    this.button('🌅 Hora', () => {
+    // los botones dicen lo que hay puesto (hora y pose), no solo lo que hacen
+    const hourLabel = () => `🌅 Hora: ${String(Math.floor(g.clock.hour)).padStart(2, '0')}:${String(Math.floor((g.clock.hour % 1) * 60)).padStart(2, '0')}`;
+    const hourBtn = this.button(hourLabel(), () => {
       const hours = [8, 12, 17, 19.5, 20.5, 23];
       const i = hours.findIndex((h) => h > g.clock.hour + 0.1);
       g.clock.hour = hours[i < 0 ? 0 : i];
       g.mod.dayNight?.setHour?.(g.clock.hour);
       // un paso de actualización del cielo sin mover el juego
       for (const s of g.systems) if (s.name === 'dayNight') s.update?.(0.0001);
+      hourBtn.textContent = hourLabel();
     });
-    this.button('🕺 Pose', () => {
+    const poseLabel = () => `🕺 Pose: ${POSES[this.poseIdx][1]}`;
+    const poseBtn = this.button(poseLabel(), () => {
       this.poseIdx = (this.poseIdx + 1) % POSES.length;
       const pl = g.mod.player;
       pl.pose = POSES[this.poseIdx][0];
       pl.rig?.update(0.5, { speed: 0, grounded: true, pose: pl.pose });
+      poseBtn.textContent = poseLabel();
     });
     this.button('💾 Guardar foto', () => this.snap());
-    this.button('✕ Salir (K)', () => this.exit());
+    this.button('✕ Salir (K o Esc)', () => this.exit());
     this.panel.style.display = 'flex';
     g.events.emit('photo:enter' as any, {} as any);
   }

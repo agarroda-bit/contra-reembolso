@@ -8,7 +8,7 @@ import { PAD, PadEdges, padNavigate, padFocusCss } from './pad';
 type Screen = 'home' | 'chats' | 'chat' | 'bank' | 'fame' | 'garage' | 'help';
 
 const CSS = `
-.cr-movil{box-sizing:border-box;position:fixed;right:28px;bottom:24px;width:340px;height:min(620px,calc(100vh - 128px));min-height:420px;z-index:30;
+.cr-movil{box-sizing:border-box;position:fixed;right:28px;bottom:24px;width:340px;height:min(620px,calc(100vh - 142px));min-height:420px;z-index:30;
   background:#1b1030;border-radius:42px;padding:14px;box-shadow:0 0 0 4px #2b1d4a,10px 12px 0 rgba(0,0,0,.35);
   transform:translateY(110%) rotate(4deg);transition:transform .32s cubic-bezier(.2,1.3,.4,1);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;pointer-events:auto}
 .cr-movil.abierto{transform:translateY(0) rotate(-2deg)}
@@ -252,8 +252,8 @@ export class Phone implements System {
         const eco = this.game.mod.economy;
         b.innerHTML = `<div class="cr-tarjeta"><h3>EN EL BANCO</h3><div class="gordo">${fmt(eco?.bank ?? 0)}</div></div>
           <div class="cr-tarjeta"><h3>EFECTIVO ENCIMA</h3><div class="gordo">${fmt(eco?.cash ?? 0)}</div>
-          <p style="font:600 13px system-ui;margin:8px 0 0">El efectivo se pierde si te matan o te pillan. Ingrésalo en un cajero 🏧 (oficina, Centro y otro más).</p></div>
-          <div class="cr-tarjeta"><h3>ESTE MES</h3><div style="font:700 14px/1.6 system-ui">Ganado: ${fmt(eco?.stats.earned ?? 0)}<br>Gastado: ${fmt(eco?.stats.spent ?? 0)}<br>Perdido: ${fmt(eco?.stats.lost ?? 0)}<br>Entregas: ${eco?.stats.deliveries ?? 0} (${eco?.stats.perfect ?? 0} perfectas)</div></div>`;
+          <p style="font:600 13px system-ui;margin:8px 0 0">El efectivo se pierde si te matan o te pillan. Ingrésalo en un cajero 🏧 (los tienes en el mapa, con la M).</p></div>
+          <div class="cr-tarjeta"><h3>EN TOTAL</h3><div style="font:700 14px/1.6 system-ui">Ganado: ${fmt(eco?.stats.earned ?? 0)}<br>Gastado: ${fmt(eco?.stats.spent ?? 0)}<br>Perdido: ${fmt(eco?.stats.lost ?? 0)}<br>Entregas: ${eco?.stats.deliveries ?? 0} (${eco?.stats.perfect ?? 0} perfectas)</div></div>`;
         break;
       }
       case 'fame': {
