@@ -530,6 +530,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   f.box(1.1, 0.45, 0.4, '#ffffff', px, 0.225, pz - 1.7);
   f.cyl(0.02, 0.02, 0.3, 6, gold, px + 0.35, 1.2, pz + 0.3, 0.6, 0, 0);
   box(px, 0.8, pz, 0.8, 0.8, 1.1);
+  box(px, 0.225, pz - 1.7, 0.55, 0.225, 0.2);
   // telescopio dorado
   const tx = P.telescope.x, tz = P.telescope.z;
   for (let k = 0; k < 3; k++) {
@@ -1087,6 +1088,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       refreshStatue();
       garage.setCars((game.mod.shops?.owned as OwnedLike[] | undefined) ?? null);
       apply(false);
+      if (attic.items.size === 0) toast(game, 'Tu ático. Precioso… y vacío. La tablet de DECORACIÓN de la entrada vende caprichos.', '#ff4f81', 3.6);
       // compilar los shaders ahora, con la pantalla en negro (si no, tirón al aparecer)
       try {
         game.renderer.compile(root, game.camera, game.scene);

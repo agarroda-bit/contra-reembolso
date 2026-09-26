@@ -64,6 +64,14 @@ const TONI_ANY = [
   'Si vienen Los Devueltos, yo no he visto nada.',
   'Ha venido una abuela a pagar en céntimos. Sigue contando. Está en el baño.',
 ];
+const STAFF_LINES = [
+  'Jefe, hoy he entregado 14 paquetes. Bueno, 13 y medio.',
+  '¿Subida de sueldo? Era broma. ¿O no?',
+  'Los Devueltos me miraron raro. Yo les miré más raro.',
+  'La furgoneta hace un ruido nuevo. Suena a dinero.',
+  'Estoy en mi descanso. Llevo en él desde el martes.',
+  'Un cliente me ha pagado con un vale de descuento. De otra tienda.',
+];
 const COFFEE = [
   'Sabe a cartón mojado. Perfecto.',
   'Café tan fuerte que el paquete se entrega solo.',
@@ -964,6 +972,37 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
   root.add(toni.root);
   const toniTarget = { position: toWorld(P.employee) };
 
+  // ── Tus repartidores (company.staff), de charla por la oficina ──
+  interface StaffSlot { x: number; z: number; heading: number; pose: 'normal' | 'phone' | 'sit'; y?: number }
+  const staffSlot = (i: number, lvl: number, lx: Set<string>): StaffSlot => {
+    if (i === 0) return lx.has('cafe') ? { x: 18.4, z: 10.9, heading: 0.76, pose: 'normal' } : { x: 18.2, z: 11.6, heading: -Math.PI / 2, pose: 'phone' };
+    if (i === 1) return lx.has('billar') ? { x: 9.2, z: 9.0, heading: -Math.PI / 2 - 0.4, pose: 'normal' } : { x: 1.6, z: 6.5, heading: -Math.PI / 2, pose: 'phone' };
+    return lvl === 0 ? { x: 3.25, z: 11.4, heading: Math.PI / 2, pose: 'sit' } : { x: 3.4, z: 1.3, heading: Math.PI, pose: 'normal' };
+  };
+  const staffChars: { ch: Character; id: number; name: string; slot: StaffSlot; target: { position: THREE.Vector3 } }[] = [];
+  let staffKey = '';
+  const refreshStaff = () => {
+    const c = game.mod.company;
+    const list = ((c?.staff as { id: number; name: string }[] | undefined) ?? []).slice(0, 3);
+    const st = companyState(game);
+    const key = list.map((e) => e.id).join(',') + '|' + st.level + '|' + [...st.lux].sort().join(',');
+    if (key === staffKey) return;
+    staffKey = key;
+    for (const s of staffChars) {
+      root.remove(s.ch.root);
+      s.ch.dispose();
+    }
+    staffChars.length = 0;
+    list.forEach((e, i) => {
+      const ch = makeCharacter(randomLook(new Rng('repartidor-' + e.id), 'repartidor'));
+      const slot = staffSlot(i, st.level, st.lux);
+      ch.root.position.set(slot.x, 0, slot.z);
+      ch.root.rotation.y = slot.heading;
+      root.add(ch.root);
+      staffChars.push({ ch, id: e.id, name: e.name, slot, target: { position: toWorld(V(slot.x, slot.z)) } });
+    });
+  };
+
   // ── Lujos ──
   const lux: Record<string, THREE.Object3D> = {};
   const luxColliders: Record<string, { setEnabled(on: boolean): void }[]> = {};
@@ -1200,6 +1239,25 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
         game.mod.audio?.play('punch', { volume: 0.5, pitch: 1.8 });
       },
     },
+    ...[0, 1, 2].map((i): Spot => {
+      const pos = new THREE.Vector3();
+      return {
+        pos, r: 1.5,
+        on: () => {
+          const sc = staffChars[i];
+          if (!sc) return false;
+          pos.set(sc.slot.x, 0, sc.slot.z);
+          return true;
+        },
+        text: () => `Hablar con ${staffChars[i]?.name ?? 'tu repartidor'}`,
+        run: () => {
+          const sc = staffChars[i];
+          if (!sc) return;
+          say(game, sc.target, pick(STAFF_LINES), 3.4);
+          game.mod.audio?.say?.(sc.target.position, 5, 0.9 + i * 0.2, 0.5);
+        },
+      };
+    }),
     ...P.buckets.map((bk) => ({
       pos: bk, r: 0.9, on: () => level === 0, text: 'Vaciar el cubo',
       run: () => {
@@ -1212,6 +1270,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
   let t = 0;
   let flick = 0;
   let sigT = 0;
+  let welcomed = false;
   const inst: OfficeScene = {
     spawn: P.spawn.clone(),
     heading: Math.PI,
@@ -1222,6 +1281,12 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       root.visible = true;
       refresh(false);
       refreshPortrait();
+      refreshStaff();
+      if (!welcomed) {
+        welcomed = true;
+        const lvl = companyState(game).level;
+        toast(game, lvl === 0 ? 'Tu oficina. Bueno, «oficina». Mejórala desde el TABLÓN.' : 'La oficina. El TABLÓN de la pared es tu centro de mando.', '#ffd23f', 3.2);
+      }
       try {
         game.renderer.compile(root, game.camera, game.scene);
       } catch {
@@ -1242,10 +1307,12 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
         const st = companyState(game);
         const sig = st.level + '|' + [...st.lux].sort().join(',');
         if (sig !== lastSig) refresh(true);
+        refreshStaff();
       }
       popper.update(dt);
       seats.update(dt);
       toni.update(dt, { speed: 0, grounded: true, pose: 'phone' });
+      for (const sc of staffChars) sc.ch.update(dt, { speed: 0, grounded: true, pose: sc.slot.pose });
       if (owned.has('acuario')) tank.update(dt);
       if (owned.has('billar')) pool.update(dt, game);
       // luces
