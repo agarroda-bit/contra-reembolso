@@ -134,6 +134,9 @@ export class Game {
    */
   warmShaders() {
     try {
+      // sin compilación en paralelo (p. ej. WebGL por software) compilar todo de golpe congela el
+      // arranque decenas de segundos: mejor que se compilen al aparecer, como antes
+      if (!this.renderer.extensions.has('KHR_parallel_shader_compile')) return;
       this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
     } catch {
       /* no pasa nada: se compilarán al usarlos */
