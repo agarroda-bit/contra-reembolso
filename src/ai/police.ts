@@ -597,7 +597,12 @@ export class Police implements System {
   private checkArrest(dt: number) {
     const g = this.game;
     const p = g.mod.player;
-    if (p.state === 'dead') return;
+    if (p.state === 'dead') {
+      // pillado (o muerto): el cartel de «te están deteniendo» se quita ya, no encima de «¡TE HAN PILLADO!»
+      this.arrestTimer = 0;
+      (g.hud as any).arrest = 0;
+      return;
+    }
     let near = false;
     const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : p.position;
     const slow = p.state === 'foot' ? p.velocity.length() < 2.2 : Math.abs(this.vm.current?.speed ?? 99) < 1.2;
