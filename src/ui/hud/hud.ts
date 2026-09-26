@@ -328,11 +328,15 @@ export class HudImpl implements Hud {
     const jobs = hud.jobs;
     const $ = this.$;
     if (this.changed('jobsN', jobs.length)) $.encargos.classList.toggle('hud-oculto', jobs.length === 0);
-    // quitar los que ya no están
-    for (const [id, v] of this.jobViews) {
-      if (!jobs.some((j) => j.id === id)) {
-        v.el.remove();
-        this.jobViews.delete(id);
+    // quitar los que ya no están (bucle simple: sin crear funciones por frame)
+    if (this.jobViews.size) {
+      for (const [id, v] of this.jobViews) {
+        let found = false;
+        for (let i = 0; i < jobs.length; i++) if (jobs[i].id === id) { found = true; break; }
+        if (!found) {
+          v.el.remove();
+          this.jobViews.delete(id);
+        }
       }
     }
     for (let i = 0; i < jobs.length; i++) {

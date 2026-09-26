@@ -462,7 +462,9 @@ export class BigMap {
     this.toScreen(-half, -half, o);
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = 'high';
-    g.drawImage(mapSource(map), 0, 0, map.width, map.height, o.x, o.y, world.size * scale, world.size * scale);
+    // 1 px del mapa = mapPixelSize m (igual que el minimapa), empezando en la esquina (-size/2, -size/2)
+    const mps = world.mapPixelSize;
+    g.drawImage(mapSource(map), 0, 0, map.width, map.height, o.x, o.y, map.width * mps * scale, map.height * mps * scale);
 
     this.drawGrid(g, world);
 
