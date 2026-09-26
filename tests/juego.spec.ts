@@ -196,6 +196,24 @@ test('la vida de lujo: casino, club, hierbas y vehículo loco', async ({ page })
   expect(errors).toEqual([]);
 });
 
+test('historia: el reloj de la señora Puri', async ({ page }) => {
+  test.skip(FASE < 7, 'llega en la fase 7');
+  test.setTimeout(240_000);
+  const errors = await arrancar(page);
+  await g(page, `__cr.mod.economy.fame = 5000; __cr.mod.story.start('reloj')`);
+  await g(page, `__cr.mod.player.teleport(__cr.mod.story.active.ctx.data.shop.door.clone())`);
+  await page.waitForFunction(() => /Recoger el reloj/.test((window as any).__cr.hud.hint ?? ''), null, { timeout: 20_000 });
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window as any).__cr.mod.story.active?.step === 1, null, { timeout: 20_000 });
+  await page.screenshot({ path: `${DIR}/16-historia.png` });
+  await g(page, `__cr.mod.player.teleport(__cr.mod.story.active.ctx.data.dest.door.clone())`);
+  await page.waitForFunction(() => /Entregar el reloj/.test((window as any).__cr.hud.hint ?? ''), null, { timeout: 20_000 });
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window as any).__cr.mod.story.completed.has('reloj'), null, { timeout: 20_000 });
+  await page.screenshot({ path: `${DIR}/17-mision-cumplida.png` });
+  expect(errors).toEqual([]);
+});
+
 test('fps con ?debug=1', async ({ page }) => {
   const errors = await arrancar(page);
   await page.waitForTimeout(4000);

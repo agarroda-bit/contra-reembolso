@@ -4,7 +4,16 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 7 — La historia del tablón (integrando)
+## Fase actual: 8 — Pulido
+
+## Fase 7 — La historia del tablón ✅ (26/09, 08:00, publicada)
+- Tablón de encargos grandes en la oficina (dentro, en la pared), con cinco misiones que se desbloquean por fama y en orden:
+  1. «El reloj de la señora Puri» (fama 2): reloj de oro de la joyería del Centro a la Colina, con dos furgonetas moradas persiguiéndote y emboscada al llegar; si el reloj se rompe, fallas.
+  2. «Mudanza exprés» (fama 3): cargar los muebles de Kevin en la furgoneta y llevarlos en 3 minutos sin romper nada (cada golpe rompe algo: «¡El flamenco!»).
+  3. «El paquete que hace tic-tac» (fama 4): un «despertador» para el casino… que resulta ser una bomba; hay que tirarla al mar al final del muelle antes de que explote (los golpes aceleran el tic-tac).
+  4. «Asalto a la guarida» (fama 5): derribar a los guardias, abrir el almacén de Los Devueltos y volver a la oficina con dos sirenas y la banda detrás.
+  5. «El Devolución» (fama 6): jefe final en su camión blindado recorriendo la isla; al 60 % llama a sus furgonetas y suelta paquetes FRÁGIL; al 25 % se baja y pelea a pie con lanzapaquetes. Final con créditos graciosos; después, el mundo libre sigue.
+- Pruebas: + la misión del reloj de principio a fin (`capturas/fase-7/`); el resto probadas a mano con scripts (jefe final y bomba completas).
 
 ## Fase 6 — La vida de lujo ✅ (26/09, 07:45, publicada)
 - Casino «La Suerte Loca» (Centro): vestíbulo y tres juegos de verdad con animaciones y sonido: tragaperras «La Paquetera», ruleta europea y blackjack «El 21 del Puerto». Apuestas de 10 a 500 € con el dinero del juego.

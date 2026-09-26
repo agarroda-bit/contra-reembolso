@@ -1,0 +1,1 @@
+12.7 fps (SwiftShader, por software)
