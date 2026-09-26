@@ -323,7 +323,11 @@ export class Npc implements NpcDriver {
         if (this.poofTimer >= 0) {
           this.poofTimer -= dt;
           if (this.poofTimer < 0) {
-            this.game.mod.particles?.poof(tmpV.copy(this.position).setY(this.position.y + 0.5));
+            const pt = tmpV.copy(this.position).setY(this.position.y + 0.5);
+            this.game.mod.particles?.poof(pt);
+            // que se vea bien de lejos: trozos de caja grandes y un chorro de confeti hacia arriba
+            this.game.mod.particles?.emit('cardboard', pt, { count: 6, scale: 1.8, speed: 1.1 });
+            this.game.mod.particles?.emit('confetti', pt, { count: 14, speed: 1.3, scale: 1.4 });
             this.game.mod.audio?.play('pop', { pos: this.position });
             this.removed = true;
             this.rig.root.visible = false;
