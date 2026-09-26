@@ -6,6 +6,14 @@ Eres repartidor de paquetes contra reembolso en **Puerto Paquete**, una isla med
 
 Juego 3D para navegador (Chrome o Safari, teclado y ratón). Todo está hecho por código: modelos, animaciones, sonido y música.
 
+![Puerto Paquete al atardecer](capturas/destacadas/isla-atardecer.png)
+
+| | |
+|---|---|
+| ![Barrio Viejo](capturas/destacadas/barrio-viejo.png) | ![Conduciendo la furgoneta](capturas/destacadas/conduciendo.png) |
+| ![Casino de noche](capturas/destacadas/casino-noche.png) | ![Club Reembolso VIP](capturas/destacadas/club-vip.png) |
+| ![Tiroteo con Los Devueltos](capturas/destacadas/tiroteo.png) | ![El móvil con un encargo](capturas/destacadas/movil.png) |
+
 ## Controles
 
 | Tecla | Acción |
