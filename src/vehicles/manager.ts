@@ -21,6 +21,7 @@ export interface NpcDriver {
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
+const notSinking = (x: Vehicle) => !x.sinking;
 
 type Transition = { kind: 'enter' | 'steal' | 'exit'; t: number; dur: number; vehicle: Vehicle; from: THREE.Vector3; to: THREE.Vector3 } | null;
 
@@ -181,13 +182,14 @@ export class VehicleManager implements System {
       }
       // el jugador va sentado
       player.position.copy(v.getPosition(tmpV));
-      g.hud.vehicle = {
-        name: v.spec.name,
-        speedKmh: Math.abs(v.speed) * 3.6,
-        health: Math.max(0, (v.health / v.spec.health) * 100),
-        packages: v.packages,
-        capacity: v.spec.capacity + v.upgrades.trunk * 2,
-      };
+      // (el mismo objeto cada frame: el HUD solo lee los campos)
+      const hv = this.hudVehicle;
+      hv.name = v.spec.name;
+      hv.speedKmh = Math.abs(v.speed) * 3.6;
+      hv.health = Math.max(0, (v.health / v.spec.health) * 100);
+      hv.packages = v.packages;
+      hv.capacity = v.spec.capacity + v.upgrades.trunk * 2;
+      g.hud.vehicle = hv;
     } else {
       g.hud.vehicle = null;
     }
@@ -195,7 +197,7 @@ export class VehicleManager implements System {
     // Pista de interacción a pie (la compone el sistema de interacción)
     this.hintText = null;
     if (player.state === 'foot' && !this.transition) {
-      const near = this.nearest(player.position, 3.4, (x) => !x.sinking);
+      const near = this.nearest(player.position, 3.4, notSinking);
       if (near) {
         const npc = near.driver && near.driver.kind === 'npc' ? near.driver.npc : null;
         this.hintText = npc ? `F — Robar ${near.spec.name.toLowerCase()}` : `F — Subir a ${near.spec.name.toLowerCase()}`;
@@ -204,29 +206,43 @@ export class VehicleManager implements System {
     if (!g.mod.interaction) g.hud.hint = this.hintText;
   }
 
+  private readonly hudVehicle = { name: '', speedKmh: 0, health: 0, packages: 0, capacity: 0 };
+
   /** Pista "F — Subir a…" para la interfaz. */
   hintText: string | null = null;
 
   /** Motores y derrapes: el del jugador siempre, y los 3 más cercanos con motor en marcha. */
   private audioNear: Vehicle[] = [];
-  private audioDist = new Map<Vehicle, number>();
+  private audioD: number[] = [];
   private updateAudio() {
     const audio = this.game.mod.audio;
     if (!audio?.ctx) return;
     const cam = this.game.camera.position;
     const near = this.audioNear;
-    const dist = this.audioDist;
+    const dd = this.audioD;
     near.length = 0;
-    dist.clear();
+    dd.length = 0;
+    // los 4 más cercanos, ordenados al meterlos (sin listas ni funciones nuevas en cada frame)
     for (const v of this.list) {
       if (v.destroyed || !(v === this.current || v.driver)) continue;
       const d = v === this.current ? -1 : v.getPosition(tmpV).distanceToSquared(cam);
       if (d > 70 * 70) continue;
-      dist.set(v, d);
-      near.push(v);
+      let i = near.length;
+      if (i === 4) {
+        if (d >= dd[3]) continue;
+        i = 3;
+      } else {
+        near.push(v);
+        dd.push(d);
+      }
+      while (i > 0 && dd[i - 1] > d) {
+        near[i] = near[i - 1];
+        dd[i] = dd[i - 1];
+        i--;
+      }
+      near[i] = v;
+      dd[i] = d;
     }
-    near.sort((a, b) => dist.get(a)! - dist.get(b)!);
-    if (near.length > 4) near.length = 4;
     for (const v of near) {
       const s = v.spec;
       const sp = Math.abs(v.speed);
@@ -234,11 +250,13 @@ export class VehicleManager implements System {
       const gear = Math.min(4, Math.floor(sp / gearSpan));
       const within = (sp - gear * gearSpan) / gearSpan;
       const thr = Math.max(0, v.controls.throttle);
-      const rpm = Math.min(1, 0.12 + within * 0.7 + thr * 0.12 + (v.wheelContact.some((c) => c) ? 0 : thr * 0.3));
+      const wc = v.wheelContact;
+      const grounded = wc[0] || wc[1] || wc[2] || wc[3];
+      const rpm = Math.min(1, 0.12 + within * 0.7 + thr * 0.12 + (grounded ? 0 : thr * 0.3));
       const pos = v.getPosition(tmpV);
       audio.engine(v.id, s.kind, pos, rpm, thr, v === this.current ? 1.2 : 0.8);
-      if (v.slip > 4.5 && sp > 4) audio.loop('skid' + v.id, 'skid', pos, Math.min(0.5, (v.slip - 4.5) / 10), Math.min(1, sp / 30));
-      if (v.sirenOn) audio.loop('siren' + v.id, 'siren', pos, 0.8);
+      if (v.slip > 4.5 && sp > 4) audio.loop(v.skidKey, 'skid', pos, Math.min(0.5, (v.slip - 4.5) / 10), Math.min(1, sp / 30));
+      if (v.sirenOn) audio.loop(v.sirenKey, 'siren', pos, 0.8);
     }
   }
 

@@ -270,7 +270,7 @@ export class Traffic implements System {
       }
       const e = R.g.edges[brain.edge];
       const len = R.length(brain.edge) || 1;
-      const [a] = R.ends(e, brain.dir);
+      const a = R.startOf(e, brain.dir);
       brain.t = THREE.MathUtils.clamp(((pos.x - a.x) * Math.sin(h1) + (pos.z - a.z) * Math.cos(h1)) / len, 0, 1);
       // punto a perseguir: por el carril hasta la esquina y luego por el carril de salida
       const look = 3.5 + absSpeed * 0.45;

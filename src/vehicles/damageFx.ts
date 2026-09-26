@@ -93,7 +93,7 @@ export class VehicleDamageFx implements System {
             v.onFire = true;
             if (v === this.vm.current) this.game.events.emit('toast', { text: '¡Está ardiendo! ¡Sal de ahí!', color: '#ff5400' });
           }
-          this.game.mod.audio?.loop('fire' + v.id, 'fire', engine, 0.5);
+          this.game.mod.audio?.loop(v.fireKey, 'fire', engine, 0.5);
           if (t.burning > 7) v.damage(99999);
         }
       }

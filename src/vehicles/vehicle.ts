@@ -36,6 +36,10 @@ const WHEEL_GROUPS = groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE);
 
 export class Vehicle {
   readonly id = nextId++;
+  /** Nombres de sus bucles de sonido (hechos una vez, no en cada frame). */
+  readonly skidKey = 'skid' + this.id;
+  readonly sirenKey = 'siren' + this.id;
+  readonly fireKey = 'fire' + this.id;
   readonly spec: VehicleSpec;
   readonly mesh: VehicleMesh;
   readonly body: RAPIER.RigidBody;
