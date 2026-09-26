@@ -4,7 +4,7 @@ import type { CharacterLook } from '../../../core/contracts';
 import { GeoBuilder, vertexColorMaterial } from '../../../core/geo';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { fx as rnd } from '../../../core/rng';
-import { makeCharacter } from '../../../actors/character';
+import { makeCharacter, type CharacterLookExtra } from '../../../actors/character';
 import { makeVehicleMesh } from '../../../vehicles/meshes';
 import { VEHICLES, type VehicleKind } from '../../../vehicles/types';
 import {
@@ -501,12 +501,28 @@ let goldMat: THREE.MeshPhongMaterial | null = null;
 /** Tú, en oro, con la pose de «fiebre del sábado» sobre la peana. Origen = suelo de la peana. */
 export function buildStatue(look: CharacterLook): { group: THREE.Group; dispose(): void } {
   const g = new THREE.Group();
-  const gold: CharacterLook & { seed: number } = {
+  const lx = look as CharacterLookExtra;
+  const gold: CharacterLookExtra = {
     skin: '#e8b83a', hair: look.hair, hairColor: '#c9962a', shirt: '#f2c94c', pants: '#d4a52c', shoes: '#b8860b',
     cap: look.cap, capColor: '#e0ae2e', glasses: look.glasses, chain: look.chain, jacket: look.jacket ? '#e3b53d' : null,
     build: look.build, height: 1.35, emblem: null, seed: 3,
+    // la ropa de Moda Paquetona también sale en la estatua (casco, capa, disfraz...)
+    jacketStyle: lx.jacketStyle, hat: lx.hat, glassesStyle: lx.glassesStyle, fake: lx.fake, shoesStyle: lx.shoesStyle, costume: lx.costume,
+    bumBag: lx.bumBag ? '#c9962a' : null, cape: lx.cape ? '#f0c24a' : null,
   };
   const ch = makeCharacter(gold);
+  // todo de oro: las piezas con color propio (casco rojo, peluca arcoíris, pollo...) se pasan a dorado
+  // según lo claras que sean, para que la estatua siga pareciendo de una pieza
+  const col = ch.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+  const c = new THREE.Color();
+  const goldHi = new THREE.Color('#ffe066'), goldLo = new THREE.Color('#6b4a00');
+  for (let i = 0; i < col.count; i++) {
+    c.setRGB(col.getX(i), col.getY(i), col.getZ(i));
+    const l = Math.min(1, 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b);
+    c.copy(goldLo).lerp(goldHi, 0.35 + l * 0.65);
+    col.setXYZ(i, c.r, c.g, c.b);
+  }
+  col.needsUpdate = true;
   if (!goldMat) goldMat = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 90, specular: '#fff0b8', emissive: '#2a1a00' });
   ch.mesh.material = goldMat;
   // posar: la animación de baile nº 3 en el momento del dedo arriba

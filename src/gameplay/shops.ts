@@ -11,6 +11,7 @@ import { WEAPONS, WEAPON_ORDER } from '../combat/weapons';
 import type { Profile } from '../ui/menus';
 import { repaint } from '../ai/police';
 import type { CharacterLook } from '../core/contracts';
+import type { CharacterLookExtra } from '../actors/character';
 
 export interface OwnedVehicle {
   id: number;
@@ -38,9 +39,31 @@ interface ClothItem {
   name: string;
   desc: string;
   price: number;
-  slot: 'uniforme' | 'gorra' | 'gafas' | 'cadena' | 'zapatillas' | 'chandal';
-  apply: (l: CharacterLook, on: boolean) => void;
+  slot: ClothSlot;
+  apply: (l: CharacterLookExtra, on: boolean) => void;
   fame?: number;
+}
+
+type ClothSlot = 'uniforme' | 'gorra' | 'gafas' | 'cadena' | 'zapatillas' | 'chandal' | 'cara' | 'complemento' | 'espalda' | 'disfraz';
+/**
+ * Orden en que se aplica la ropa: lo de después manda (el traje de gala cambia el pantalón del uniforme,
+ * el disfraz tapa casi todo lo demás).
+ */
+const SLOT_ORDER: ClothSlot[] = ['uniforme', 'gorra', 'gafas', 'cadena', 'zapatillas', 'chandal', 'cara', 'complemento', 'espalda', 'disfraz'];
+const SLOT_TITLES: Record<ClothSlot, string> = {
+  uniforme: 'Uniformes', gorra: 'Gorras, cascos y pelucas', gafas: 'Gafas', cadena: 'Joyas', zapatillas: 'Zapatillas',
+  chandal: 'Chándal, chaquetas y trajes', cara: 'Postizos', complemento: 'Complementos', espalda: 'Capas', disfraz: 'Disfraces (tapan el resto de la ropa)',
+};
+/** Pone un disfraz: fuera gorra, sombrero, chaqueta, cadena, capa y riñonera (las gafas y el bigote se quedan). */
+function costume(l: CharacterLookExtra, kind: 'pollo' | 'paquete') {
+  l.costume = kind;
+  l.cap = false;
+  l.hat = null;
+  l.jacket = null;
+  l.chain = false;
+  l.cape = null;
+  l.bumBag = null;
+  l.shoesStyle = null;
 }
 
 const CLOTHES: ClothItem[] = [
@@ -63,6 +86,18 @@ const CLOTHES: ClothItem[] = [
   { id: 'chandal-lujo', icon: '🧥', name: 'Chándal de lujo', desc: 'Terciopelo morado. Elegancia de polígono.', price: 950, slot: 'chandal', apply: (l, on) => { l.jacket = on ? '#6c3bd1' : null; }, fame: 2 },
   { id: 'chandal-blanco', icon: '🥼', name: 'Chándal blanco', desc: 'Para no mancharlo nunca.', price: 1500, slot: 'chandal', apply: (l, on) => { l.jacket = on ? '#f1faee' : null; }, fame: 3 },
   { id: 'chaqueta-cuero', icon: '🧥', name: 'Chaqueta de cuero', desc: 'Rebelde con reembolso.', price: 1800, slot: 'chandal', apply: (l, on) => { l.jacket = on ? '#3a2418' : null; }, fame: 4 },
+  // ── fase 9: más ropa ──
+  { id: 'casco-moto', icon: '🏍️', name: 'Casco de moto', desc: 'Rojo, con rayos a los lados y la visera subida. Homologado por tu primo.', price: 400, slot: 'gorra', apply: (l) => { l.cap = false; l.hat = 'casco'; } },
+  { id: 'sombrero-paja', icon: '👒', name: 'Sombrero de paja', desc: 'De feria, de playa o de repartir a las tres de la tarde en agosto.', price: 200, slot: 'gorra', apply: (l) => { l.cap = false; l.hat = 'paja'; } },
+  { id: 'peluca-afro', icon: '🌈', name: 'Peluca afro arcoíris', desc: 'Treinta centímetros de alegría. Los clientes abren antes, por curiosidad.', price: 500, slot: 'gorra', apply: (l) => { l.cap = false; l.hat = 'peluca'; }, fame: 2 },
+  { id: 'gafas-corazon', icon: '😍', name: 'Gafas de corazón', desc: 'Para mirar a los clientes con amor aunque no estén en casa.', price: 150, slot: 'gafas', apply: (l) => { l.glasses = true; l.glassesStyle = 'corazon'; } },
+  { id: 'bigote-postizo', icon: '🥸', name: 'Bigote postizo', desc: 'Bigotazo de manillar. Nadie sabrá que eres tú. Salvo por todo lo demás.', price: 80, slot: 'cara', apply: (l) => { l.fake = 'bigotazo'; } },
+  { id: 'rinonera', icon: '👝', name: 'Riñonera cruzada', desc: 'Imitación de una imitación. Caben el móvil, las llaves y tres euros en monedas.', price: 250, slot: 'complemento', apply: (l) => { l.bumBag = '#1b1030'; } },
+  { id: 'bata-pantuflas', icon: '🥿', name: 'Bata y pantuflas', desc: 'Bata de guatiné rosa y pantuflas de conejito. Para repartir como si estuvieras en casa.', price: 350, slot: 'chandal', apply: (l) => { l.jacket = '#ff9ec7'; l.jacketStyle = 'bata'; l.shoesStyle = 'pantuflas'; } },
+  { id: 'capa-heroe', icon: '🦸', name: 'Capa de superhéroe', desc: 'Roja, con un paquete dorado a la espalda. No vuelas, pero corres con más dignidad.', price: 1500, slot: 'espalda', apply: (l) => { l.cape = '#e63946'; }, fame: 3 },
+  { id: 'disfraz-paquete', icon: '📦', name: 'Disfraz de paquete gigante', desc: '¿Repartidor o paquete? Nadie lo sabe. Pone FRÁGIL, así que te tratan con cariño.', price: 600, slot: 'disfraz', apply: (l) => costume(l, 'paquete') },
+  { id: 'disfraz-pollo', icon: '🐔', name: 'Disfraz de pollo', desc: 'Pollo de fiesta de cumpleaños, con cresta y patas. Cacarear no está incluido.', price: 900, slot: 'disfraz', apply: (l) => { costume(l, 'pollo'); l.pants = '#ff9f1c'; }, fame: 2 },
+  { id: 'traje-gala', icon: '🤵', name: 'Traje de gala dorado', desc: 'Dorado de arriba abajo, con pajarita y lentejuelas. Brillas más que tu futuro.', price: 6000, slot: 'chandal', apply: (l) => { l.jacket = '#e2b43c'; l.jacketStyle = 'gala'; l.shirt = '#ffffff'; l.pants = '#c9a227'; l.shoes = '#1b1030'; }, fame: 6 },
 ];
 
 let nextOwned = 1;
@@ -80,7 +115,10 @@ export class Shops implements System {
   readonly owned: OwnedVehicle[] = [];
   readonly clothesOwned = new Set<string>(['uni-propio', 'gorra-propia', 'uni-amarillo', 'gorra-rosa']);
   /** Lo puesto de la tienda. «uni-propio» y «gorra-propia» son lo elegido al crear el personaje. */
-  readonly equipped: Record<string, string | null> = { uniforme: 'uni-propio', gorra: 'gorra-propia', gafas: null, cadena: null, zapatillas: null, chandal: null };
+  readonly equipped: Record<string, string | null> = {
+    uniforme: 'uni-propio', gorra: 'gorra-propia', gafas: null, cadena: null, zapatillas: null, chandal: null,
+    cara: null, complemento: null, espalda: null, disfraz: null,
+  };
   profile: Profile | null = null;
   private deliveryTimer = -1;
   private pendingDelivery: OwnedVehicle | null = null;
@@ -319,9 +357,8 @@ export class Shops implements System {
       color: '#ff4f81',
       icon: '👕',
       sections: () => {
-        const slots: [ClothItem['slot'], string][] = [['uniforme', 'Uniformes'], ['gorra', 'Gorras'], ['gafas', 'Gafas'], ['cadena', 'Joyas'], ['zapatillas', 'Zapatillas'], ['chandal', 'Chándal y chaquetas']];
-        return slots.map(([slot, title]) => ({
-          title,
+        return SLOT_ORDER.map((slot) => ({
+          title: SLOT_TITLES[slot],
           items: CLOTHES.filter((c) => c.slot === slot).map((c) => {
             const has = this.clothesOwned.has(c.id);
             const on = this.equipped[slot] === c.id;
@@ -372,15 +409,23 @@ export class Shops implements System {
     const prof = this.profile;
     const p = this.game.mod.player;
     if (!prof || !p?.rig) return;
-    const l: CharacterLook = { ...prof.look };
+    const l: CharacterLookExtra = { ...prof.look };
     // quitar accesorios y volver a ponerlos según lo equipado
     l.glasses = false;
     l.chain = false;
     l.jacket = null;
+    delete l.jacketStyle;
+    delete l.glassesStyle;
+    l.hat = null;
+    l.fake = null;
+    l.bumBag = null;
+    l.cape = null;
+    l.shoesStyle = null;
+    l.costume = null;
     if (!this.equipped.gorra) l.cap = false;
-    for (const slot of Object.keys(this.equipped)) {
+    for (const slot of SLOT_ORDER) {
       const id = this.equipped[slot];
-      const c = CLOTHES.find((x) => x.id === id);
+      const c = CLOTHES.find((x) => x.id === id && x.slot === slot);
       if (c) c.apply(l, true);
     }
     p.rig.setLook(l);

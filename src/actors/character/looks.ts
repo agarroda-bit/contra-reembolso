@@ -15,10 +15,28 @@ export interface CharacterLookExtra extends CharacterLook {
   facial?: 'bigote' | 'barba' | null;
   /** Pantalón corto. */
   shorts?: boolean;
-  /** Estilo de la chaqueta: chándal (rayas), rebeca (botones) o americana. */
-  jacketStyle?: 'chandal' | 'rebeca' | 'americana';
+  /**
+   * Estilo de la chaqueta: chándal (rayas), rebeca (botones), americana, bata de guatiné (con cinturón
+   * y faldón hasta las rodillas) o traje de gala (americana con pajarita y lentejuelas).
+   */
+  jacketStyle?: 'chandal' | 'rebeca' | 'americana' | 'bata' | 'gala';
   /** Semilla de gestos (variante de baile, parpadeo...). */
   seed?: number;
+  // ── Ropa de Moda Paquetona (fase 9) ──
+  /** Lo que se lleva en la cabeza en vez de la gorra: casco de moto, sombrero de paja o peluca afro arcoíris. */
+  hat?: 'casco' | 'paja' | 'peluca' | null;
+  /** Forma de las gafas (con glasses = true). */
+  glassesStyle?: 'sol' | 'corazon';
+  /** Postizo de la cara: bigotazo de manillar. */
+  fake?: 'bigotazo' | null;
+  /** Riñonera cruzada al pecho (color). */
+  bumBag?: string | null;
+  /** Capa de superhéroe (color). */
+  cape?: string | null;
+  /** Calzado especial en vez de zapatillas: pantuflas de conejito. */
+  shoesStyle?: 'pantuflas' | null;
+  /** Disfraz de cuerpo entero: tapa casi todo lo demás (menos gafas y bigote). */
+  costume?: 'pollo' | 'paquete' | null;
 }
 
 /** Tonos de piel, de claro a oscuro. */

@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import type { Game } from '../../../core/game';
 import type { CharacterLook, CharacterPose } from '../../../core/contracts';
+import type { CharacterLookExtra } from '../../../actors/character';
 import { GeoBuilder } from '../../../core/geo';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { fx as rnd } from '../../../core/rng';
@@ -232,7 +233,11 @@ export function playerLook(game: Game): CharacterLook {
 }
 
 export function lookKey(l: CharacterLook): string {
-  return [l.skin, l.hair, l.hairColor, l.shirt, l.cap, l.capColor, l.glasses, l.chain, l.jacket].join('|');
+  const x = l as CharacterLookExtra;
+  return [
+    l.skin, l.hair, l.hairColor, l.shirt, l.pants, l.cap, l.capColor, l.glasses, l.chain, l.jacket,
+    x.jacketStyle, x.hat, x.glassesStyle, x.fake, x.bumBag, x.cape, x.shoesStyle, x.costume,
+  ].join('|');
 }
 
 /** Texto de aviso en pantalla completa (fundido a negro con mensaje). */
@@ -662,13 +667,40 @@ export function paintPortrait(g: CanvasRenderingContext2D, w: number, h: number,
     g.fill();
   }
   const u = w / 256;
-  // hombros (uniforme)
-  g.fillStyle = look.jacket ?? look.shirt;
-  g.beginPath();
-  g.ellipse(cx, h * 0.92, 108 * u, 70 * u, 0, Math.PI, 0);
-  g.fill();
-  g.fillRect(cx - 108 * u, h * 0.92, 216 * u, h * 0.1);
-  if (look.jacket) {
+  const lx = look as CharacterLookExtra;
+  const costume = lx.costume ?? null;
+  const hat = costume === 'pollo' ? 'pollo' : costume ? null : (lx.hat ?? null);
+  // capa de superhéroe por detrás de los hombros
+  if (lx.cape && !costume) {
+    g.fillStyle = lx.cape;
+    g.beginPath();
+    g.moveTo(cx - 70 * u, h * 0.78);
+    g.lineTo(cx + 70 * u, h * 0.78);
+    g.lineTo(cx + 128 * u, h);
+    g.lineTo(cx - 128 * u, h);
+    g.fill();
+  }
+  // hombros (uniforme, chaqueta o disfraz)
+  g.fillStyle = costume === 'pollo' ? '#ffd93b' : costume === 'paquete' ? '#c8915a' : (look.jacket ?? look.shirt);
+  if (costume === 'paquete') {
+    g.fillRect(cx - 104 * u, h * 0.8, 208 * u, h * 0.2);
+    g.fillStyle = '#e3d3a8';
+    g.fillRect(cx - 14 * u, h * 0.8, 28 * u, h * 0.2);
+    g.fillStyle = '#b07b48';
+    g.fillRect(cx - 104 * u, h * 0.8, 208 * u, 8 * u);
+  } else {
+    g.beginPath();
+    g.ellipse(cx, h * 0.92, 108 * u, 70 * u, 0, Math.PI, 0);
+    g.fill();
+    g.fillRect(cx - 108 * u, h * 0.92, 216 * u, h * 0.1);
+  }
+  if (costume === 'pollo') {
+    g.fillStyle = '#fff8e7';
+    g.beginPath();
+    g.ellipse(cx, h * 0.97, 46 * u, 40 * u, 0, Math.PI, 0);
+    g.fill();
+  }
+  if (look.jacket && !costume) {
     g.fillStyle = look.shirt;
     g.beginPath();
     g.moveTo(cx - 26 * u, h * 0.8);
@@ -680,12 +712,54 @@ export function paintPortrait(g: CanvasRenderingContext2D, w: number, h: number,
   g.fillStyle = look.skin;
   g.fillRect(cx - 22 * u, h * 0.62, 44 * u, 44 * u);
   // cadena
-  if (look.chain) {
+  if (look.chain && !costume) {
     g.strokeStyle = '#ffd700';
     g.lineWidth = 7 * u;
     g.beginPath();
     g.arc(cx, h * 0.74, 34 * u, 0.2, Math.PI - 0.2);
     g.stroke();
+  }
+  // pajarita del traje de gala
+  if (lx.jacketStyle === 'gala' && look.jacket && !costume) {
+    g.fillStyle = '#111111';
+    g.beginPath();
+    g.moveTo(cx, h * 0.83);
+    g.lineTo(cx - 24 * u, h * 0.81);
+    g.lineTo(cx - 24 * u, h * 0.86);
+    g.closePath();
+    g.moveTo(cx, h * 0.83);
+    g.lineTo(cx + 24 * u, h * 0.81);
+    g.lineTo(cx + 24 * u, h * 0.86);
+    g.closePath();
+    g.fill();
+  }
+  // riñonera cruzada
+  if (lx.bumBag && !costume) {
+    g.strokeStyle = '#1b1030';
+    g.lineWidth = 9 * u;
+    g.beginPath();
+    g.moveTo(cx + 70 * u, h * 0.8);
+    g.lineTo(cx - 40 * u, h * 1.0);
+    g.stroke();
+    g.fillStyle = lx.bumBag;
+    g.fillRect(cx - 80 * u, h * 0.92, 60 * u, 30 * u);
+    g.fillStyle = '#ffd23f';
+    g.fillRect(cx - 58 * u, h * 0.95, 16 * u, 10 * u);
+  }
+  // peluca y capucha de pollo: por detrás de la cabeza
+  if (hat === 'peluca') {
+    const cols = ['#3a86ff', '#06d6a0', '#ffd23f', '#ff7b1a', '#e63946'];
+    cols.forEach((c, i) => {
+      g.fillStyle = c;
+      g.beginPath();
+      g.arc(cx, h * 0.4 - i * 6 * u, (100 - i * 16) * u, 0, Math.PI * 2);
+      g.fill();
+    });
+  } else if (hat === 'pollo') {
+    g.fillStyle = '#ffd93b';
+    g.beginPath();
+    g.ellipse(cx, h * 0.43, 82 * u, 96 * u, 0, 0, Math.PI * 2);
+    g.fill();
   }
   // cabeza
   const hy = h * 0.46;
@@ -698,9 +772,9 @@ export function paintPortrait(g: CanvasRenderingContext2D, w: number, h: number,
   g.ellipse(cx - 58 * u, hy + 6 * u, 11 * u, 16 * u, 0, 0, Math.PI * 2);
   g.ellipse(cx + 58 * u, hy + 6 * u, 11 * u, 16 * u, 0, 0, Math.PI * 2);
   g.fill();
-  // pelo
+  // pelo (el casco, la peluca y la capucha de pollo lo tapan entero)
   g.fillStyle = look.hairColor;
-  const hair = look.hair;
+  const hair = hat === 'casco' || hat === 'peluca' || hat === 'pollo' ? 'calvo' : look.hair;
   if (hair === 'afro') {
     g.beginPath();
     g.arc(cx, hy - 40 * u, 78 * u, 0, Math.PI * 2);
@@ -722,16 +796,80 @@ export function paintPortrait(g: CanvasRenderingContext2D, w: number, h: number,
     g.ellipse(cx, hy - 34 * u, 60 * u, hair === 'rapado' ? 38 * u : 44 * u, 0, Math.PI, 0);
     g.fill();
   }
-  // gorra
-  if (look.cap) {
+  // gorra (o lo que se lleve en la cabeza)
+  if (look.cap && !hat && !costume) {
     g.fillStyle = look.capColor;
     g.beginPath();
     g.ellipse(cx, hy - 40 * u, 62 * u, 44 * u, 0, Math.PI, 0);
     g.fill();
     g.fillRect(cx - 10 * u, hy - 46 * u, 96 * u, 14 * u);
   }
+  if (hat === 'casco' || hat === 'pollo') {
+    g.fillStyle = hat === 'casco' ? '#e63946' : '#ffd93b';
+    g.beginPath();
+    g.ellipse(cx, hy - 30 * u, 72 * u, 62 * u, 0, Math.PI, 0);
+    g.fill();
+    g.fillRect(cx - 72 * u, hy - 32 * u, 16 * u, 70 * u);
+    g.fillRect(cx + 56 * u, hy - 32 * u, 16 * u, 70 * u);
+    if (hat === 'casco') {
+      g.fillStyle = '#223a70';
+      g.fillRect(cx - 52 * u, hy - 44 * u, 104 * u, 16 * u);
+      g.fillStyle = '#ffd23f';
+      g.beginPath();
+      g.moveTo(cx - 62 * u, hy - 24 * u);
+      g.lineTo(cx - 70 * u, hy + 4 * u);
+      g.lineTo(cx - 62 * u, hy + 2 * u);
+      g.lineTo(cx - 68 * u, hy + 26 * u);
+      g.lineTo(cx - 58 * u, hy - 4 * u);
+      g.lineTo(cx - 64 * u, hy - 2 * u);
+      g.fill();
+    } else {
+      g.fillStyle = '#ff3b3b';
+      for (let k = 0; k < 3; k++) {
+        g.beginPath();
+        g.arc(cx - 18 * u + k * 18 * u, hy - 96 * u + (k === 1 ? -8 : 0) * u, 13 * u, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.fillStyle = '#ff9f1c';
+      g.beginPath();
+      g.moveTo(cx - 16 * u, hy - 40 * u);
+      g.lineTo(cx + 16 * u, hy - 40 * u);
+      g.lineTo(cx, hy - 20 * u);
+      g.fill();
+      g.fillStyle = '#1b1030';
+      g.fillRect(cx - 34 * u, hy - 66 * u, 12 * u, 12 * u);
+      g.fillRect(cx + 22 * u, hy - 66 * u, 12 * u, 12 * u);
+    }
+  } else if (hat === 'paja') {
+    g.fillStyle = '#d9b04f';
+    g.beginPath();
+    g.ellipse(cx, hy - 40 * u, 118 * u, 24 * u, 0, 0, Math.PI * 2);
+    g.fill();
+    g.fillStyle = '#f1cf6e';
+    g.beginPath();
+    g.ellipse(cx, hy - 52 * u, 60 * u, 50 * u, 0, Math.PI, 0);
+    g.fill();
+    g.fillStyle = '#e63946';
+    g.fillRect(cx - 60 * u, hy - 62 * u, 120 * u, 12 * u);
+  } else if (hat === 'peluca') {
+    // flequillo arcoíris por encima de la frente
+    g.fillStyle = '#3a86ff';
+    g.beginPath();
+    g.ellipse(cx, hy - 52 * u, 62 * u, 26 * u, 0, Math.PI, 0);
+    g.fill();
+  }
   // cara: ojos, cejas y sonrisa de ganador
-  if (look.glasses) {
+  if (look.glasses && lx.glassesStyle === 'corazon') {
+    g.fillStyle = '#ff4f81';
+    for (const s of [-1, 1]) {
+      const x = cx + s * 27 * u, y = hy + 2 * u;
+      g.beginPath();
+      g.moveTo(x, y + 18 * u);
+      g.bezierCurveTo(x - 30 * u, y - 2 * u, x - 16 * u, y - 22 * u, x, y - 8 * u);
+      g.bezierCurveTo(x + 16 * u, y - 22 * u, x + 30 * u, y - 2 * u, x, y + 18 * u);
+      g.fill();
+    }
+  } else if (look.glasses) {
     g.fillStyle = '#111';
     g.fillRect(cx - 50 * u, hy - 8 * u, 42 * u, 22 * u);
     g.fillRect(cx + 8 * u, hy - 8 * u, 42 * u, 22 * u);
@@ -762,6 +900,18 @@ export function paintPortrait(g: CanvasRenderingContext2D, w: number, h: number,
   // guiño de brillo en un diente
   g.fillStyle = '#ffffff';
   g.fillRect(cx - 6 * u, hy + 42 * u, 8 * u, 6 * u);
+  // bigotazo postizo
+  if (lx.fake === 'bigotazo') {
+    g.strokeStyle = '#2a1a12';
+    g.lineCap = 'round';
+    g.lineWidth = 11 * u;
+    g.beginPath();
+    g.moveTo(cx - 44 * u, hy + 6 * u);
+    g.quadraticCurveTo(cx - 40 * u, hy + 30 * u, cx, hy + 22 * u);
+    g.quadraticCurveTo(cx + 40 * u, hy + 30 * u, cx + 44 * u, hy + 6 * u);
+    g.stroke();
+    g.lineCap = 'butt';
+  }
   // cartela
   g.fillStyle = '#1b1030';
   g.fillRect(w * 0.18, h * 0.88, w * 0.64, h * 0.09);

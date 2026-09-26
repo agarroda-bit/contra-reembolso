@@ -1343,6 +1343,8 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
         const sig = st.level + '|' + [...st.lux].sort().join(',');
         if (sig !== lastSig) refresh(true);
         refreshStaff();
+        // si te cambias de ropa (o te pones un disfraz), el retrato también
+        if (lux.cuadro.visible) refreshPortrait();
       }
       popper.update(dt);
       seats.update(dt);

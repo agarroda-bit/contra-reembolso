@@ -41,11 +41,19 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   const hairC = look.hairColor;
   const hairLight = luminance(hairC) > 0.45;
   const browC = hairLight ? shade(hairC, 0.68) : shade(hairC, 0.6);
-  const jacket = look.jacket ?? null;
+  // disfraces: el de pollo es un mono amarillo de mangas largas; el de paquete, una caja de cartón
+  const costume = look.costume ?? null;
+  const chicken = costume === 'pollo';
+  const boxSuit = costume === 'paquete';
+  const jacket = chicken ? CHICKEN_YELLOW : costume ? null : (look.jacket ?? null);
   const top = jacket ?? look.shirt;
   const jStyle = look.jacketStyle ?? 'chandal';
   const kind = look.kind;
   const frontZ = 0.113 * bd;
+  // lo que va en la cabeza: casco y peluca tapan todo el pelo; sombrero y gorra dejan ver lo de detrás
+  const hat = chicken ? 'pollo' : costume ? null : (look.hat ?? null);
+  const capOn = look.cap && !hat && !costume;
+  const hairShown = hat === 'casco' || hat === 'peluca' || hat === 'pollo' ? 'none' : capOn || hat === 'paja' ? 'covered' : 'full';
 
   // ───────────── cadera y cinturón ─────────────
   M.setBone(B.hips).color(look.pants);
@@ -81,7 +89,12 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
     8, false, true, // la tapa de abajo queda dentro del cinturón
   );
   const fz = frontZ + 0.003;
-  if (jacket) {
+  if (chicken) {
+    // pechuga blanca de peluche
+    M.color('#fff8e7').poly([[-0.1, 0.34], [0.1, 0.34], [0.13, 0.16], [0.06, 0.02], [-0.06, 0.02], [-0.13, 0.16]], fz, 1);
+  } else if (jacket && (jStyle === 'bata' || jStyle === 'gala')) {
+    buildWrapFront(M, look, jacket, jStyle, fz, frontZ, bw);
+  } else if (jacket) {
     if (jStyle === 'americana') {
       // cuello de pico con la camisa
       M.color(look.shirt).poly([[-0.075, 0.37], [0.075, 0.37], [0, 0.12]], fz, 1);
@@ -122,11 +135,17 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
     );
   }
   // emblema en el pecho (izquierda del personaje = +X) y grande en la espalda
-  if (look.emblem) {
+  if (look.emblem && !costume) {
     drawEmblem(M, look.emblem, 0.08 * bw, 0.26, fz + 0.001, 0.075, 1, false);
-    drawEmblem(M, look.emblem, 0, 0.2, -frontZ - 0.004, 0.17, -1, true);
+    // con capa, el de la espalda no se ve: se ahorra
+    if (!look.cape) drawEmblem(M, look.emblem, 0, 0.2, -frontZ - 0.004, 0.17, -1, true);
   }
-  if (look.chain) {
+  if (!costume) {
+    if (look.bumBag) buildBumBag(M, look.bumBag, frontZ, bw);
+    if (look.cape) buildCape(M, look.cape, frontZ, bw, bd);
+  }
+  if (boxSuit) buildBoxSuit(M);
+  if (look.chain && !costume) {
     M.color('#f2c230');
     const z = frontZ + 0.006;
     M.flatBar(-0.075, 0.36, -0.045, 0.262, z, 0.017).flatBar(-0.045, 0.262, 0, 0.226, z, 0.017);
@@ -168,12 +187,13 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
     M.box(0.11, 0.062, 0.07, 0.056, 0.072, 0.14);
     M.box(-0.11, 0.062, 0.07, 0.056, 0.072, 0.14);
   }
-  if (look.facial === 'bigote' || look.facial === 'barba') {
+  if ((look.facial === 'bigote' || look.facial === 'barba') && look.fake !== 'bigotazo') {
     M.color(look.facial === 'barba' ? hairC : browC);
     // bigote: barra y dos puntas caídas (pegatinas)
     M.box(0, 0.076, 0.141, 0.108, 0.024, 0.016);
     M.decal(0.048, 0.058, 0.1495, 0.022, 0.03).decal(-0.048, 0.058, 0.1495, 0.022, 0.03);
   }
+  if (look.fake === 'bigotazo') buildBigotazo(M);
 
   // ojos normales
   M.setBone(B.eyes);
@@ -206,19 +226,29 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   );
   M.color('#ffffff').decal(0, 0.007, 0.003, 0.076, 0.011);
 
-  // pelo y gorra
-  buildHair(M, look);
-  if (look.cap) buildCap(M, look);
+  // pelo y gorra (o lo que se lleve en la cabeza)
+  if (hairShown !== 'none') buildHair(M, look, hairShown === 'covered');
+  if (capOn) buildCap(M, look);
+  if (hat) buildHat(M, hat);
   if (look.glasses) {
-    M.setBone(B.head).color('#111111');
+    const heart = look.glassesStyle === 'corazon';
+    M.setBone(B.head).color(heart ? '#ff2e88' : '#111111');
     M.box(0, 0.16, 0.147, 0.222, 0.024, 0.012);
     for (const s of [1, -1]) {
       const x = s * 0.137;
       M.quad([x, 0.152, 0.14], [x, 0.166, 0.14], [x, 0.166, -0.01], [x, 0.152, -0.01], [s, 0, 0], true);
     }
-    M.color(kind === 'fiestero' ? '#b0126b' : '#1a1f3a');
-    M.decal(0.055, 0.122, 0.1535, 0.08, 0.064).decal(-0.055, 0.122, 0.1535, 0.08, 0.064);
-    M.color('#8fa3ff').decal(0.034, 0.138, 0.154, 0.018, 0.009).decal(-0.076, 0.138, 0.154, 0.018, 0.009);
+    if (heart) {
+      // cristales en forma de corazón, más grandes que la cara
+      M.color('#ff4f81');
+      M.poly(HEART.map(([u, v]) => [u * 1.3, v * 1.3] as [number, number]), 0.1535, 1, 0.058, 0.118, true);
+      M.poly(HEART.map(([u, v]) => [u * 1.3, v * 1.3] as [number, number]), 0.1535, 1, -0.058, 0.118, true);
+      M.color('#ffd0e4').decal(0.036, 0.142, 0.154, 0.016, 0.016).decal(-0.08, 0.142, 0.154, 0.016, 0.016);
+    } else {
+      M.color(kind === 'fiestero' ? '#b0126b' : '#1a1f3a');
+      M.decal(0.055, 0.122, 0.1535, 0.08, 0.064).decal(-0.055, 0.122, 0.1535, 0.08, 0.064);
+      M.color('#8fa3ff').decal(0.034, 0.138, 0.154, 0.018, 0.009).decal(-0.076, 0.138, 0.154, 0.018, 0.009);
+    }
   }
 
   // ───────────── brazos ─────────────
@@ -253,7 +283,7 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
         { y: -0.2, hx: 0.044 * lw, hz: 0.046 * lw, ch: 0.016 },
         { y: -0.24, hx: 0.043 * lw, hz: 0.045 * lw, ch: 0.016 },
       ]);
-      if (jStyle === 'chandal') {
+      if (jStyle === 'chandal' && !chicken) {
         M.color('#f7f7f7');
         M.setBone(arm).box(s * (0.052 * lw + 0.001), -0.13, 0, 0.008, 0.3, 0.022);
         M.setBone(fore).box(s * (0.044 * lw + 0.001), -0.09, 0, 0.008, 0.21, 0.02);
@@ -310,8 +340,17 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
         { y: -0.385, hx: 0.053 * lw, hz: 0.055 * lw, ch: 0.02 },
       ]);
     }
+    M.setBone(foot);
+    if (chicken) {
+      buildChickenFoot(M);
+      continue;
+    }
+    if (look.shoesStyle === 'pantuflas') {
+      buildSlipper(M);
+      continue;
+    }
     // zapatilla
-    M.setBone(foot).color(look.shoes);
+    M.color(look.shoes);
     M.loft([
       { y: -0.066, hx: 0.062, hz: 0.142, ch: 0.045, cz: 0.058 },
       { y: -0.018, hx: 0.06, hz: 0.136, ch: 0.045, cz: 0.052 },
@@ -323,6 +362,9 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
       { y: -0.064, hx: 0.066, hz: 0.149, cz: 0.058 },
     ], 4, true, false);
   }
+  // faldón de la bata (hasta las rodillas) y cola de plumas del pollo
+  if (jacket && jStyle === 'bata' && !costume) buildRobeSkirt(M, jacket, bw, bd);
+  if (chicken) buildChickenTail(M, bd);
 
   // ───────────── accesorios que se muestran según la pose ─────────────
   // estrellitas de mareo alrededor de la cabeza
@@ -370,7 +412,8 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   let topY = 0;
   for (let i = 0; i < pos.count; i++) if (si.getX(i) === B.head) topY = Math.max(topY, pos.getY(i));
   const headTop = Math.max(0.29, topY - BIND_WORLD[B.head][1]);
-  return { geometry, triangles, chestZ: frontZ, headTop };
+  // con el disfraz de paquete, lo que se lleva en el pecho (el paquete del encargo) va por fuera de la caja
+  return { geometry, triangles, chestZ: boxSuit ? BOX_SUIT.hz : frontZ, headTop };
 }
 
 // ─────────────────────────────── pelo ───────────────────────────────
@@ -387,12 +430,12 @@ function backBlock(M: MeshBuilder, grow: number, low = 0.045) {
   M.roundBox(0, (low + yTop) / 2, -0.092 - grow * 0.5, 0.284 + grow * 2, yTop - low, 0.112 + grow, 0.04);
 }
 
-function buildHair(M: MeshBuilder, look: CharacterLookExtra) {
+function buildHair(M: MeshBuilder, look: CharacterLookExtra, covered = !!look.cap) {
   const style = look.hair;
   const c = look.hairColor;
   M.setBone(B.head);
-  if (look.cap) {
-    // con gorra solo asoma lo de detrás y los lados
+  if (covered) {
+    // con gorra (o sombrero) solo asoma lo de detrás y los lados
     M.color(c);
     switch (style) {
       case 'calvo':
@@ -526,6 +569,262 @@ function buildCap(M: MeshBuilder, look: CharacterLookExtra) {
   M.color(shade(c, 0.7));
   M.rotated(0.14, 0, 0, 0, 0.222, 0.14, () => M.box(0, 0.222, 0.205, 0.235, 0.016, 0.135));
   if (look.emblem) drawEmblem(M, look.emblem, 0, 0.254, 0.1505, 0.056, 1, false);
+}
+
+// ─────────────────────────────── ropa de Moda Paquetona ───────────────────────────────
+// Cada pieza cuesta pocos triángulos: el peor caso de ropa comprada sigue en torno a 1.500.
+
+const CHICKEN_YELLOW = '#ffd93b';
+/** Corazón (centro aproximado en 0,0): ancho 0,08, alto 0,07. */
+const HEART: [number, number][] = [
+  [0, -0.049], [0.026, -0.025], [0.04, -0.005], [0.038, 0.011], [0.026, 0.021], [0.012, 0.019], [0, 0.007],
+  [-0.012, 0.019], [-0.026, 0.021], [-0.038, 0.011], [-0.04, -0.005], [-0.026, -0.025],
+];
+/** Caja del disfraz de paquete (espacio del hueso spine). */
+const BOX_SUIT = { hx: 0.225, hz: 0.215, y0: -0.27, y1: 0.29 };
+
+/** Casco de moto, sombrero de paja, peluca afro arcoíris o la capucha del disfraz de pollo. */
+function buildHat(M: MeshBuilder, hat: 'casco' | 'paja' | 'peluca' | 'pollo') {
+  M.setBone(B.head);
+  if (hat === 'casco' || hat === 'pollo') {
+    const chick = hat === 'pollo';
+    const c = chick ? CHICKEN_YELLOW : '#e63946';
+    const g = chick ? 0.012 : 0;
+    // cúpula por encima de las cejas y protecciones a los lados y en la nuca (la cara queda al aire)
+    M.color(c).loft([
+      { y: 0.22, hx: 0.172 + g, hz: 0.176 + g, ch: 0.06, cz: -0.012 },
+      { y: 0.33, hx: 0.16 + g, hz: 0.164 + g, ch: 0.056, cz: -0.014 },
+      { y: 0.405 + g * 2, hx: 0.092 + g, hz: 0.096 + g, ch: 0.034, cz: -0.018 },
+    ], 8, false, true);
+    M.box(0.16 + g, 0.105, -0.03, 0.032, 0.24, 0.25).box(-0.16 - g, 0.105, -0.03, 0.032, 0.24, 0.25);
+    M.box(0, 0.105, -0.162 - g, 0.3 + g * 2, 0.24, 0.04);
+    if (!chick) {
+      // visera subida sobre la frente y un rayo amarillo a cada lado
+      M.color('#223a70');
+      M.rotated(-0.42, 0, 0, 0, 0.27, 0.17, () => M.box(0, 0.27, 0.17, 0.28, 0.075, 0.02));
+      M.color('#ffd23f');
+      for (const s of [1, -1]) {
+        const px = s * 0.1765, py = 0.105, pz = -0.03;
+        M.rotated(0, (s * Math.PI) / 2, 0, px, py, pz, () => {
+          M.poly([[-0.005, 0.075], [0.035, 0.075], [0.01, 0.01], [-0.025, 0.01]], pz, 1, px, py);
+          M.poly([[-0.03, 0.02], [0.03, 0.02], [-0.035, -0.08]], pz, 1, px, py);
+        });
+      }
+      return;
+    }
+    // pollo: cresta roja, pico naranja, barbilla roja y ojos de peluche
+    M.color('#ff3b3b');
+    ([[0.07, 0.1], [-0.01, 0.13], [-0.09, 0.09]] as [number, number][]).forEach(([z, h]) =>
+      M.rotated(-0.25, 0, 0, 0, 0.43, z, () => M.box(0, 0.42 + h / 2, z, 0.036, h, 0.075)),
+    );
+    M.box(0, 0.235, 0.205, 0.04, 0.055, 0.03);
+    M.color('#ff9f1c');
+    const beak: [number, number, number][] = [[0.06, 0.255, 0.17], [-0.06, 0.255, 0.17], [-0.06, 0.315, 0.16], [0.06, 0.315, 0.16]];
+    const tip: [number, number, number] = [0, 0.27, 0.29];
+    const inside: [number, number, number] = [0, 0.285, 0.19];
+    for (let k = 0; k < 4; k++) M.tri(beak[k], beak[(k + 1) % 4], tip, inside);
+    M.rotated(-0.63, 0, 0, 0, 0.35, 0.155, () => {
+      M.color('#ffffff').decal(0.07, 0.35, 0.158, 0.05, 0.05).decal(-0.07, 0.35, 0.158, 0.05, 0.05);
+      M.color('#1b1030').decal(0.072, 0.345, 0.16, 0.025, 0.028).decal(-0.068, 0.345, 0.16, 0.025, 0.028);
+    });
+    return;
+  }
+  if (hat === 'paja') {
+    // un poco echado hacia atrás, de ir a la feria
+    M.rotated(-0.14, 0, 0, 0, 0.26, 0, () => {
+      M.color('#d9b04f').loft([
+        { y: 0.236, hx: 0.37, hz: 0.365 },
+        { y: 0.254, hx: 0.35, hz: 0.345 },
+      ], 10);
+      M.color('#f1cf6e').loft([
+        { y: 0.22, hx: 0.158, hz: 0.162, ch: 0.05 },
+        { y: 0.35, hx: 0.148, hz: 0.152, ch: 0.05 },
+        { y: 0.38, hx: 0.118, hz: 0.122, ch: 0.04 },
+      ], 8, false, true);
+      M.color('#e63946').loft([
+        { y: 0.252, hx: 0.162, hz: 0.166, ch: 0.05 },
+        { y: 0.292, hx: 0.16, hz: 0.164, ch: 0.05 },
+      ], 8, false, false);
+    });
+    return;
+  }
+  // peluca afro arcoíris: por delante empieza detrás de la frente, para que se vean cejas y ojos
+  const R = [
+    { y: -0.01, hx: 0.19, hz: 0.15, ch: 0.07, cz: -0.08 },
+    { y: 0.19, hx: 0.25, hz: 0.19, ch: 0.09, cz: -0.07 },
+    { y: 0.31, hx: 0.29, hz: 0.28, ch: 0.12, cz: -0.02 },
+    { y: 0.45, hx: 0.28, hz: 0.27, ch: 0.12, cz: -0.02 },
+    { y: 0.56, hx: 0.2, hz: 0.19, ch: 0.08, cz: -0.02 },
+    { y: 0.6, hx: 0.1, hz: 0.1, ch: 0.04, cz: -0.02 },
+  ];
+  const cols = ['#3a86ff', '#06d6a0', '#ffd23f', '#ff7b1a', '#e63946'];
+  for (let i = 0; i < 5; i++) M.color(cols[i]).loft([R[i], R[i + 1]], 8, i === 0, i === 4);
+}
+
+/** Bigotazo postizo de manillar, con las puntas enroscadas hacia arriba. */
+function buildBigotazo(M: MeshBuilder) {
+  M.setBone(B.head).color('#2a1a12');
+  M.box(0, 0.075, 0.15, 0.1, 0.034, 0.024);
+  for (const s of [1, -1]) {
+    rod(M, s * 0.045, 0.073, s * 0.105, 0.061, 0.148, 0.03, 0.022);
+    rod(M, s * 0.105, 0.061, s * 0.137, 0.093, 0.146, 0.022, 0.02);
+  }
+}
+
+/** Barra fina entre dos puntos del plano XY, sin tapas en las puntas (8 triángulos). */
+function rod(M: MeshBuilder, x1: number, y1: number, x2: number, y2: number, z: number, thick: number, depth: number) {
+  const len = Math.hypot(x2 - x1, y2 - y1) + thick * 0.5;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const ang = Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2;
+  M.rotated(0, 0, ang, mx, my, z, () =>
+    M.loft([
+      { y: my - len / 2, hx: thick / 2, hz: depth / 2, cx: mx, cz: z },
+      { y: my + len / 2, hx: thick / 2, hz: depth / 2, cx: mx, cz: z },
+    ], 4, false, false),
+  );
+}
+
+/** Frente de la bata de guatiné (cuello cruzado y cinturón con lazo) o del traje de gala (pajarita y lentejuelas). */
+function buildWrapFront(M: MeshBuilder, look: CharacterLookExtra, jacket: string, style: 'bata' | 'gala', fz: number, frontZ: number, bw: number) {
+  if (style === 'gala') {
+    M.color(look.shirt).poly([[-0.075, 0.37], [0.075, 0.37], [0, 0.12]], fz, 1);
+    M.color(shade(jacket, 0.72));
+    M.poly([[-0.075, 0.37], [0, 0.12], [-0.02, 0.12], [-0.1, 0.33]], fz + 0.001, 1);
+    M.poly([[0.075, 0.37], [0.1, 0.33], [0.02, 0.12], [0, 0.12]], fz + 0.001, 1);
+    // pajarita
+    M.color('#111111');
+    M.poly([[-0.062, 0.372], [-0.062, 0.312], [0, 0.342]], fz + 0.003, 1);
+    M.poly([[0.062, 0.372], [0, 0.342], [0.062, 0.312]], fz + 0.003, 1);
+    M.decal(0, 0.342, fz + 0.004, 0.024, 0.028);
+    M.decal(0, 0.09, fz, 0.016, 0.016).decal(0, 0.04, fz, 0.016, 0.016);
+    // lentejuelas que brillan (delante y detrás)
+    M.color('#fff6c9');
+    for (const [x, y] of [[0.13, 0.12], [-0.13, 0.21], [0.15, 0.29], [-0.14, 0.05], [0.11, 0.01]] as [number, number][]) M.decal(x * bw, y, fz, 0.02, 0.02);
+    for (const [x, y] of [[0.1, 0.3], [-0.08, 0.22], [0.05, 0.08], [-0.13, 0.04], [0.15, 0.16], [-0.02, 0.33]] as [number, number][]) M.decal(x * bw, y, -frontZ - 0.003, 0.02, 0.02, -1);
+    return;
+  }
+  // bata: el pijama asoma por el cuello; solapas cruzadas y cinturón de la misma tela con lazo
+  const trim = shade(jacket, 0.78);
+  M.color(look.shirt).poly([[-0.07, 0.37], [0.07, 0.37], [0, 0.2]], fz, 1);
+  M.color(trim);
+  M.flatBar(-0.07, 0.37, 0.055, 0.02, fz + 0.001, 0.04);
+  M.flatBar(0.07, 0.37, -0.005, 0.19, fz + 0.002, 0.04);
+  M.loft([
+    { y: -0.035, hx: 0.166 * bw, hz: frontZ * 0.97 + 0.007, ch: 0.04 },
+    { y: 0.02, hx: 0.171 * bw, hz: frontZ + 0.007, ch: 0.045 },
+  ], 8, false, false);
+  M.decal(0.07 * bw, -0.008, frontZ + 0.012, 0.055, 0.045);
+  M.decal(0.058 * bw, -0.085, frontZ + 0.021, 0.024, 0.11).decal(0.086 * bw, -0.078, frontZ + 0.022, 0.024, 0.1);
+}
+
+/** Faldón de la bata, colgado de la cadera (hasta medio muslo), con dobladillo y bolsillos. */
+function buildRobeSkirt(M: MeshBuilder, color: string, bw: number, bd: number) {
+  M.setBone(B.hips).color(color);
+  M.loft([
+    { y: 0.1, hx: 0.176 * bw, hz: 0.118 * bd, ch: 0.045 },
+    { y: -0.16, hx: 0.19 * bw, hz: 0.138 * bd, ch: 0.05 },
+    { y: -0.36, hx: 0.2 * bw, hz: 0.158 * bd, ch: 0.055 },
+  ], 8, false, false);
+  M.color(shade(color, 0.78)).decal(0.095 * bw, -0.12, 0.142 * bd, 0.07, 0.07).decal(-0.095 * bw, -0.12, 0.142 * bd, 0.07, 0.07);
+}
+
+/** Pantufla rosa de conejito (una por pie). */
+function buildSlipper(M: MeshBuilder) {
+  const pink = '#ffb3d1';
+  M.color(pink).loft([
+    { y: -0.09, hx: 0.07, hz: 0.152, ch: 0.05, cz: 0.058 },
+    { y: -0.035, hx: 0.074, hz: 0.152, ch: 0.056, cz: 0.056 },
+    { y: 0.025, hx: 0.06, hz: 0.085, ch: 0.04, cz: 0.0 },
+  ], 8, false, true); // la suela no se ve: pisa el suelo
+  // orejas de conejo sobre la puntera, un poco abiertas (planas, por las dos caras)
+  M.color('#fff0f6');
+  for (const e of [1, -1]) {
+    M.rotated(-0.3, 0, -e * 0.25, e * 0.03, -0.03, 0.15, () => M.decal(e * 0.03, 0.03, 0.15, 0.032, 0.12, 1).decal(e * 0.03, 0.03, 0.15, 0.032, 0.12, -1));
+  }
+}
+
+/** Pata de pollo naranja con tres dedos. */
+function buildChickenFoot(M: MeshBuilder) {
+  M.color('#ff9f1c');
+  M.box(0, -0.055, 0.0, 0.05, 0.07, 0.06);
+  for (const a of [-0.5, 0, 0.5]) M.rotated(0, a, 0, 0, -0.078, 0.0, () => M.box(0, -0.078, 0.1, 0.03, 0.024, 0.2));
+}
+
+/** Cola de plumas blancas del disfraz de pollo (en la cadera, por detrás). */
+function buildChickenTail(M: MeshBuilder, bd: number) {
+  M.setBone(B.hips).color('#fff8e7');
+  const z = -0.1 * bd;
+  for (const k of [-1, 0, 1]) M.rotated(-0.75, 0, k * 0.5, 0, 0, z, () => M.box(0, 0.11, z, 0.07, 0.24, 0.03));
+}
+
+/** Riñonera cruzada al pecho: bolso delante y correa en bandolera por delante y por detrás. */
+function buildBumBag(M: MeshBuilder, color: string, frontZ: number, bw: number) {
+  M.setBone(B.spine);
+  const z = frontZ + 0.006;
+  M.color('#1b1030');
+  M.flatBar(-0.06 * bw, 0.13, 0.15 * bw, 0.39, z, 0.03);
+  M.rotated(0, Math.PI, 0, 0, 0, 0, () => M.flatBar(-0.15 * bw, 0.39, 0.16 * bw, 0.02, z + 0.003, 0.03));
+  M.box(0.15 * bw, 0.412, 0, 0.035, 0.02, 0.23);
+  M.color(color).box(-0.07 * bw, 0.1, z + 0.035, 0.2, 0.1, 0.07);
+  M.color('#d8d8d8').decal(-0.07 * bw, 0.126, z + 0.071, 0.17, 0.01);
+  M.color('#ffd23f').decal(-0.07 * bw, 0.086, z + 0.071, 0.05, 0.03);
+}
+
+/** Capa de superhéroe con un paquete dorado a la espalda. Cae hacia atrás, como si hubiera viento. */
+function buildCape(M: MeshBuilder, color: string, frontZ: number, bw: number, bd: number) {
+  M.setBone(B.spine).color(color);
+  const t = 0.012;
+  const zTop = -(frontZ + t + 0.004), zMid = -(0.16 * bd + t);
+  M.loft([
+    { y: 0.4, hx: 0.15 * bw, hz: t, cz: -0.07 * bd - t },
+    { y: 0.3, hx: 0.2 * bw, hz: t, cz: zTop },
+    { y: -0.1, hx: 0.23 * bw, hz: t, cz: zMid },
+    { y: -0.55, hx: 0.28 * bw, hz: t, cz: -(0.3 * bd + t) },
+  ], 4, true, true);
+  // escudo: círculo amarillo con una caja de cartón precintada
+  const slope = (zTop - zMid) / 0.4;
+  const ey = 0.08;
+  const ez = zTop - t - slope * (0.3 - ey) - 0.003;
+  M.rotated(Math.atan(slope), 0, 0, 0, ey, ez, () => {
+    M.color('#ffd23f').oct(0, ey, ez, 0.2, 0.2, -1);
+    M.color('#c8915a').decal(0, ey - 0.008, ez - 0.001, 0.1, 0.085, -1);
+    M.color('#e63946').decal(0, ey + 0.016, ez - 0.002, 0.1, 0.018, -1);
+  });
+  // broches dorados en los hombros
+  M.color('#ffd23f').decal(0.14 * bw, 0.37, 0.108 * bd, 0.03, 0.03).decal(-0.14 * bw, 0.37, 0.108 * bd, 0.03, 0.03);
+}
+
+/** Disfraz de paquete gigante: caja de cartón con solapas abiertas, precinto, FRÁGIL y el logo de la empresa. */
+function buildBoxSuit(M: MeshBuilder) {
+  M.setBone(B.spine);
+  const { hx, hz, y0, y1 } = BOX_SUIT;
+  const cy = (y0 + y1) / 2, h = y1 - y0;
+  M.color('#c8915a').box(0, cy, 0, hx * 2, h, hz * 2);
+  M.color('#b07b48');
+  M.rotated(0.95, 0, 0, 0, y1, hz, () => M.box(0, y1 + 0.065, hz, hx * 2, 0.13, 0.012));
+  M.rotated(-0.95, 0, 0, 0, y1, -hz, () => M.box(0, y1 + 0.065, -hz, hx * 2, 0.13, 0.012));
+  // precinto por delante y por detrás
+  M.color('#e3d3a8').decal(0, cy, hz + 0.001, 0.07, h).decal(0, cy, -hz - 0.001, 0.07, h, -1);
+  // delante: etiqueta con la dirección
+  M.color('#ffffff').decal(0.07, 0.05, hz + 0.002, 0.15, 0.1);
+  M.color('#1b1030');
+  for (let i = 0; i < 3; i++) M.decal(0.07 - (i === 2 ? 0.02 : 0), 0.077 - i * 0.026, hz + 0.003, i === 2 ? 0.08 : 0.12, 0.01);
+  // detrás: el logo de la empresa y FRÁGIL en rojo (con su copa)
+  drawEmblem(M, 'reparto', 0, 0.02, -hz - 0.002, 0.2, -1, true);
+  M.color('#e63946').decal(0, 0.2, -hz - 0.002, 0.3, 0.065, -1);
+  M.color('#ffffff');
+  M.poly([[-0.1, 0.225], [-0.06, 0.225], [-0.08, 0.2]], -hz - 0.003, -1);
+  M.decal(-0.08, 0.19, -hz - 0.003, 0.008, 0.022, -1);
+  for (let i = 0; i < 4; i++) M.decal(-0.03 + i * 0.037, 0.2, -hz - 0.003, 0.025, 0.035, -1);
+  // flechas «este lado arriba» en los costados
+  for (const s of [1, -1]) {
+    const px = s * (hx + 0.002), py = 0.02, pz = 0;
+    M.rotated(0, (s * Math.PI) / 2, 0, px, py, pz, () => {
+      M.color('#1b1030');
+      M.poly([[-0.05, 0.05], [0.05, 0.05], [0, 0.11]], pz, 1, px, py);
+      M.decal(px, py, pz, 0.03, 0.1);
+    });
+  }
 }
 
 // ─────────────────────────────── emblemas ───────────────────────────────
