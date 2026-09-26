@@ -12,15 +12,15 @@ import { makeCombatBrain, updateCombatant, armNpc, type CombatBrain } from './co
 import { randomLookFor } from '../actors/looks';
 import { Rng, fx as rnd } from '../core/rng';
 import { WEAPONS, type WeaponId } from '../combat/weapons';
+import { G } from '../core/physics';
+import { driveChaseCar, offscreen, type ChaseNav } from './police';
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 
-interface Chase {
+interface Chase extends ChaseNav {
   van: Vehicle;
   crew: Npc[];
-  route: THREE.Vector3[];
-  routeTimer: number;
   fireTimer: number;
   stopTimer: number;
   dismounted: boolean;
@@ -71,7 +71,10 @@ export class Gang implements System {
       if (near) game.mod.jobs?.dropFrom(v, 1);
     });
     game.events.on('player:died', () => this.clearChases());
-    game.events.on('player:respawn', () => this.clearChases());
+    game.events.on('player:respawn', () => {
+      this.clearChases();
+      this.calmDown();
+    });
   }
 
   private get vm(): VehicleManager {
@@ -105,14 +108,52 @@ export class Gang implements System {
     return n;
   }
 
+  /**
+   * Tras reaparecer: los que te estaban dando caza se van (si no, te esperan en la puerta del
+   * centro de salud) y los guardias de la guarida vuelven a su sitio.
+   */
+  private calmDown() {
+    for (const m of [...this.members]) {
+      if (m.removed || m.role === 'jefe') continue;
+      if (this.guards.includes(m)) {
+        const b = m.brain as CombatBrain;
+        b.aggro = false;
+        b.mode = 'idle';
+        m.aiming = false;
+        if (b.home && m.alive && !m.busy) m.goTo(b.home);
+        continue;
+      }
+      if (m.alive) this.npcs.remove(m);
+    }
+  }
+
+  /** ¿Es un buen sitio para que aparezca alguien? En tierra, fuera de los edificios y sin desnivel raro. */
+  private goodSpot(p: THREE.Vector3, refY: number): boolean {
+    const w = this.game.world;
+    if (!w.isLand(p.x, p.z)) return false;
+    p.y = w.heightAt(p.x, p.z);
+    if (Math.abs(p.y - refY) > 3) return false;
+    // dentro de un edificio (hay techo encima)
+    return !this.game.physics.raycast(tmpV.set(p.x, p.y + 21, p.z), tmpV2.set(0, -1, 0), 19.5, G.STATIC);
+  }
+
   /** Emboscada: `count` miembros alrededor de `pos`, ya enfadados. */
   ambush(pos: THREE.Vector3, count = 3, weapon?: WeaponId): Npc[] {
     const out: Npc[] = [];
+    const refY = this.game.world.heightAt(pos.x, pos.z);
     for (let i = 0; i < count; i++) {
-      const a = (i / count) * Math.PI * 2 + rnd.next();
-      const r = 6 + rnd.next() * 6;
-      const p = new THREE.Vector3(pos.x + Math.cos(a) * r, 0, pos.z + Math.sin(a) * r);
-      if (!this.game.world.isLand(p.x, p.z)) p.copy(pos);
+      // un sitio a 7-14 m, fuera de los edificios y, si se puede, donde no se vea aparecer
+      let p: THREE.Vector3 | null = null;
+      let fallback: THREE.Vector3 | null = null;
+      for (let k = 0; k < 10 && !p; k++) {
+        const a = (i / count) * Math.PI * 2 + rnd.next() * 1.4 + k * 0.7;
+        const r = 7 + rnd.next() * 7;
+        const c = new THREE.Vector3(pos.x + Math.cos(a) * r, 0, pos.z + Math.sin(a) * r);
+        if (!this.goodSpot(c, refY)) continue;
+        if (offscreen(this.game, c)) p = c;
+        else fallback ??= c;
+      }
+      p ??= fallback ?? pos.clone();
       p.y = this.game.world.heightAt(p.x, p.z);
       out.push(this.spawnMember(p, weapon, true));
     }
@@ -125,11 +166,23 @@ export class Gang implements System {
     const p = this.game.mod.player;
     const edges = this.roads.edgesInRing(p.position, 70, 130);
     if (!edges.length) return false;
-    const eid = edges[Math.floor(rnd.next() * edges.length)];
-    const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
-    const e = this.roads.g.edges[eid];
-    const pos = this.roads.lanePoint(eid, dir, 0.5, e.width / 4, new THREE.Vector3());
-    if (this.vm.nearest(pos, 8)) return false;
+    // una calle fuera de la vista, con la furgoneta ya mirando hacia el jugador
+    let eid = -1;
+    let dir: 1 | -1 = 1;
+    let pos: THREE.Vector3 | null = null;
+    for (let k = 0; k < 8; k++) {
+      const id = edges[Math.floor(rnd.next() * edges.length)];
+      const ed = this.roads.g.edges[id];
+      const a = this.roads.g.nodes[ed.a].pos, b = this.roads.g.nodes[ed.b].pos;
+      const d: 1 | -1 = b.distanceToSquared(p.position) < a.distanceToSquared(p.position) ? 1 : -1;
+      const q = this.roads.lanePoint(id, d, 0.5, ed.width / 4, new THREE.Vector3());
+      if (this.vm.nearest(q, 8)) continue;
+      eid = id;
+      dir = d;
+      pos = q;
+      if (offscreen(this.game, q)) break;
+    }
+    if (!pos) return false;
     const van = this.vm.spawn('gangvan', pos, this.roads.heading(eid, dir));
     const crew: Npc[] = [];
     for (let i = 0; i < 3; i++) {
@@ -140,7 +193,7 @@ export class Gang implements System {
     }
     const brain: CarBrain = { edge: eid, dir, t: 0.5, next: null, cruise: 22, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() };
     (van as any).brain = brain;
-    this.chases.push({ van, crew, route: [], routeTimer: 0, fireTimer: 2, stopTimer: 0, dismounted: false, life: 0 });
+    this.chases.push({ van, crew, route: [], routeTimer: 0, fireTimer: 2, stopTimer: 0, dismounted: false, life: 0, unstick: { t: 0, tries: 0 } });
     this.game.events.emit('notify', { title: 'Furgoneta morada detrás', text: '¿Ese paquete es para nosotros? 😂', from: 'Los Devueltos', icon: '↩️' });
     return true;
   }
@@ -291,25 +344,11 @@ export class Gang implements System {
     const target = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : tmpV.copy(p.position);
     const vpos = van.getPosition(tmpV2);
     const dist = vpos.distanceTo(target);
-    c.routeTimer -= dt;
-    if (dist > 35) {
-      if (c.routeTimer <= 0 || !c.route.length) {
-        c.routeTimer = 1.5;
-        c.route = this.roads.route(vpos, target);
-      }
-      while (c.route.length > 1 && c.route[0].distanceTo(vpos) < 12) c.route.shift();
-      brain.chaseTarget!.copy(c.route[0] ?? target);
-    } else {
-      brain.chaseTarget!.copy(target);
-      const pv = this.vm.current;
-      if (pv) {
-        const lv = pv.body.linvel();
-        brain.chaseTarget!.x += lv.x * 0.4;
-        brain.chaseTarget!.z += lv.z * 0.4;
-      }
+    // por calles si no te ve; directo si te ve o está cerca. Atascada sin remedio y sin que nadie la vea: se recoloca
+    if (driveChaseCar(g, this.roads, van, brain, c, target, 0.4, dt) && dist > 45 && offscreen(g, vpos)) {
+      this.relocate(c);
+      return;
     }
-    brain.mode = 'chase';
-    this.traffic?.drive(van, dt);
 
     // disparos desde la ventanilla (el copiloto)
     c.fireTimer -= dt;
@@ -335,6 +374,33 @@ export class Gang implements System {
       c.stopTimer += dt;
       if (c.stopTimer > 1.2) this.dismount(c);
     } else c.stopTimer = 0;
+  }
+
+  /** Pone una furgoneta atascada en otra calle (fuera de la vista) mirando hacia el jugador. */
+  private relocate(c: Chase) {
+    const p = this.game.mod.player;
+    const focus = this.vm.current ? this.vm.current.getPosition(new THREE.Vector3()) : p.position;
+    const edges = this.roads.edgesInRing(focus, 60, 110);
+    for (let k = 0; k < 8 && edges.length; k++) {
+      const id = edges[Math.floor(rnd.next() * edges.length)];
+      const ed = this.roads.g.edges[id];
+      const a = this.roads.g.nodes[ed.a].pos, b = this.roads.g.nodes[ed.b].pos;
+      const d: 1 | -1 = b.distanceToSquared(focus) < a.distanceToSquared(focus) ? 1 : -1;
+      const q = this.roads.lanePoint(id, d, 0.5, ed.width / 4, new THREE.Vector3());
+      if (this.vm.nearest(q, 8) || !offscreen(this.game, q)) continue;
+      c.van.place(q, this.roads.heading(id, d));
+      c.unstick.t = 0;
+      c.unstick.tries = 0;
+      c.route = [];
+      const brain = (c.van as any).brain as CarBrain | undefined;
+      if (brain) {
+        brain.edge = id;
+        brain.dir = d;
+        brain.t = 0.5;
+        brain.reverse = 0;
+      }
+      return;
+    }
   }
 
   private dismount(c: Chase) {

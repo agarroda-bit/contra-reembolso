@@ -13,18 +13,139 @@ import { makeCombatBrain, updateCombatant, armNpc, type CombatBrain } from './co
 import { randomLookFor } from '../actors/looks';
 import { Rng, fx as rnd } from '../core/rng';
 import { SOLID } from '../core/physics';
+import type { Game as GameT } from '../core/game';
 
 const HEAT_LEVELS = [0, 1, 3, 6, 10, 15];
+/** Calor por cada disparo tuyo (antes 1: con defenderte de una emboscada llegabas a 5 sirenas). */
+const HEAT_SHOT = 0.3;
+/** Sin un policía delante, los disparos (la gente llamando) no pasan de 2 sirenas. */
+const HEAT_CAP_UNSEEN_SHOTS = HEAT_LEVELS[3] - 0.01;
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+const tmpE = new THREE.Vector3();
+const tmpT = new THREE.Vector3();
+const tmpF = new THREE.Vector3();
 
-interface Unit {
+interface Unit extends ChaseNav {
   car: Vehicle;
   crew: Npc[];
-  route: THREE.Vector3[];
-  routeTimer: number;
   onFoot: boolean;
   roadblock: boolean;
+}
+
+/** Estado del «vigilante de atascos» de un coche perseguidor. */
+export interface UnstickState {
+  t: number;
+  tries: number;
+}
+
+/**
+ * Coches de persecución (policía y banda) que se quedan clavados contra una pared o en un giro
+ * imposible: marcha atrás un momento (maniobra en tres tiempos). Devuelve true si, tras varios intentos,
+ * sigue atascado (entonces conviene retirarlo si nadie lo ve).
+ */
+export function unstickCar(car: Vehicle, brain: CarBrain, s: UnstickState, dt: number): boolean {
+  if (brain.reverse > 0) return false;
+  const sp = Math.abs(car.speed);
+  if (sp < 1.2) s.t += dt;
+  else if (sp > 4) {
+    s.t = 0;
+    s.tries = 0;
+  }
+  if (s.t > 2.2) {
+    s.t = 0;
+    s.tries++;
+    brain.reverse = 1.1 + rnd.next() * 0.7;
+  }
+  return s.tries >= 3;
+}
+
+/** Estado de navegación de un coche perseguidor. */
+export interface ChaseNav {
+  route: THREE.Vector3[];
+  routeTimer: number;
+  /** Va directo al objetivo (lo ve o está muy cerca) en vez de por la ruta de calles. */
+  direct?: boolean;
+  unstick: UnstickState;
+}
+
+const tmpN = new THREE.Vector3();
+const tmpL = new THREE.Vector3();
+const tmpQ = new THREE.Quaternion();
+
+/** Ruta por calles empezando por el cruce que el coche tiene delante (así no intenta dar la vuelta en mitad de una calle). */
+function chaseRoute(roads: Roads, car: Vehicle, carPos: THREE.Vector3, target: THREE.Vector3): THREE.Vector3[] {
+  const ne = roads.nearestEdge(carPos, true);
+  if (!ne || ne.dist > 12) return roads.route(carPos, target);
+  const e = roads.g.edges[ne.edge];
+  const a = roads.g.nodes[e.a].pos, b = roads.g.nodes[e.b].pos;
+  const fx = Math.sin(car.heading), fz = Math.cos(car.heading);
+  const ahead = (b.x - a.x) * fx + (b.z - a.z) * fz > 0 ? b : a;
+  return roads.route(ahead, target);
+}
+
+/**
+ * Conduce un coche perseguidor (policía o furgoneta morada) hacia `target`: por las calles si no lo ve,
+ * directo si lo ve o está muy cerca (con un poco de predicción si vas en coche). Hace maniobras
+ * cuando el objetivo queda detrás en una calle estrecha y detecta atascos.
+ * Devuelve true si está atascado sin remedio.
+ */
+export function driveChaseCar(game: GameT, roads: Roads, car: Vehicle, brain: CarBrain, nav: ChaseNav, target: THREE.Vector3, lead: number, dt: number): boolean {
+  const carPos = car.getPosition(tmpN);
+  const dist = carPos.distanceTo(target);
+  nav.routeTimer -= dt;
+  if (nav.routeTimer <= 0 || (!nav.direct && !nav.route.length)) {
+    nav.routeTimer = 1.5;
+    let direct = dist < 18;
+    if (!direct && dist < 45) {
+      const o = tmpL.copy(carPos).setY(carPos.y + 1);
+      const d = tmpT.copy(target).setY(target.y + 1).sub(o);
+      direct = !game.physics.raycast(o, d, Math.max(0.1, d.length() - 2), SOLID);
+    }
+    nav.direct = direct;
+    if (!direct) nav.route = chaseRoute(roads, car, carPos, target);
+  }
+  const ct = brain.chaseTarget!;
+  if (nav.direct) {
+    ct.copy(target);
+    const pv = game.mod.vehicles?.current as Vehicle | undefined;
+    if (pv && lead > 0) {
+      const lv = pv.body.linvel();
+      ct.x += lv.x * lead;
+      ct.z += lv.z * lead;
+    }
+  } else {
+    while (nav.route.length > 1 && nav.route[0].distanceTo(carPos) < 10) nav.route.shift();
+    ct.copy(nav.route[0] ?? target);
+  }
+  brain.mode = 'chase';
+  game.mod.traffic?.drive(car, dt);
+  // el objetivo le queda detrás y tiene una pared delante (o va muy lento): marcha atrás girando
+  if (brain.reverse <= 0) {
+    car.getQuaternion(tmpQ).invert();
+    tmpL.copy(ct).sub(carPos).applyQuaternion(tmpQ);
+    const ang = Math.abs(Math.atan2(tmpL.x, tmpL.z));
+    if (ang > 1.5 && tmpL.length() > 6) {
+      const h = car.heading;
+      const fwd = tmpT.set(Math.sin(h), 0, Math.cos(h));
+      const nose = tmpL.copy(carPos).addScaledVector(fwd, car.spec.half.z + 0.2);
+      nose.y += 0.4;
+      const wall = game.physics.raycast(nose, fwd, 4 + Math.max(0, car.speed) * 0.4, SOLID);
+      if (wall || (ang > 2.2 && Math.abs(car.speed) < 2.5)) brain.reverse = 0.9 + rnd.next() * 0.4;
+    }
+  }
+  return unstickCar(car, brain, nav.unstick, dt);
+}
+
+/** ¿Está fuera de la vista de la cámara (detrás o tapado por un edificio)? */
+export function offscreen(game: GameT, pos: THREE.Vector3): boolean {
+  const cam = game.camera.position;
+  const fwd = game.camera.getWorldDirection(tmpF);
+  const to = tmpT.copy(pos).setY(pos.y + 1).sub(cam);
+  const len = to.length();
+  if (len < 1) return false;
+  if (to.dot(fwd) / len < 0.25) return true;
+  return !!game.physics.raycast(cam, to, len - 1, SOLID);
 }
 
 export class Police implements System {
@@ -51,7 +172,7 @@ export class Police implements System {
     // crímenes
     ev.on('vehicle:steal' as any, (e: any) => this.crime(e.npc?.police ? 3 : 1, 'robo', true));
     ev.on('weapon:shot' as any, (e: any) => {
-      if (e.shooter?.kind === 'player') this.crime(e.melee ? 0.3 : 1, 'disparos', false, 60);
+      if (e.shooter?.kind === 'player') this.crime(e.melee ? 0.15 : HEAT_SHOT, 'disparos', false, 60, HEAT_CAP_UNSEEN_SHOTS);
     });
     ev.on('npc:runover' as any, (e: any) => {
       if (e.vehicle === game.mod.vehicles?.current) this.crime(e.npc.police ? 2 : 0.6, 'atropello', true);
@@ -91,7 +212,7 @@ export class Police implements System {
    * Un delito. `needsWitness`: solo cuenta si lo ve la policía (o con probabilidad si lo ve la gente).
    * maxDist: distancia a la que la policía lo oye/ve.
    */
-  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55) {
+  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55, capUnseen = Infinity) {
     const p = this.game.mod.player;
     if (!p) return;
     const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : p.position;
@@ -105,7 +226,8 @@ export class Police implements System {
       if (rnd.next() > 0.35) return;
     }
     const before = this.wanted;
-    this.heat += weight;
+    if (seen) this.heat += weight;
+    else if (this.heat < capUnseen) this.heat = Math.min(capUnseen, this.heat + weight);
     this.recalc();
     this.unseen = 0;
     this.lastSeen.copy(pos);
@@ -130,20 +252,23 @@ export class Police implements System {
 
   /** ¿Algún policía (a pie o en coche) ve este punto? */
   seesPoint(pt: THREE.Vector3, maxDist = 60): boolean {
-    const eyes: THREE.Vector3[] = [];
-    for (const o of this.officers) if (o.alive && !o.vehicle) eyes.push(tmpV2.copy(o.position).setY(o.position.y + 1.6).clone());
+    const target = tmpT.copy(pt).setY(pt.y + 1);
+    const look = (e: THREE.Vector3) => {
+      const d = e.distanceTo(target);
+      if (d > maxDist) return false;
+      const dir = tmpV2.copy(target).sub(e);
+      return !this.game.physics.raycast(e, dir, d - 0.8, SOLID);
+    };
+    for (const o of this.officers) {
+      if (!o.alive || o.vehicle || o.busy) continue;
+      if (look(tmpE.copy(o.position).setY(o.position.y + 1.6))) return true;
+    }
     for (const u of this.units) {
       // solo cuentan los coches con un policía al volante (no el que conduces tú ni uno vacío)
       if (u.car.destroyed || u.car.disposed || u.car === this.vm.current || u.car.driver?.kind !== 'npc') continue;
-      eyes.push(u.car.getPosition(new THREE.Vector3()).setY(u.car.getPosition(tmpV2).y + 0.8));
-    }
-    const target = pt.clone().setY(pt.y + 1);
-    for (const e of eyes) {
-      const d = e.distanceTo(target);
-      if (d > maxDist) continue;
-      const dir = target.clone().sub(e);
-      const hit = this.game.physics.raycast(e, dir, d - 0.8, SOLID);
-      if (!hit) return true;
+      const e = u.car.getPosition(tmpE);
+      e.y += 0.8;
+      if (look(e)) return true;
     }
     return false;
   }
@@ -152,6 +277,8 @@ export class Police implements System {
   clear() {
     this.heat = 0;
     this.wanted = 0;
+    this.arrestTimer = 0;
+    (this.game.hud as any).arrest = 0;
     this.game.events.emit('wanted', { level: 0 });
     for (const u of this.units) this.despawnUnit(u);
     this.units = [];
@@ -168,17 +295,58 @@ export class Police implements System {
     return [0, 1, 2, 3, 4, 6][this.wanted];
   }
 
-  private spawnUnit(roadblock = false) {
+  /** Hacia dónde va el jugador (para poner los controles por delante). */
+  private playerHeading(out: THREE.Vector3): THREE.Vector3 {
+    const v = this.vm.current;
+    if (v) {
+      const lv = v.body.linvel();
+      if (Math.hypot(lv.x, lv.z) > 4) return out.set(lv.x, 0, lv.z).normalize();
+      return out.set(Math.sin(v.heading), 0, Math.cos(v.heading));
+    }
     const p = this.game.mod.player;
-    const focus = p.position;
-    const edges = this.roads.edgesInRing(focus, roadblock ? 55 : 90, roadblock ? 95 : 160);
-    if (!edges.length) return;
-    const eid = edges[Math.floor(rnd.next() * edges.length)];
-    const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
-    const e = this.roads.g.edges[eid];
-    const pos = this.roads.lanePoint(eid, dir, 0.5, roadblock ? 0 : e.width / 4, new THREE.Vector3());
-    if (this.vm.nearest(pos, 8)) return;
-    const kind = this.wanted >= 4 && rnd.next() < 0.4 ? 'policevan' : 'police';
+    if (p.velocity.lengthSq() > 4) return out.set(p.velocity.x, 0, p.velocity.z).normalize();
+    return this.game.mod.cameraRig?.forwardXZ(out) ?? out.set(0, 0, -1);
+  }
+
+  /**
+   * Elige una calle donde aparecer: fuera de la vista de la cámara y, para los controles, por delante
+   * de hacia donde va el jugador. Devuelve null si no encuentra sitio libre.
+   */
+  private pickSpot(roadblock: boolean): { eid: number; dir: 1 | -1; pos: THREE.Vector3 } | null {
+    const p = this.game.mod.player;
+    const focus = this.vm.current ? this.vm.current.getPosition(new THREE.Vector3()) : p.position.clone();
+    const edges = this.roads.edgesInRing(focus, roadblock ? 55 : 90, roadblock ? 100 : 160);
+    if (!edges.length) return null;
+    const ahead = this.playerHeading(new THREE.Vector3());
+    let best: { eid: number; dir: 1 | -1; pos: THREE.Vector3 } | null = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 10; i++) {
+      const eid = edges[Math.floor(rnd.next() * edges.length)];
+      const e = this.roads.g.edges[eid];
+      if (roadblock && this.roads.length(eid) < 12) continue;
+      // que salga mirando hacia el jugador (si no, lo primero que hace es dar la vuelta y se atasca)
+      const a = this.roads.g.nodes[e.a].pos, b = this.roads.g.nodes[e.b].pos;
+      const dir: 1 | -1 = b.distanceToSquared(focus) < a.distanceToSquared(focus) ? 1 : -1;
+      const pos = this.roads.lanePoint(eid, dir, 0.5, roadblock ? 0 : e.width / 4, new THREE.Vector3());
+      if (this.vm.nearest(pos, 8)) continue;
+      let score = offscreen(this.game, pos) ? 2 : 0;
+      if (roadblock) score += 2.5 * tmpV.copy(pos).sub(focus).setY(0).normalize().dot(ahead);
+      score += rnd.next() * 0.5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = { eid, dir, pos };
+      }
+    }
+    // un control que te queda detrás no sirve de nada
+    if (roadblock && best && tmpV.copy(best.pos).sub(focus).setY(0).normalize().dot(ahead) < 0.2) return null;
+    return best;
+  }
+
+  private spawnUnit(roadblock = false) {
+    const spot = this.pickSpot(roadblock);
+    if (!spot) return;
+    const { eid, dir, pos } = spot;
+    const kind = this.wanted >= 4 && rnd.next() < (roadblock ? 0.6 : 0.4) ? 'policevan' : 'police';
     const heading = this.roads.heading(eid, dir) + (roadblock ? Math.PI / 2 : 0);
     const car = this.vm.spawn(kind, pos, heading);
     car.sirenOn = true;
@@ -200,18 +368,35 @@ export class Police implements System {
     for (let i = 1; i < crew.length; i++) crew[i].rideAlong(car);
     const brain: CarBrain = { edge: eid, dir, t: 0.5, next: null, cruise: 20, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() };
     (car as any).brain = brain;
-    const unit: Unit = { car, crew, route: [], routeTimer: 0, onFoot: roadblock, roadblock };
-    if (roadblock) this.dismount(unit);
+    const unit: Unit = { car, crew, route: [], routeTimer: 0, onFoot: roadblock, roadblock, unstick: { t: 0, tries: 0 } };
+    if (roadblock) {
+      (car as any).brain = undefined;
+      this.dismount(unit);
+    }
     this.units.push(unit);
   }
 
   private dismount(u: Unit) {
     u.onFoot = true;
     const car = u.car;
+    // control: los agentes se ponen detrás del coche (el lado que no da al jugador) y se quedan ahí
+    let side0 = 1;
+    if (u.roadblock) {
+      const p = this.game.mod.player.position;
+      const a = this.vm.doorPoint(car, tmpV, 1).distanceToSquared(p);
+      const b = this.vm.doorPoint(car, tmpV, -1).distanceToSquared(p);
+      side0 = a > b ? 1 : -1;
+    }
     u.crew.forEach((n, i) => {
       if (n.removed) return;
-      const side = i % 2 === 0 ? 1 : -1;
+      const side = u.roadblock ? side0 : i % 2 === 0 ? 1 : -1;
       const out = this.vm.doorPoint(car, new THREE.Vector3(), side);
+      if (u.roadblock) {
+        // repartidos a lo largo del coche
+        const f = (i - (u.crew.length - 1) / 2) * 1.6;
+        out.x += Math.sin(car.heading) * f;
+        out.z += Math.cos(car.heading) * f;
+      }
       if (n.vehicle) n.leaveVehicle(out);
       else {
         n.position.copy(out);
@@ -221,6 +406,7 @@ export class Police implements System {
         n.setState('idle');
         this.game.scene.add(n.rig.root);
       }
+      if (u.roadblock && n.brain) (n.brain as CombatBrain).holdAt = n.position.clone();
       if (!this.officers.includes(n)) this.officers.push(n);
     });
     car.controls.throttle = 0;
@@ -236,6 +422,9 @@ export class Police implements System {
     this.checkPaintShop();
 
     if (this.wanted === 0) {
+      // (si te acababan de pillar, que no se quede el cartel de «te están deteniendo»)
+      this.arrestTimer = 0;
+      (g.hud as any).arrest = 0;
       // retirar lo que quede lejos
       for (let i = this.units.length - 1; i >= 0; i--) {
         const u = this.units[i];
@@ -317,7 +506,11 @@ export class Police implements System {
         this.units.splice(i, 1);
         continue;
       }
-      if (!u.onFoot) this.driveUnit(u, dt);
+      if (!u.onFoot && this.driveUnit(u, dt)) {
+        // atascado sin remedio y nadie lo ve: se retira (luego aparece otra patrulla en un sitio mejor)
+        this.despawnUnit(u);
+        this.units.splice(i, 1);
+      }
     }
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {
@@ -342,8 +535,11 @@ export class Police implements System {
       }
       const b = o.brain as CombatBrain;
       if (b) {
-        b.arrestOnly = this.wanted <= 2 && p.state === 'foot';
+        // con 1-2 sirenas intentan detenerte sin disparar (también si vas en coche)
+        b.arrestOnly = this.wanted <= 2;
         b.aggro = true;
+        // si hace rato que no te ven, van a donde te vieron por última vez (no saben dónde estás)
+        b.hunt = this.unseen > 3 ? this.lastSeen : null;
       }
       updateCombatant(g, o, dt);
       // volver al coche si el jugador se va en vehículo y está lejos
@@ -351,19 +547,20 @@ export class Police implements System {
     this.checkArrest(dt);
   }
 
-  private driveUnit(u: Unit, dt: number) {
+  /** Conduce una patrulla. Devuelve true si está atascada sin remedio (y no se ve). */
+  private driveUnit(u: Unit, dt: number): boolean {
     const g = this.game;
     const p = g.mod.player;
     const car = u.car;
     const brain = (car as any).brain as CarBrain | undefined;
     if (!brain || car.destroyed) {
       if (!u.onFoot) this.dismount(u);
-      return;
+      return false;
     }
     const driver = car.driver && car.driver.kind === 'npc' ? car.driver.npc : null;
     if (!driver) {
       if (!u.onFoot) this.dismount(u);
-      return;
+      return false;
     }
     const target = this.unseen < 3 ? (p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : tmpV.copy(p.position)) : tmpV.copy(this.lastSeen);
     const carPos = car.getPosition(tmpV2);
@@ -372,29 +569,11 @@ export class Police implements System {
     const playerSlow = p.state === 'foot' || (this.vm.current && Math.abs(this.vm.current.speed) < 3);
     if (dist < 14 && playerSlow) {
       this.dismount(u);
-      return;
+      return false;
     }
-    // ruta por calles si está lejos; directo si está cerca
-    u.routeTimer -= dt;
-    if (dist > 35) {
-      if (u.routeTimer <= 0 || !u.route.length) {
-        u.routeTimer = 1.5;
-        u.route = this.roads.route(carPos, target);
-      }
-      while (u.route.length > 1 && u.route[0].distanceTo(carPos) < 12) u.route.shift();
-      brain.chaseTarget!.copy(u.route[0] ?? target);
-    } else {
-      // predicción: apuntar un poco por delante del coche del jugador
-      const pv = this.vm.current;
-      brain.chaseTarget!.copy(target);
-      if (pv) {
-        const lv = pv.body.linvel();
-        brain.chaseTarget!.x += lv.x * 0.5;
-        brain.chaseTarget!.z += lv.z * 0.5;
-      }
-    }
-    brain.mode = 'chase';
-    this.traffic?.drive(car, dt);
+    // por calles si no te ve; directo (con algo de predicción) si te ve o está cerca
+    const hopeless = driveChaseCar(g, this.roads, car, brain, u, target, this.unseen < 3 ? 0.5 : 0, dt);
+    return hopeless && dist > 45 && offscreen(g, carPos);
   }
 
   private checkArrest(dt: number) {
