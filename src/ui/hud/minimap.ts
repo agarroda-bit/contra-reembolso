@@ -67,6 +67,8 @@ export class Minimap {
   private spriteDpr = 0;
   /** Calidad del suavizado al girar el mapa ('low' es lo más barato). */
   smoothing: ImageSmoothingQuality = 'low';
+  private ro: ResizeObserver | null = null;
+  private onWinResize = () => this.resize();
 
   constructor() {
     this.el = document.createElement('div');
@@ -82,8 +84,15 @@ export class Minimap {
     this.g = this.canvas.getContext('2d')!;
     this.north = this.el.querySelector('.hud-minimapa__norte')!;
     this.wpEl = this.el.querySelector('.hud-minimapa__destino')!;
-    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.resize()).observe(this.canvas);
-    else window.addEventListener('resize', () => this.resize());
+    if (typeof ResizeObserver !== 'undefined') {
+      this.ro = new ResizeObserver(this.onWinResize);
+      this.ro.observe(this.canvas);
+    } else window.addEventListener('resize', this.onWinResize);
+  }
+
+  dispose() {
+    this.ro?.disconnect();
+    window.removeEventListener('resize', this.onWinResize);
   }
 
   /** Olvida lo cacheado del mapa (llamar si el mundo repinta su mapCanvas). */

@@ -45,6 +45,12 @@ export interface Hud {
   /** Posición y rumbo (0 = norte) que usa el HUD; útil para otros módulos. */
   readonly view: { x: number; z: number; heading: number };
   /**
+   * Opcional: de dónde sacar la posición del jugador. Por defecto game.mod.player.position
+   * (y si no hay jugador, la cámara). Útil si al conducir el jugador no sigue al coche:
+   * hud.follow = () => cocheActual?.position ?? null
+   */
+  follow: (() => { x: number; z: number } | null | undefined) | null;
+  /**
    * true si el HUD se ha quedado la tecla de pausa (Esc) este frame: el mapa está abierto
    * o se acaba de cerrar con ella. El menú de pausa debe ignorar 'pause' en ese caso.
    */
@@ -65,6 +71,7 @@ export class HudImpl implements Hud {
   fameThreshold = defaultFameThreshold;
   phoneAppName = 'Paquetín';
   readonly view = { x: 0, z: 0, heading: 0 };
+  follow: (() => { x: number; z: number } | null | undefined) | null = null;
   readonly stats = { hudMs: 0, minimapMs: 0 };
 
   private $: Record<string, HTMLElement> = {};
@@ -133,6 +140,10 @@ export class HudImpl implements Hud {
         el.classList.add('hud-dano--golpe');
       }),
       ev.on('money', (p) => {
+        // el evento trae los totales nuevos: los copiamos por si quien lo lanza aún no ha
+        // tocado game.hud (si ya lo hizo, son los mismos valores)
+        if (Number.isFinite(p.cash)) game.hud.cash = p.cash;
+        if (Number.isFinite(p.bank)) game.hud.bank = p.bank;
         this.notes.money(p.delta, p.reason);
         const el = this.$.efectivo;
         el.classList.remove('hud-flash-mas', 'hud-flash-menos');
@@ -193,6 +204,9 @@ export class HudImpl implements Hud {
   dispose() {
     this.closeMap();
     for (const off of this.offs) off();
+    this.minimap.dispose();
+    this.bigMap.dispose();
+    this.notes.dispose();
     this.game.removeSystem(this.system);
     this.root.remove();
     this.game.ui.classList.remove('cr-hud-on');
@@ -202,8 +216,9 @@ export class HudImpl implements Hud {
   /** Posición del jugador (o de la cámara) y rumbo de la cámara. */
   private updateView() {
     const game = this.game;
-    const p = game.mod.player?.position as THREE.Vector3 | undefined;
-    const src = p ?? game.camera.position;
+    const f = this.follow?.();
+    const p = (f ?? game.mod.player?.position) as { x: number; z: number } | undefined;
+    const src = p && Number.isFinite(p.x) && Number.isFinite(p.z) ? p : game.camera.position;
     this.view.x = src.x;
     this.view.z = src.z;
     const d = game.camera.getWorldDirection(this.tmpDir);
@@ -224,10 +239,12 @@ export class HudImpl implements Hud {
       if (!hud.visible) this.closeMap();
     }
 
-    // mapa grande: M abre (jugando); M o Esc cierran (en pausa)
+    // mapa grande: M abre (jugando, sin menús); M o Esc cierran (en pausa).
+    // Input deja pasar 'map' aunque esté desactivado (para poder cerrar): por eso solo se
+    // abre con input.enabled, si no la M abriría el mapa encima del móvil o de una tienda.
     if (this.bigMap.isOpen()) {
       if (game.input.pressed('map') || game.input.pressed('pause')) this.closeMap();
-    } else if (!paused && hud.visible && game.input.pressed('map')) {
+    } else if (!paused && hud.visible && game.input.enabled && game.input.pressed('map')) {
       this.openMap();
     }
 
@@ -431,10 +448,13 @@ export class HudImpl implements Hud {
     if (stationChanged || showChanged) {
       $.vehRadio.innerHTML = station ? `<span class="cr-emoji">📻</span> ${esc(station)}` : '';
       $.vehRadio.hidden = !station;
-      if (station && (stationChanged || show)) {
+      if (station) {
+        // el texto del cartel siempre al día (aunque el programa se quede vacío)
         $.radioNombre.textContent = station;
         $.radioPrograma.textContent = show;
         $.radioPrograma.hidden = !show;
+      }
+      if (station && (stationChanged || show)) {
         $.radio.classList.remove('hud-radio--ve');
         void $.radio.offsetWidth;
         $.radio.classList.add('hud-radio--ve');

@@ -919,6 +919,10 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+/* sin sitio (p. ej. en coche con pantalla baja): las antiguas se quedan en cabecera + título */
+.hud-notifs--compacta .hud-notif + .hud-notif { align-items: center; padding-top: 6px; padding-bottom: 6px; }
+.hud-notifs--compacta .hud-notif + .hud-notif .hud-notif__texto { display: none; }
+.hud-notifs--compacta .hud-notif + .hud-notif .hud-notif__icono { width: 32px; height: 32px; font-size: 18px; border-radius: 10px; }
 .hud-notif--sale { animation: hud-notif-sale 0.42s ease-in both; }
 @keyframes hud-notif-entra {
   0% { transform: translateX(125%) rotate(6deg); opacity: 0; }

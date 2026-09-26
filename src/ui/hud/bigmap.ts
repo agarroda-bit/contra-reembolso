@@ -46,6 +46,7 @@ export class BigMap {
   private seaColor = '#2f8fd0';
   private seaFor: HTMLCanvasElement | null = null;
   private wavePattern: CanvasPattern | null = null;
+  private waveMatrix: DOMMatrix | null = null;
   private t = 0;
   private player = { x: 0, z: 0, heading: 0 };
   // vectores temporales reutilizados (sin basura por frame)
@@ -54,6 +55,7 @@ export class BigMap {
   private pp = { x: 0, y: 0 };
   private wpS = { x: 0, y: 0 };
   private pk = { x: 0, y: 0 };
+  private abort = new AbortController();
 
   constructor(private game: Game) {
     this.el = document.createElement('div');
@@ -128,14 +130,28 @@ export class BigMap {
       const kind = li?.dataset.tipo as PoiKind | undefined;
       if (kind) this.waypointToNearest(kind);
     });
-    window.addEventListener('keydown', (e) => {
-      if (!this.open) return;
-      if (e.key === '+' || e.key === '=') this.zoomAt(this.W / 2, this.H / 2, 1.4);
-      else if (e.key === '-' || e.key === '_') this.zoomAt(this.W / 2, this.H / 2, 1 / 1.4);
-    });
-    window.addEventListener('resize', () => {
-      if (this.open) this.resize();
-    });
+    const signal = this.abort.signal;
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (!this.open) return;
+        if (e.key === '+' || e.key === '=') this.zoomAt(this.W / 2, this.H / 2, 1.4);
+        else if (e.key === '-' || e.key === '_') this.zoomAt(this.W / 2, this.H / 2, 1 / 1.4);
+      },
+      { signal },
+    );
+    window.addEventListener(
+      'resize',
+      () => {
+        if (this.open) this.resize();
+      },
+      { signal },
+    );
+  }
+
+  /** Quita los oyentes de la ventana. */
+  dispose() {
+    this.abort.abort();
   }
 
   isOpen() {
@@ -317,29 +333,67 @@ export class BigMap {
     this.legend.innerHTML = html;
   }
 
-  /** Lo que hay bajo el ratón (px CSS dentro del canvas). */
+  /** Lo que hay bajo el ratón (px CSS dentro del canvas). Sin crear funciones por frame. */
   private pick(sx: number, sy: number): Hover {
     const w = this.world;
     if (!w) return null;
     const p = this.pk;
-    let best: Hover = null;
-    let bd = 15 * 15;
-    const test = (x: number, z: number, make: (x: number, y: number) => Hover) => {
-      this.toScreen(x, z, p);
-      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
-      if (d < bd) {
-        bd = d;
-        best = make(p.x, p.y);
-      }
-    };
+    const R2 = 15 * 15;
+    let bd = R2;
+    let kind = 0; // 0 nada, 1 destino, 2 marcador, 3 sitio, 4 jugador
+    let bi = -1;
+    let bx = 0, by = 0;
     const wp = this.game.hud.waypoint;
-    if (wp) test(wp.x, wp.z, (x, y) => ({ type: 'waypoint', label: wp.label ?? 'Destino', x, y: y - 22 }));
-    for (const m of this.game.hud.markers) {
-      test(m.x, m.z, (x, y) => ({ type: 'marker', label: m.label ?? 'Aviso', icon: m.icon, x, y }));
+    if (wp) {
+      this.toScreen(wp.x, wp.z, p);
+      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
+      if (d < bd) { bd = d; kind = 1; bx = p.x; by = p.y; }
     }
-    for (const poi of w.pois) test(poi.door.x, poi.door.z, (x, y) => ({ type: 'poi', poi, x, y }));
-    test(this.player.x, this.player.z, (x, y) => ({ type: 'player', x, y }));
-    return best;
+    const markers = this.game.hud.markers;
+    for (let i = 0; i < markers.length; i++) {
+      this.toScreen(markers[i].x, markers[i].z, p);
+      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
+      if (d < bd) { bd = d; kind = 2; bi = i; bx = p.x; by = p.y; }
+    }
+    for (let i = 0; i < w.pois.length; i++) {
+      this.toScreen(w.pois[i].door.x, w.pois[i].door.z, p);
+      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
+      if (d < bd) { bd = d; kind = 3; bi = i; bx = p.x; by = p.y; }
+    }
+    this.toScreen(this.player.x, this.player.z, p);
+    {
+      const d = (p.x - sx) ** 2 + (p.y - sy) ** 2;
+      if (d < bd) { bd = d; kind = 4; bx = p.x; by = p.y; }
+    }
+    // solo se crea el objeto si cambia lo señalado (o su posición en pantalla)
+    const h = this.hover;
+    if (kind === 1 && wp) {
+      const label = wp.label ?? 'Destino';
+      if (h?.type === 'waypoint' && h.label === label) return this.movedHover(h, bx, by - 22);
+      return { type: 'waypoint', label, x: bx, y: by - 22 };
+    }
+    if (kind === 2) {
+      const m = markers[bi];
+      const label = m.label ?? 'Aviso';
+      if (h?.type === 'marker' && h.label === label && h.icon === m.icon) return this.movedHover(h, bx, by);
+      return { type: 'marker', label, icon: m.icon, x: bx, y: by };
+    }
+    if (kind === 3) {
+      const poi = w.pois[bi];
+      if (h?.type === 'poi' && h.poi === poi) return this.movedHover(h, bx, by);
+      return { type: 'poi', poi, x: bx, y: by };
+    }
+    if (kind === 4) {
+      if (h?.type === 'player') return this.movedHover(h, bx, by);
+      return { type: 'player', x: bx, y: by };
+    }
+    return null;
+  }
+
+  private movedHover(h: NonNullable<Hover>, x: number, y: number): Hover {
+    h.x = x;
+    h.y = y;
+    return h;
   }
 
   private setHover(h: Hover) {
@@ -527,7 +581,11 @@ export class BigMap {
     if (!this.wavePattern) return;
     const o = this.toScreen(0, 0, this.pk);
     try {
-      this.wavePattern.setTransform(new DOMMatrix().translate(o.x, o.y));
+      // las olas se mueven con el mapa al arrastrar (matriz reutilizada)
+      const m = (this.waveMatrix ??= new DOMMatrix());
+      m.e = o.x;
+      m.f = o.y;
+      this.wavePattern.setTransform(m);
     } catch {
       /* navegadores antiguos */
     }

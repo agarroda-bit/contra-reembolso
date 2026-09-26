@@ -22,6 +22,8 @@ export class Notifications {
   bottomLimit: () => number = () => window.innerHeight - 20;
   appName = 'Paquetín';
   private count = 0;
+  /** Temporizadores pendientes (para limpiarlos en dispose). */
+  private timers = new Set<number>();
 
   constructor() {
     this.notifList = div('hud-notifs');
@@ -46,24 +48,37 @@ export class Notifications {
     this.notifList.prepend(card);
     const live = [...this.notifList.children].filter((c) => !c.classList.contains('hud-notif--sale')) as HTMLElement[];
     for (let i = NOTIF_MAX; i < live.length; i++) this.dismiss(live[i]);
-    // si no caben encima del panel de abajo a la derecha, se van las más antiguas
-    // (todo en px de pantalla con getBoundingClientRect: vale también con el zoom de pantallas pequeñas)
-    const limit = this.bottomLimit();
-    const top = this.notifList.getBoundingClientRect().top;
+    this.fit(live);
+    this.later(() => this.dismiss(card), NOTIF_TIME);
+  }
+
+  /**
+   * Si la pila no cabe encima del panel de abajo a la derecha (arma/vehículo), primero se
+   * encogen las antiguas (solo cabecera y título) y, si aun así no caben, se van.
+   * Todo en px de pantalla (getBoundingClientRect): vale también con el zoom de pantallas pequeñas.
+   */
+  private fit(live: HTMLElement[]) {
     const n = Math.min(NOTIF_MAX, live.length);
+    const list = this.notifList;
+    list.classList.remove('hud-notifs--compacta');
+    const limit = this.bottomLimit();
+    const top = list.getBoundingClientRect().top;
+    if (top + 1 >= limit || n < 2) return;
+    const overflow = () => live[n - 1].getBoundingClientRect().bottom > limit;
+    if (!overflow()) return;
+    list.classList.add('hud-notifs--compacta');
     for (let i = 1; i < n; i++) {
-      if (live[i].getBoundingClientRect().bottom > limit && top + 1 < limit) {
+      if (live[i].getBoundingClientRect().bottom > limit) {
         for (let k = i; k < n; k++) this.dismiss(live[k]);
         break;
       }
     }
-    window.setTimeout(() => this.dismiss(card), NOTIF_TIME);
   }
 
   private dismiss(card: HTMLElement) {
     if (card.classList.contains('hud-notif--sale')) return;
     card.classList.add('hud-notif--sale');
-    window.setTimeout(() => card.remove(), 420);
+    this.later(() => card.remove(), 420);
   }
 
   // ───────────── Toast grande ─────────────
@@ -86,7 +101,7 @@ export class Notifications {
     if (p.color) el.style.setProperty('--toast-color', p.color);
     this.toastBox.appendChild(el);
     this.toastEl = el;
-    const ms = Math.max(600, p.time != null ? p.time * 1000 : TOAST_TIME);
+    const ms = Math.max(600, toastMs(p.time));
     this.toastTimer = window.setTimeout(() => this.endToast(), this.toastQueue.length ? Math.min(ms, 1100) : ms);
   }
 
@@ -95,8 +110,28 @@ export class Notifications {
     if (!el) return;
     this.toastEl = null;
     el.classList.add('hud-toast--sale');
-    window.setTimeout(() => el.remove(), 300);
-    window.setTimeout(() => this.nextToast(), 120);
+    this.later(() => el.remove(), 300);
+    this.later(() => this.nextToast(), 120);
+  }
+
+  /** setTimeout que se puede cancelar en dispose. */
+  private later(fn: () => void, ms: number) {
+    const id = window.setTimeout(() => {
+      this.timers.delete(id);
+      fn();
+    }, ms);
+    this.timers.add(id);
+  }
+
+  /** Cancela temporizadores y vacía los mensajes. */
+  dispose() {
+    for (const t of this.timers) window.clearTimeout(t);
+    this.timers.clear();
+    window.clearTimeout(this.toastTimer);
+    window.clearTimeout(this.districtTimer);
+    this.toastQueue.length = 0;
+    this.toastEl = null;
+    for (const el of [this.notifList, this.toastBox, this.districtBox, this.moneyBox]) el.textContent = '';
   }
 
   // ───────────── Cartel del barrio (título de película) ─────────────
@@ -121,8 +156,17 @@ export class Notifications {
     el.innerHTML = `<span class="hud-salto__cifra">${formatMoney(delta, true)}</span>${reason ? `<span class="hud-salto__motivo">${esc(reason)}</span>` : ''}`;
     this.moneyBox.appendChild(el);
     while (this.moneyBox.childElementCount > 4) this.moneyBox.firstElementChild!.remove();
-    window.setTimeout(() => el.remove(), 1900);
+    this.later(() => el.remove(), 1900);
   }
+}
+
+/**
+ * Duración del toast en ms. El contrato no dice la unidad de `time`: lo normal son segundos
+ * (2.5), pero si alguien pasa milisegundos (2500) también vale. Más de 60 = milisegundos.
+ */
+function toastMs(time: number | undefined): number {
+  if (time == null || !Number.isFinite(time) || time <= 0) return TOAST_TIME;
+  return Math.min(15000, time > 60 ? time : time * 1000);
 }
 
 function div(cls: string) {
