@@ -3,11 +3,12 @@
 import type { Game, System } from '../core/game';
 import type { Messages, Chat } from '../gameplay/messages';
 import { fmt, FAME_LEVELS } from '../gameplay/economy';
+import { PAD, PadEdges, padNavigate, padFocusCss } from './pad';
 
 type Screen = 'home' | 'chats' | 'chat' | 'bank' | 'fame' | 'garage' | 'help';
 
 const CSS = `
-.cr-movil{position:fixed;right:28px;bottom:24px;width:340px;height:620px;max-height:calc(100vh - 40px);z-index:30;
+.cr-movil{box-sizing:border-box;position:fixed;right:28px;bottom:24px;width:340px;height:min(620px,calc(100vh - 128px));min-height:420px;z-index:30;
   background:#1b1030;border-radius:42px;padding:14px;box-shadow:0 0 0 4px #2b1d4a,10px 12px 0 rgba(0,0,0,.35);
   transform:translateY(110%) rotate(4deg);transition:transform .32s cubic-bezier(.2,1.3,.4,1);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;pointer-events:auto}
 .cr-movil.abierto{transform:translateY(0) rotate(-2deg)}
@@ -18,7 +19,7 @@ const CSS = `
 .cr-cab button{border:0;background:#1b1030;color:#ffd23f;border-radius:12px;font:900 16px system-ui;padding:6px 10px;cursor:pointer}
 .cr-cuerpo{flex:1;overflow-y:auto;padding:4px 12px 14px}
 .cr-apps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px 10px;padding:18px 8px}
-.cr-app{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;border:0;background:none;color:#1b1030;font:800 12px system-ui;position:relative}
+.cr-app{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;border:0;background:none;color:#1b1030;font:800 13px system-ui;position:relative}
 .cr-app i{font-style:normal;width:64px;height:64px;border-radius:20px;display:flex;align-items:center;justify-content:center;font-size:32px;
   box-shadow:3px 4px 0 rgba(27,16,48,.35);border:3px solid #1b1030}
 .cr-app b{position:absolute;top:-6px;right:6px;background:#ff2d55;color:#fff;border-radius:12px;min-width:22px;height:22px;font:900 13px/22px system-ui;border:2px solid #1b1030}
@@ -26,12 +27,12 @@ const CSS = `
 .cr-chatitem .av{font-size:28px;width:40px;text-align:center}
 .cr-chatitem .tx{flex:1;min-width:0}
 .cr-chatitem .tx div{font:900 14px system-ui}
-.cr-chatitem .tx span{display:block;font:500 12px system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75}
+.cr-chatitem .tx span{display:block;font:500 13px system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75}
 .cr-chatitem b{background:#ff2d55;color:#fff;border-radius:10px;padding:1px 7px;font:900 12px system-ui}
 .cr-msg{max-width:84%;margin:8px 0;padding:9px 12px;border-radius:16px;font:600 14px/1.3 system-ui;white-space:pre-wrap;border:2px solid #1b1030;box-shadow:2px 3px 0 rgba(27,16,48,.25)}
 .cr-msg.suyo{background:#ffffff;border-bottom-left-radius:4px}
 .cr-msg.mio{background:#2ec4b6;margin-left:auto;border-bottom-right-radius:4px;color:#1b1030}
-.cr-msg small{display:block;opacity:.55;font:700 10px system-ui;margin-top:3px;text-align:right}
+.cr-msg small{display:block;opacity:.6;font:700 11px system-ui;margin-top:3px;text-align:right}
 .cr-acciones{display:flex;gap:8px;margin-top:8px}
 .cr-acciones button{flex:1;border:2px solid #1b1030;border-radius:12px;font:900 14px system-ui;padding:8px;cursor:pointer;box-shadow:2px 3px 0 #1b1030}
 .cr-acciones .si{background:#ffd23f}.cr-acciones .no{background:#ffd1dc}
@@ -41,8 +42,9 @@ const CSS = `
 .cr-tarjeta .gordo{font:900 34px system-ui}
 .cr-barrafama{height:14px;border-radius:8px;background:#1b1030;overflow:hidden;margin-top:8px}
 .cr-barrafama i{display:block;height:100%;background:linear-gradient(90deg,#ffd23f,#ff4f81)}
-.cr-pie{padding:6px 0 10px;text-align:center;font:700 11px system-ui;opacity:.6}
+.cr-pie{padding:6px 8px 10px;text-align:center;font:700 12px system-ui;opacity:.7}
 .cr-boton{display:block;width:100%;border:2px solid #1b1030;border-radius:14px;background:#ffd23f;font:900 15px system-ui;padding:10px;margin:8px 0;cursor:pointer;box-shadow:2px 3px 0 #1b1030;color:#1b1030}
+${padFocusCss()}
 `;
 
 export class Phone implements System {
@@ -56,6 +58,8 @@ export class Phone implements System {
   private screen: Screen = 'home';
   private chatId: string | null = null;
   private drawnVersion = -1;
+  private pad = new PadEdges();
+  private toggledAt = -1;
   /** Apps extra que añaden otros módulos (garaje, radio...). */
   readonly extraApps: { id: string; icon: string; name: string; color: string; open: (body: HTMLDivElement) => void }[] = [];
 
@@ -82,8 +86,26 @@ export class Phone implements System {
       if (!this.open) return;
       if (e.code === 'Enter') this.quickAction(0);
       if (e.code === 'Backspace') this.quickAction(1);
-      if (e.code === 'Escape') this.toggle(false);
+      if (e.code === 'Escape') {
+        // Esc solo cierra el móvil: que no abra además la pausa (el menú escucha después)
+        e.stopImmediatePropagation();
+        this.toggle(false);
+      }
     });
+  }
+
+  /** Mando con el móvil abierto: A acepta, X rechaza, B vuelve atrás (y cierra en el inicio). */
+  private pollPad() {
+    const edges = this.pad.poll();
+    if (!edges) return;
+    if (edges & PAD.A) {
+      // si con la cruceta has elegido un botón del móvil, A lo pulsa; si no, acepta el encargo
+      const f = document.activeElement;
+      if (f instanceof HTMLButtonElement && this.root.contains(f)) f.click();
+      else this.quickAction(0);
+    } else if (edges & PAD.X) this.quickAction(1);
+    else if (edges & PAD.B) this.goBack();
+    else if (edges & (PAD.DOWN | PAD.LEFT | PAD.RIGHT)) padNavigate(this.root, edges);
   }
 
   private get msgs(): Messages {
@@ -103,6 +125,7 @@ export class Phone implements System {
       g.input.releaseAll();
       g.input.enabled = false;
       g.timeScaleMods.set('movil', 0.3);
+      this.pad.reset();
       // abrir directamente la conversación con algo pendiente
       const pending = this.msgs?.latestActionable();
       if (pending) this.show('chat', pending.chat.id);
@@ -112,6 +135,9 @@ export class Phone implements System {
     } else {
       g.input.enabled = true;
       g.timeScaleMods.delete('movil');
+      // que ningún botón del móvil se quede con el foco (Enter o Espacio lo pulsarían luego)
+      const f = document.activeElement;
+      if (f instanceof HTMLElement && this.root.contains(f)) f.blur();
     }
   }
 
@@ -245,10 +271,13 @@ export class Phone implements System {
       }
       case 'help': {
         this.title.textContent = 'Ayuda';
-        b.innerHTML = `<div class="cr-tarjeta" style="font:600 13px/1.6 system-ui">
+        const photo = this.game.mod.photo ? ' · K modo foto' : '';
+        b.innerHTML = `<div class="cr-tarjeta" style="font:600 13.5px/1.55 system-ui">
           <b>Cómo va esto</b><br>1. Te llegan encargos aquí. Acepta con el botón (o Enter).<br>2. Recoge el paquete donde diga (📦 en el mapa).<br>
-          3. Llévalo sin romperlo a la casa (🏠) y pulsa E en la puerta.<br>4. Cobras en efectivo: ingrésalo en un cajero 🏧.<br><br>
-          <b>Teclas</b><br>WASD mover · Ratón cámara · Shift correr/turbo · Espacio saltar/freno de mano · F subir/bajar/robar · E interactuar · Clic disparar · Clic derecho apuntar · R recargar · 1-5 armas · M mapa · H claxon · Q/E radio · Esc pausa</div>`;
+          3. Llévalo sin romperlo a la casa (🏠) y pulsa E en la puerta.<br>4. Cobras en efectivo: ingrésalo en un cajero 🏧 antes de que te lo quiten.<br>
+          5. Los encargos grandes, en el tablón de la oficina.</div>
+          <div class="cr-tarjeta" style="font:600 13.5px/1.55 system-ui"><b>Teclas</b><br>WASD mover · Ratón mirar · Shift correr/turbo · Espacio saltar/freno de mano · F subir/bajar/robar · E interactuar · Clic disparar · Clic derecho apuntar · R recargar · 1-5 armas · M mapa · H claxon · Q/E radio${photo} · Esc pausa<br><br>
+          <b>Con mando</b><br>A aceptar · X rechazar · B atrás. Todos los controles, en Pausa → Controles.</div>`;
         break;
       }
       default:
@@ -270,8 +299,14 @@ export class Phone implements System {
 
   private tick() {
     const g = this.game;
-    if (g.input.pressed('phone') && !(g as any).menuOpen) this.toggle();
+    // con mando, al abrir se sueltan las acciones y la cruceta aún pulsada vuelve a contar como
+    // pulsación: sin este margen el móvil se abriría y se cerraría en el mismo instante
+    if (g.input.pressed('phone') && !(g as any).menuOpen && g.time.real - this.toggledAt > 0.3) {
+      this.toggledAt = g.time.real;
+      this.toggle();
+    }
     if (!this.open) return;
+    this.pollPad();
     const h = g.clock.hour;
     this.clock.textContent = `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
     // redibujar si hay mensajes nuevos (o cada segundo para ofertas que caducan)

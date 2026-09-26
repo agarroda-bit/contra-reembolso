@@ -87,6 +87,7 @@ export class HudImpl implements Hud {
   private sirens: HTMLElement[] = [];
   /** Hasta cuándo (performance.now) no se anuncian barrios (al entrar o salir de interiores). */
   private districtQuietUntil = 0;
+  private mapToggledAt = -1;
   /** Interior en el que está el jugador (para el minimapa) y la puerta de fuera. */
   private insideId: string | null = null;
   private insideDoor: { x: number; z: number } | null = null;
@@ -285,10 +286,14 @@ export class HudImpl implements Hud {
     // mapa grande: M abre (jugando, sin menús); M o Esc cierran (en pausa).
     // Input deja pasar 'map' aunque esté desactivado (para poder cerrar): por eso solo se
     // abre con input.enabled, si no la M abriría el mapa encima del móvil o de una tienda.
+    // (el margen de 0,3 s: con mando, soltar las acciones al abrir hace que el botón aún
+    // pulsado cuente otra vez y el mapa se cerraría solo)
+    const canToggle = game.time.real - this.mapToggledAt > 0.3;
     if (this.bigMap.isOpen()) {
-      if (game.input.pressed('map') || game.input.pressed('pause')) this.closeMap();
-    } else if (!paused && hud.visible && game.input.enabled && game.input.pressed('map')) {
+      if (canToggle && (game.input.pressed('map') || game.input.pressed('pause'))) this.closeMap();
+    } else if (canToggle && !paused && hud.visible && game.input.enabled && game.input.pressed('map')) {
       this.openMap();
+      this.mapToggledAt = game.time.real;
     }
 
     if (!hud.visible) return;

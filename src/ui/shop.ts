@@ -1,6 +1,7 @@
 // Panel de tienda genérico (taller, armería, ropa, oficina, club...). Menú bonito con tarjetas.
 import type { Game } from '../core/game';
 import { fmt } from '../gameplay/economy';
+import { PAD, PadEdges, padNavigate, padFocusCss } from './pad';
 
 export interface ShopItem {
   id: string;
@@ -58,7 +59,12 @@ const CSS = `
 .cr-tienda .item button:disabled{opacity:.45;cursor:default;box-shadow:none;background:#eee}
 .cr-tienda .item.tuyo{background:#e7fff5}
 .cr-tienda .item.puesto{outline:4px solid #2ec4b6}
-.cr-tienda .pista{font:700 12px system-ui;opacity:.6;padding:0 22px 12px}
+.cr-tienda .item .cabeza{display:flex;align-items:flex-start;justify-content:space-between;gap:6px}
+.cr-tienda .insignia{font:900 11.5px system-ui;letter-spacing:.04em;text-transform:uppercase;padding:4px 8px;border-radius:99px;border:2px solid #1b1030;background:#2ec4b6;color:#1b1030;white-space:nowrap}
+.cr-tienda .insignia.puesto{background:#ffd23f}
+.cr-tienda .item button:focus-visible,.cr-tienda .cerrar:focus-visible{outline:4px solid #ff4f81;outline-offset:2px}
+.cr-tienda .pista{font:700 13px system-ui;opacity:.7;padding:8px 22px 12px;border-top:2px dashed rgba(27,16,48,.15)}
+${padFocusCss()}
 `;
 
 let styled = false;
@@ -66,6 +72,16 @@ let styled = false;
 export class ShopUI {
   private el: HTMLDivElement | null = null;
   private def: ShopDef | null = null;
+  private pad = new PadEdges();
+  private raf = 0;
+  /** Mando con la tienda abierta: cruceta elige, A compra, B sale (Start no: abriría la pausa). */
+  private padLoop = () => {
+    if (!this.el) return;
+    const edges = this.pad.poll();
+    if (edges & PAD.B) this.close();
+    else if (edges) padNavigate(this.el, edges);
+    if (this.el) this.raf = requestAnimationFrame(this.padLoop);
+  };
   private keyHandler = (e: KeyboardEvent) => {
     if (e.code === 'Escape' || e.code === 'KeyE') {
       e.stopPropagation();
@@ -100,6 +116,9 @@ export class ShopUI {
     this.el.className = 'cr-tienda';
     g.ui.appendChild(this.el);
     setTimeout(() => window.addEventListener('keydown', this.keyHandler, true), 50);
+    this.pad.reset();
+    cancelAnimationFrame(this.raf);
+    this.raf = requestAnimationFrame(this.padLoop);
     this.render();
     g.mod.audio?.play('door');
   }
@@ -109,6 +128,7 @@ export class ShopUI {
     const g = this.game;
     this.el.remove();
     this.el = null;
+    cancelAnimationFrame(this.raf);
     window.removeEventListener('keydown', this.keyHandler, true);
     g.paused = false;
     (g as any).menuOpen = false;
@@ -124,6 +144,10 @@ export class ShopUI {
     if (!def || !el) return;
     const eco = this.game.mod.economy;
     const scroll = el.querySelector('.lista')?.scrollTop ?? 0;
+    // tras comprar se redibuja todo: el foco (teclado o mando) vuelve al mismo botón
+    const focused = document.activeElement;
+    const focusIdx = focused instanceof HTMLButtonElement && el.contains(focused) ? [...el.querySelectorAll('button')].indexOf(focused) : -1;
+    const padFocus = focusIdx >= 0 && focused!.classList.contains('cr-foco');
     el.innerHTML = '';
     const box = document.createElement('div');
     box.className = 'caja';
@@ -151,7 +175,9 @@ export class ShopUI {
       for (const it of sec.items) {
         const card = document.createElement('div');
         card.className = 'item' + (it.owned ? ' tuyo' : '') + (it.equipped ? ' puesto' : '');
-        card.innerHTML = `<div class="ic">${it.icon}</div><b></b><p></p><div class="pie"><span class="precio"></span></div>`;
+        // lo que ya es tuyo o llevas puesto se dice con texto, no solo con el color de la tarjeta
+        const badge = it.equipped ? '<span class="insignia puesto">★ Puesto</span>' : it.owned ? '<span class="insignia">✔ Tuyo</span>' : '';
+        card.innerHTML = `<div class="cabeza"><div class="ic">${it.icon}</div>${badge}</div><b></b><p></p><div class="pie"><span class="precio"></span></div>`;
         (card.querySelector('b') as HTMLElement).textContent = it.name;
         (card.querySelector('p') as HTMLElement).textContent = it.desc ?? '';
         (card.querySelector('.precio') as HTMLElement).textContent = it.locked ? '🔒 ' + it.locked : it.price > 0 ? fmt(it.price) : it.owned ? 'Tuyo' : 'Gratis';
@@ -171,9 +197,16 @@ export class ShopUI {
     box.appendChild(list);
     const pista = document.createElement('div');
     pista.className = 'pista';
-    pista.textContent = 'Se paga primero con el efectivo y, si no llega, con el banco. Esc o E para salir.';
+    pista.textContent = 'Se paga primero con el efectivo y, si no llega, con el banco. Esc o E para salir (con mando, B).';
     box.appendChild(pista);
     el.appendChild(box);
     list.scrollTop = scroll;
+    if (focusIdx >= 0) {
+      const again = el.querySelectorAll('button')[focusIdx];
+      if (again) {
+        again.focus({ preventScroll: true });
+        if (padFocus) again.classList.add('cr-foco');
+      }
+    }
   }
 }

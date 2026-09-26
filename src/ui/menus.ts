@@ -5,6 +5,7 @@ import type { CharacterLook, HairStyle } from '../core/contracts';
 import type { Quality } from '../core/settings';
 import { SaveSystem } from '../gameplay/save';
 import { fmt } from '../gameplay/economy';
+import { PAD, PadEdges, padNavigate, padFocusCss } from './pad';
 
 export const SKINS = ['#ffe0c4', '#f1c27d', '#e0ac69', '#c68642', '#a0673c', '#8d5524', '#5c3a21'];
 export const HAIRS: { id: HairStyle; name: string }[] = [
@@ -41,25 +42,42 @@ const CSS = `
 .cr-bt:hover,.cr-bt:focus{transform:translate(-3px,-3px) rotate(-1deg);box-shadow:9px 9px 0 #1b1030;background:#ff7b54;outline:none}
 .cr-bt:disabled{opacity:.45;cursor:default;transform:none}
 .cr-bt small{display:block;font:700 13px system-ui;opacity:.75}
-.cr-panel{background:#fff7e6;color:#1b1030;border:4px solid #1b1030;border-radius:26px;box-shadow:10px 10px 0 rgba(27,16,48,.7);padding:24px 28px;max-width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 40px);overflow:auto;position:relative}
+.cr-panel{box-sizing:border-box;background:#fff7e6;color:#1b1030;border:4px solid #1b1030;border-radius:26px;box-shadow:10px 10px 0 rgba(27,16,48,.7);padding:24px 28px;max-width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;position:relative}
 .cr-panel h2{margin:0 0 16px;font:900 34px system-ui;color:#1b1030;transform:rotate(-1deg)}
 .cr-fila{display:flex;align-items:center;gap:14px;margin:12px 0;font:800 16px system-ui}
 .cr-fila label{min-width:190px}
-.cr-fila input[type=range]{flex:1;accent-color:#ff4f81}
+.cr-fila input[type=range]{flex:1;accent-color:#ff4f81;min-width:120px}
 .cr-seg{display:flex;gap:6px;flex-wrap:wrap}
 .cr-seg button{font:800 15px system-ui;border:3px solid #1b1030;border-radius:12px;padding:6px 12px;background:#fff;color:#1b1030;cursor:pointer}
 .cr-seg button.on{background:#ffd23f;box-shadow:3px 3px 0 #1b1030}
-.cr-muestras{display:flex;gap:8px;flex-wrap:wrap}
-.cr-muestras button{width:38px;height:38px;border-radius:50%;border:3px solid #1b1030;cursor:pointer}
+.cr-seg button.on::before{content:'✔ '}
+.cr-muestras{display:flex;gap:6px;flex-wrap:wrap}
+.cr-muestras button{width:34px;height:34px;border-radius:50%;border:3px solid #1b1030;cursor:pointer;padding:0;display:grid;place-items:center;font:900 16px system-ui;color:#1b1030}
 .cr-muestras button.on{outline:4px solid #ff4f81;outline-offset:2px}
+.cr-muestras button.on::after{content:'✔';color:#fff;text-shadow:0 0 3px #1b1030,1px 1px 0 #1b1030,-1px -1px 0 #1b1030}
 .cr-tabla{border-collapse:collapse;width:100%;font:700 15px system-ui}
-.cr-tabla td{padding:7px 10px;border-bottom:2px dashed rgba(27,16,48,.2)}
-.cr-tabla td:first-child{white-space:nowrap}
+.cr-tabla td{padding:5px 8px;border-bottom:2px dashed rgba(27,16,48,.18);vertical-align:middle}
+.cr-tabla td:first-child{white-space:nowrap;width:1%}
 .cr-tecla-menu{display:inline-block;min-width:26px;text-align:center;background:#1b1030;color:#ffd23f;border-radius:8px;padding:3px 8px;font:900 14px system-ui;margin:1px}
+.cr-tecla-menu.mando{background:#2ec4b6;color:#1b1030}
+.cr-controles{width:min(1060px,calc(100vw - 32px));max-width:none;padding:18px 26px}
+.cr-controles .cr-tabla{font-size:14.5px}
+.cr-controles .cr-tabla td{padding:3px 8px}
+.cr-controles .cr-tecla-menu{font-size:13px;padding:2px 7px}
+.cr-controles h2{margin:0 0 4px}
+.cr-controles .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(390px,1fr));gap:6px 30px}
+.cr-controles h3{margin:6px 0 4px;font:900 17px system-ui;text-transform:uppercase;letter-spacing:.04em;color:#c2185b}
+.cr-controles .nota{font:600 13.5px/1.4 system-ui;margin:10px 0 0;color:#4a3a66}
 .cr-cerrar{position:absolute;top:12px;right:14px;border:3px solid #1b1030;border-radius:12px;background:#ff4f81;color:#fff;font:900 18px system-ui;width:40px;height:40px;cursor:pointer}
-.cr-creacion{position:absolute;right:clamp(16px,5vw,80px);top:50%;transform:translateY(-50%);width:min(430px,calc(100vw - 32px))}
-.cr-nombre{font:800 20px system-ui;border:3px solid #1b1030;border-radius:12px;padding:8px 12px;width:100%;box-sizing:border-box}
-.cr-version{position:absolute;right:16px;bottom:12px;font:600 12px system-ui;opacity:.6}
+.cr-creacion{position:absolute;right:clamp(16px,5vw,80px);top:50%;transform:translateY(-50%);width:min(540px,calc(100vw - 32px));padding:16px 22px}
+.cr-creacion h2{margin:0 0 6px}
+.cr-creacion .cr-fila{display:grid;grid-template-columns:124px 1fr;align-items:center;gap:10px;margin:7px 0;font:800 15px system-ui}
+.cr-creacion .cr-bt{width:100%;min-width:0}
+.cr-nombre{font:800 20px system-ui;border:3px solid #1b1030;border-radius:12px;padding:6px 12px;width:100%;box-sizing:border-box}
+.cr-version{position:absolute;right:16px;bottom:12px;font:700 13px system-ui;color:#fff;text-shadow:0 1px 3px #1b1030,1px 1px 0 #1b1030}
+.cr-menu button:focus-visible{outline:4px solid #ff4f81;outline-offset:3px}
+@media (max-height:640px){.cr-creacion .cr-fila{margin:4px 0}.cr-muestras button{width:30px;height:30px}}
+${padFocusCss()}
 `;
 
 export class Menus implements System {
@@ -72,6 +90,7 @@ export class Menus implements System {
   onContinue: (() => void) | null = null;
   private profile: Profile = defaultProfile();
   private previewRig: any = null;
+  private pad = new PadEdges();
 
   constructor(private game: Game) {
     game.mod.menus = this;
@@ -82,12 +101,41 @@ export class Menus implements System {
     game.ui.appendChild(this.layer);
     window.addEventListener('keydown', (e) => {
       if (e.code !== 'Escape' && e.code !== 'KeyP') return;
-      if (this.game.mod.phone?.open) return;
-      if (this.game.mod.hud?.mapOpen) return;
-      if (this.mode === 'play') this.pause();
-      else if (this.mode === 'pause' && this.current?.dataset.sub !== '1') this.resume();
-      else if (this.current?.dataset.sub === '1') this.back?.();
+      this.pauseKey();
     });
+  }
+
+  /** Esc, P o Start del mando: pausa, vuelve atrás o sigue jugando. */
+  private pauseKey() {
+    const g = this.game;
+    if (g.mod.phone?.open) return;
+    // el mapa grande se cierra con Esc: esa pulsación no debe abrir además la pausa
+    if (g.mod.hud?.isMapOpen?.() || g.mod.hud?.ownsPauseKey?.()) return;
+    // otra pantalla (tienda, casino, modo foto) manda sobre la pausa
+    if (!this.current && ((g as any).menuOpen || g.mod.photo?.active)) return;
+    if (this.mode === 'play') this.pause();
+    else if (this.mode === 'pause' && this.current?.dataset.sub !== '1') this.resume();
+    else if (this.current?.dataset.sub === '1') this.back?.();
+  }
+
+  /** Mando en los menús: Start pausa, cruceta y A eligen, B vuelve. */
+  private pollPad() {
+    const edges = this.pad.poll();
+    if (!edges) return;
+    if (edges & PAD.START) {
+      this.pauseKey();
+      this.pad.reset();
+      return;
+    }
+    if (!this.current) return;
+    if (edges & PAD.B) {
+      if (this.current.dataset.sub === '1') this.back?.();
+      else if (this.mode === 'pause') this.resume();
+      else if (this.mode === 'create') this.showMain();
+      this.pad.reset();
+      return;
+    }
+    padNavigate(this.current, edges);
   }
 
   private back: (() => void) | null = null;
@@ -157,15 +205,10 @@ export class Menus implements System {
     const panel = document.createElement('div');
     panel.className = 'cr-panel cr-creacion';
     panel.innerHTML = `<h2>Tu repartidor</h2>`;
-    panel.style.padding = '16px 22px';
-    (panel.querySelector('h2') as HTMLElement).style.margin = '0 0 6px';
+    // etiqueta a la izquierda y opciones a la derecha: cabe entero en 1280 × 720
     const row = (label: string, content: HTMLElement) => {
       const r = document.createElement('div');
       r.className = 'cr-fila';
-      r.style.flexDirection = 'column';
-      r.style.alignItems = 'stretch';
-      r.style.margin = '5px 0';
-      r.style.gap = '5px';
       const l = document.createElement('div');
       l.textContent = label;
       r.append(l, content);
@@ -183,17 +226,20 @@ export class Menus implements System {
       d.className = 'cr-muestras';
       const draw = () => {
         d.innerHTML = '';
-        for (const c of list) {
+        list.forEach((c, i) => {
           const b = document.createElement('button');
           b.style.background = c;
+          b.title = `Color ${i + 1}`;
+          b.setAttribute('aria-label', `Color ${i + 1}`);
           if (get() === c) b.className = 'on';
           b.onclick = () => {
             setv(c);
             this.applyPreview();
             draw();
+            (d.querySelector('.on') as HTMLElement | null)?.focus({ preventScroll: true });
           };
           d.appendChild(b);
-        }
+        });
       };
       draw();
       return d;
@@ -212,6 +258,7 @@ export class Menus implements System {
           look.hair = h.id;
           this.applyPreview();
           drawHair();
+          (hairSeg.querySelector('.on') as HTMLElement | null)?.focus({ preventScroll: true });
         };
         hairSeg.appendChild(b);
       }
@@ -232,6 +279,7 @@ export class Menus implements System {
           look.cap = v;
           this.applyPreview();
           drawCap();
+          (capSeg.querySelector('.on') as HTMLElement | null)?.focus({ preventScroll: true });
         };
         capSeg.appendChild(b);
       }
@@ -244,13 +292,13 @@ export class Menus implements System {
       this.set(null);
       this.onNewGame?.(this.profile);
     });
-    go.style.marginTop = '16px';
+    go.style.marginTop = '12px';
     go.style.width = '100%';
     panel.appendChild(go);
     const back = this.button('← Volver', null, () => this.showMain());
     back.style.background = '#fff';
     back.style.fontSize = '18px';
-    back.style.marginTop = '10px';
+    back.style.marginTop = '8px';
     back.style.width = '100%';
     panel.appendChild(back);
     el.appendChild(panel);
@@ -282,7 +330,17 @@ export class Menus implements System {
     col.className = 'col';
     col.innerHTML = `<div class="cr-logo" style="font-size:clamp(40px,6vw,72px)">PAUSA<small>El cliente puede esperar. Un poco.</small></div>`;
     col.appendChild(this.button('▶ Seguir repartiendo', null, () => this.resume()));
-    col.appendChild(this.button('💾 Guardar partida', null, () => this.game.mod.save?.save(false)));
+    const saveBtn = this.button('💾 Guardar partida', null, () => {
+      this.game.mod.save?.save(false);
+      // el aviso de «guardado» del HUD queda debajo del menú: se confirma en el propio botón
+      saveBtn.innerHTML = '✔ Partida guardada';
+      saveBtn.disabled = true;
+      window.setTimeout(() => {
+        saveBtn.innerHTML = '💾 Guardar partida';
+        saveBtn.disabled = false;
+      }, 1600);
+    });
+    col.appendChild(saveBtn);
     col.appendChild(this.button('⚙ Opciones', null, () => this.showOptions(() => this.showPauseMenu())));
     col.appendChild(this.button('⌨ Controles', null, () => this.showControls(() => this.showPauseMenu())));
     col.appendChild(this.button('⏏ Salir al menú', 'Se guarda antes de salir', () => {
@@ -378,6 +436,7 @@ export class Menus implements System {
           b.onclick = () => {
             onPick(v);
             draw(v);
+            (d.querySelector('.on') as HTMLElement | null)?.focus({ preventScroll: true });
           };
           d.appendChild(b);
         }
@@ -404,17 +463,51 @@ export class Menus implements System {
     el.dataset.sub = '1';
     this.back = onBack;
     const panel = document.createElement('div');
-    panel.className = 'cr-panel';
-    const k = (t: string) => t.split(' ').map((x) => `<span class="cr-tecla-menu">${x}</span>`).join(' ');
-    const rows: [string, string][] = [
-      ['W A S D', 'Moverse / conducir'], ['Ratón', 'Cámara (haz clic para capturarlo)'], ['Shift', 'Correr / turbo del vehículo'],
-      ['Espacio', 'Saltar / freno de mano (derrape)'], ['Clic izq.', 'Disparar'], ['Clic der.', 'Apuntar (cámara al hombro)'],
-      ['F', 'Subir y bajar de vehículos · junto a un coche con conductor: robarlo'], ['E', 'Interactuar: entregar, cobrar, tiendas, puertas'],
-      ['R', 'Recargar'], ['1 2 3 4 5', 'Cambiar de arma (o la rueda del ratón)'], ['Tab', 'Abrir el móvil (Enter acepta encargos)'],
-      ['M', 'Mapa grande (clic: poner destino)'], ['H', 'Claxon'], ['Q E', 'En vehículo: cambiar de emisora'], ['Esc', 'Pausa'],
+    panel.className = 'cr-panel cr-controles';
+    // teclas separadas por «|» (cada una en su cajita)
+    const k = (t: string, cls = '') => t.split('|').map((x) => `<span class="cr-tecla-menu${cls}">${x}</span>`).join(' ');
+    const table = (rows: [string, string][], cls = '') =>
+      `<table class="cr-tabla">${rows.map(([a, b]) => `<tr><td>${k(a, cls)}</td><td>${b}</td></tr>`).join('')}</table>`;
+    const keys: [string, string][] = [
+      ['W|A|S|D', 'Moverse / conducir (también las flechas)'],
+      ['Ratón', 'Mirar (haz clic en el juego para capturarlo)'],
+      ['Shift', 'Correr / turbo del vehículo'],
+      ['Espacio', 'Saltar / freno de mano (derrape)'],
+      ['Clic izq.', 'Disparar'],
+      ['Clic der.', 'Apuntar (cámara al hombro)'],
+      ['F', 'Subir y bajar · junto a un coche con conductor: robarlo'],
+      ['E', 'Interactuar: recoger, entregar, tiendas, puertas'],
+      ['R', 'Recargar'],
+      ['1–5|Rueda', 'Cambiar de arma'],
+      ['Tab', 'Móvil (Enter acepta, Retroceso rechaza)'],
+      ['M', 'Mapa grande (clic: poner destino)'],
+      ['H', 'Claxon'],
+      ['Q|E', 'En un vehículo: cambiar de emisora'],
+      ...(this.game.mod.photo ? ([['K', 'Modo foto']] as [string, string][]) : []),
+      ['Esc|P', 'Pausa'],
     ];
-    panel.innerHTML = `<h2>Controles</h2><table class="cr-tabla">${rows.map(([a, b]) => `<tr><td>${k(a)}</td><td>${b}</td></tr>`).join('')}</table>
-      <p style="font:600 13px system-ui;opacity:.7">Mando: stick izquierdo mover, derecho cámara, gatillos apuntar y disparar, A saltar, B vehículo, X interactuar, Y recargar.</p>`;
+    const pad: [string, string][] = [
+      ['Stick izq.', 'Moverse / conducir'],
+      ['Stick der.', 'Mirar'],
+      ['RT|R2', 'Disparar'],
+      ['LT|L2', 'Apuntar'],
+      ['A|✕', 'Saltar / freno de mano'],
+      ['B|○', 'Subir y bajar de vehículos'],
+      ['X|□', 'Interactuar'],
+      ['Y|△', 'Recargar'],
+      ['LB|RB', 'Cambiar de emisora'],
+      ['L3', 'Correr / turbo (pulsa el stick izquierdo)'],
+      ['R3', 'Claxon (pulsa el stick derecho)'],
+      ['Cruceta ↑', 'Móvil (A acepta, X rechaza, B atrás)'],
+      ['Select', 'Mapa grande'],
+      ['Start', 'Pausa (en los menús: cruceta y A; B vuelve)'],
+    ];
+    panel.innerHTML = `<h2>Controles</h2>
+      <div class="cols">
+        <div><h3>⌨️ Teclado y ratón</h3>${table(keys)}</div>
+        <div><h3>🎮 Mando</h3>${table(pad, ' mando')}</div>
+      </div>
+      <p class="nota">Con el mando, enchúfalo y pulsa cualquier botón para que el juego lo reconozca.</p>`;
     const close = document.createElement('button');
     close.className = 'cr-cerrar';
     close.textContent = '✕';
@@ -428,9 +521,10 @@ export class Menus implements System {
 
   update(dt: number) {
     this.animateCamera(dt);
+    this.pollPad();
   }
-  pausedUpdate(dt: number) {
-    void dt;
+  pausedUpdate() {
+    this.pollPad();
   }
 
   private animateCamera(dt: number) {
@@ -446,13 +540,19 @@ export class Menus implements System {
       const p = g.mod.player;
       const cam = g.camera;
       this.orbit += dt * 0.5;
-      const target = p.position.clone().setY(p.position.y + 1.1);
+      const target = tmpTarget.copy(p.position).setY(p.position.y + 1.1);
       p.heading = this.orbit;
       cam.position.set(target.x + Math.sin(g.world.playerSpawn.heading) * 3.2, target.y + 0.4, target.z + Math.cos(g.world.playerSpawn.heading) * 3.2);
       // desplazar a la izquierda de la pantalla para dejar sitio al panel
-      const right = new THREE.Vector3().crossVectors(new THREE.Vector3().subVectors(target, cam.position).normalize(), new THREE.Vector3(0, 1, 0)).normalize();
+      const right = tmpRight.crossVectors(tmpDir.subVectors(target, cam.position).normalize(), UP).normalize();
       cam.position.addScaledVector(right, 1.0);
-      cam.lookAt(target.clone().addScaledVector(right, 1.0));
+      cam.lookAt(target.addScaledVector(right, 1.0));
     }
   }
 }
+
+// vectores de trabajo (sin crear objetos en cada frame)
+const tmpTarget = new THREE.Vector3();
+const tmpRight = new THREE.Vector3();
+const tmpDir = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
