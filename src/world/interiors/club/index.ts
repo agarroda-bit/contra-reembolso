@@ -45,6 +45,19 @@ const DJ_AMBIENT = [
   '¡Si has perdido un paquete, está en la pista!',
   '¡Pedid champán, que el DJ también come!',
 ];
+const DJ_REQUESTS = [
+  '¿Reguetón? Aquí solo house, colega.',
+  'Anotado. Te la pongo en 2031.',
+  '¿«Paquito el chocolatero»? ...Vale, luego. Si nadie mira.',
+  'Esta ya está sonando. Es TODA la misma canción, amigo.',
+  'Te la pongo si me traes un paquete sin abollar.',
+];
+const PHOTO_TOASTS = [
+  '📸 ¡Foto subida a Postureogram! 3 «me gusta». Uno es tu madre.',
+  '📸 ¡Flash! Sales con los ojos cerrados, pero con mucho estilo.',
+  '📸 Foto de perfil nueva: «Repartidor de día, leyenda de noche».',
+  '📸 ¡Clic! El photocall dice que eres su mejor cliente (se lo dice a todos).',
+];
 const BARMAN_LINES = ['¿Qué te pongo? Aquí no se fía, ¿eh?', 'El champán, solo en mesa VIP. Normas de la casa.', 'Tu cara me suena… ¿tú no me trajiste una tostadora?'];
 const PORTERO_NO = ['Sin mesa VIP no pasas, colega.', 'Esto es zona VIP. V-I-P. ¿Te suena?', 'Lista VIP… No sales. Paga una mesa y sales.'];
 const PORTERO_YES = ['Adelante, jefe.', 'Su mesa le espera, señor repartidor.', 'Pase, pase. Cuidado con el cordón.'];
@@ -61,6 +74,7 @@ export class ClubState {
   bottles = 0;
   danceNight = -9999;
   roundNight = -9999;
+  photoNight = -9999;
   dances = 0;
   totalTables = 0;
   totalBottles = 0;
@@ -81,12 +95,12 @@ export class ClubState {
   }
 
   save() {
-    const { vipNight, bottlesNight, bottles, danceNight, roundNight, dances, totalTables, totalBottles } = this;
-    return { vipNight, bottlesNight, bottles, danceNight, roundNight, dances, totalTables, totalBottles };
+    const { vipNight, bottlesNight, bottles, danceNight, roundNight, photoNight, dances, totalTables, totalBottles } = this;
+    return { vipNight, bottlesNight, bottles, danceNight, roundNight, photoNight, dances, totalTables, totalBottles };
   }
   load(d: any) {
     if (!d || typeof d !== 'object') return;
-    for (const k of ['vipNight', 'bottlesNight', 'bottles', 'danceNight', 'roundNight', 'dances', 'totalTables', 'totalBottles'] as const) {
+    for (const k of ['vipNight', 'bottlesNight', 'bottles', 'danceNight', 'roundNight', 'photoNight', 'dances', 'totalTables', 'totalBottles'] as const) {
       if (typeof d[k] === 'number') this[k] = d[k];
     }
   }
@@ -138,6 +152,7 @@ export class ClubInterior implements InteriorInstance {
   private afterCinematic: (() => void) | null = null;
   private lampGroup: THREE.Object3D | null = null;
   private fade: HTMLDivElement;
+  private flash: HTMLDivElement;
   private playerLocal = new THREE.Vector3();
   private playerLocal2 = new THREE.Vector3();
   private seatedAt: THREE.Vector3 | null = null;
@@ -158,6 +173,9 @@ export class ClubInterior implements InteriorInstance {
     this.fade = document.createElement('div');
     this.fade.style.cssText = 'position:fixed;inset:0;background:#1b1030;opacity:0;pointer-events:none;transition:opacity .28s;z-index:44';
     this.game.ui.appendChild(this.fade);
+    this.flash = document.createElement('div');
+    this.flash.style.cssText = 'position:fixed;inset:0;background:#ffffff;opacity:0;pointer-events:none;z-index:44';
+    this.game.ui.appendChild(this.flash);
     this.applyState(true);
   }
 
@@ -273,10 +291,66 @@ export class ClubInterior implements InteriorInstance {
     if (st.hasTable && local.y > 0.35 && d2(this.myTable) < 2.3 && this.myPose !== 'sit') {
       return { text: 'Sentarte en tu reservado', run: () => this.sitDown(false) };
     }
+    if (local.z < -6.6 && Math.abs(local.x) < 2.6 && local.y < 0.4) {
+      return { text: 'Pedirle una canción al DJ', run: () => this.askDj() };
+    }
     if (onDanceFloor(local.x, local.z) && local.y < 0.4) {
       return { text: this.myPose === 'dance' ? 'Cambiar de paso' : 'Bailar', run: () => this.dance() };
     }
+    if (local.x > 9.6 && local.x < 14.6 && local.z > 8.0 && local.y < 0.5) {
+      return { text: 'Hacerte una foto en el photocall', run: () => this.photo() };
+    }
+    if (local.x < -10.6 && local.z > 8.2 && local.z < 9.9 && local.y < 0.5) {
+      return { text: 'Dejar algo en la paquetería', run: () => this.coatCheck() };
+    }
     return null;
+  }
+
+  /** Photocall: pose, flash y foto para las redes (inventadas). */
+  photo() {
+    const g = this.game;
+    const p = this.player;
+    if (p) {
+      p.heading = Math.PI; // de cara a la sala, de espaldas al photocall
+      p.pose = 'dance';
+      p.poseTimer = 2.2;
+      this.myPose = 'dance';
+      this.setPlayerDance(0);
+      const cam = g.mod.cameraRig;
+      if (cam) {
+        cam.yaw = Math.PI - 0.3;
+        cam.pitch = -0.1;
+      }
+    }
+    window.setTimeout(() => {
+      this.flash.style.transition = 'none';
+      this.flash.style.opacity = '0.85';
+      window.setTimeout(() => {
+        this.flash.style.transition = 'opacity .45s';
+        this.flash.style.opacity = '0';
+      }, 60);
+      g.mod.audio?.play('click', { volume: 1, pitch: 1.6 });
+      this.fx.strobe(0.7);
+      g.events.emit('toast', { text: pick(PHOTO_TOASTS), color: '#19e6d2', time: 3.2 });
+      const st = this.state;
+      if (st.photoNight !== st.night) {
+        st.photoNight = st.night;
+        g.mod.economy?.addFame(1, 'photocall');
+      }
+    }, 650);
+  }
+
+  askDj() {
+    const g = this.game;
+    this.djSay(pick(DJ_REQUESTS), 3.6);
+    g.events.emit('toast', { text: '🎧 Le has pedido una canción al DJ. Te ha mirado raro.', color: '#b44dff', time: 2.6 });
+  }
+
+  coatCheck() {
+    const g = this.game;
+    const n = 1000 + Math.floor(Math.random() * 9000);
+    g.events.emit('toast', { text: `🧥 Dejas la chaqueta en la paquetería. Ticket nº ${n}. «Contra reembolso, como todo», te dicen.`, color: '#19e6d2', time: 3.4 });
+    g.mod.audio?.play('bell');
   }
 
   openShop(where: 'barra' | 'portero' = 'barra') {
@@ -535,8 +609,8 @@ export class ClubInterior implements InteriorInstance {
     if (anim && typeof anim.danceStyle === 'number') anim.danceStyle = style;
   }
 
-  private djSay(text: string) {
-    this.game.mod.bubbles?.say(this.toWorld(DJ_SPOT), text, 3.2);
+  private djSay(text: string, seconds = 3.2) {
+    this.game.mod.bubbles?.say(this.toWorld(DJ_SPOT), text, seconds);
   }
 
   private showLed(text: string, seconds: number) {

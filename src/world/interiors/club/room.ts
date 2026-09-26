@@ -135,6 +135,25 @@ export function buildRoom(ctx: InteriorContext): RoomParts {
     lit.box(0.32, 0.14, 0.32, '#26262e', x, ty - 0.17, z);
     lit.box(0.12, 0.3, 0.36, '#1d1d24', x, ty - 0.36, z);
   }
+  // aro de neón en el techo alrededor de la bola y rayos hacia las esquinas del truss
+  {
+    const ring = new THREE.TorusGeometry(4.2, 0.05, 4, 48);
+    ring.rotateX(Math.PI / 2);
+    pulseB.add(ring, C.purple, BALL.x, H - 0.06, BALL.z);
+    ring.dispose();
+    const ring2 = new THREE.TorusGeometry(2.6, 0.04, 4, 40);
+    ring2.rotateX(Math.PI / 2);
+    pulseA.add(ring2, C.pink, BALL.x, H - 0.05, BALL.z);
+    ring2.dispose();
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
+      const x0 = BALL.x + Math.cos(a) * 4.3, z0 = BALL.z + Math.sin(a) * 4.3;
+      const x1 = BALL.x + Math.cos(a) * 9.5, z1 = BALL.z + Math.sin(a) * 7.8;
+      const len = Math.hypot(x1 - x0, z1 - z0);
+      glow.add(new THREE.BoxGeometry(len, 0.03, 0.03), '#3a1f66', (x0 + x1) / 2, H - 0.04, (z0 + z1) / 2, 0, -Math.atan2(z1 - z0, x1 - x0), 0);
+    }
+  }
+
   // barra que sujeta la bola de espejos
   shiny.cyl(0.025, 0.025, H - BALL.y - 0.6, 5, C.chrome, BALL.x, (H + BALL.y + 0.6) / 2, BALL.z);
 
