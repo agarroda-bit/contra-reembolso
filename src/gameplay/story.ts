@@ -409,8 +409,15 @@ function missions(): Mission[] {
             if (!c.data.spawned && near(c.g, h.door, 150)) {
               c.data.spawned = true;
               c.data.guards = c.g.mod.gang?.ambush(h.door, 2) ?? [];
-              const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', true);
-              if (extra) c.data.guards.push(extra);
+              const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', false);
+              if (extra) {
+                // guarda la puerta como los demás apostados: no sale corriendo a buscarte ni se borra por estar lejos
+                const eb = extra.brain as CombatBrain;
+                eb.home = extra.position.clone();
+                eb.holdAt = extra.position.clone();
+                eb.aggro = false;
+                c.data.guards.push(extra);
+              }
             }
             if (!c.data.spawned) return;
             // si te alejas mucho, desaparecen: vuelven a salir cuando vuelvas
