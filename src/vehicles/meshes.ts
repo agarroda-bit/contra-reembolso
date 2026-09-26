@@ -1,6 +1,7 @@
 // Modelos de vehículos generados por código (low-poly, colores por vértice).
 import * as THREE from 'three';
 import { GeoBuilder, shade } from '../core/geo';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { VehicleKind, VehicleSpec } from './types';
 
 export interface VehicleMesh {
@@ -10,16 +11,121 @@ export interface VehicleMesh {
   lights: THREE.Mesh; // faros y pilotos (material compartido que se enciende de noche)
   siren: THREE.Mesh | null; // luces de policía
   bodyGeo: THREE.BufferGeometry; // propia de este vehículo (se abolla)
+  /**
+   * Ruedas dibujadas como instancias compartidas por todos los vehículos (un draw call por tipo de
+   * rueda en vez de cuatro por coche). null = ruedas como mallas normales dentro del grupo.
+   * Una entrada por pivote (null en las ruedas que no se dibujan, p. ej. las gemelas de la moto).
+   */
+  wheelSlots: (WheelSlot | null)[] | null;
 }
 
 // Materiales compartidos por todos los vehículos
 export const vehicleBodyMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+/**
+ * Brillo de faros y pilotos (0,55 de día, 1,45 de noche). Los vértices de la carrocería con
+ * `glow` = 1 son luces: no reciben sombra ni luz, brillan con su color × este valor
+ * (igual que el antiguo material de faros, pero sin una malla aparte por coche).
+ */
+const lightK = { value: 0.55 };
+vehicleBodyMaterial.onBeforeCompile = (shader) => {
+  shader.uniforms.uLightK = lightK;
+  shader.vertexShader = 'attribute float glow;\nvarying float vGlow;\n' + shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvGlow = glow;');
+  shader.fragmentShader =
+    'varying float vGlow;\nuniform float uLightK;\n' +
+    shader.fragmentShader.replace(
+      '#include <emissivemap_fragment>',
+      '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * vGlow * uLightK;\n\tdiffuseColor.rgb *= 1.0 - vGlow;',
+    );
+};
+
+function withGlow(g: THREE.BufferGeometry, v: number): THREE.BufferGeometry {
+  const n = g.getAttribute('position').count;
+  g.setAttribute('glow', new THREE.BufferAttribute(new Float32Array(n).fill(v), 1));
+  return g;
+}
 export const headlightMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
 export const sirenMaterialRed = new THREE.MeshBasicMaterial({ color: '#ff2040' });
 export const sirenMaterialBlue = new THREE.MeshBasicMaterial({ color: '#2060ff' });
+/** Luces de sirena y rotativos (colores por vértice): uno para todos. */
+const sirenMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
 const tireGeo = new THREE.CylinderGeometry(1, 1, 1, 12).rotateZ(Math.PI / 2);
 const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
 const wheelGeoCache = new Map<string, THREE.BufferGeometry>();
+
+// ─────────── Ruedas compartidas (InstancedMesh) ───────────
+
+/** Hueco de una rueda en el InstancedMesh de su tipo. `x` = desplazamiento lateral de la malla (moto). */
+export interface WheelSlot {
+  pool: WheelPool;
+  index: number;
+  x: number;
+}
+
+const WHEEL_POOL_SIZE = 160;
+
+class WheelPool {
+  readonly mesh: THREE.InstancedMesh;
+  private readonly slots: WheelSlot[] = [];
+  constructor(geo: THREE.BufferGeometry) {
+    const m = new THREE.InstancedMesh(geo, wheelMaterial, WHEEL_POOL_SIZE);
+    m.name = 'ruedas';
+    m.count = 0;
+    m.castShadow = true;
+    m.receiveShadow = true;
+    // las instancias se mueven por todo el mapa: sin recorte por caja envolvente
+    m.frustumCulled = false;
+    m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh = m;
+  }
+  alloc(x: number): WheelSlot | null {
+    if (this.slots.length >= WHEEL_POOL_SIZE) return null;
+    const s: WheelSlot = { pool: this, index: this.slots.length, x };
+    this.slots.push(s);
+    this.mesh.count = this.slots.length;
+    return s;
+  }
+  /** Libera un hueco: la última rueda pasa a ocuparlo (los huecos siempre van seguidos). */
+  free(s: WheelSlot) {
+    const i = this.slots.indexOf(s);
+    if (i < 0) return;
+    const last = this.slots.pop()!;
+    if (last !== s) {
+      this.slots[i] = last;
+      this.mesh.getMatrixAt(last.index, tmpMat);
+      last.index = i;
+      this.mesh.setMatrixAt(i, tmpMat);
+      this.mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.mesh.count = this.slots.length;
+  }
+}
+
+const wheelPools = new Map<THREE.BufferGeometry, WheelPool>();
+const tmpMat = new THREE.Matrix4();
+const tmpPivot = new THREE.Matrix4();
+const tmpSpin = new THREE.Matrix4();
+
+/** Suelta las ruedas compartidas de un vehículo (al borrarlo). */
+export function releaseWheels(m: VehicleMesh) {
+  if (!m.wheelSlots) return;
+  for (const s of m.wheelSlots) s?.pool.free(s);
+  m.wheelSlots = null;
+}
+
+/**
+ * Coloca la rueda i en su instancia. `groupMatrix` = matriz de mundo del vehículo; la rueda gira
+ * (steer) en su pivote y rueda (spin) sobre su eje.
+ */
+export function setWheelInstance(s: WheelSlot, groupMatrix: THREE.Matrix4, pivot: THREE.Vector3, steer: number, spin: number) {
+  tmpPivot.makeRotationY(steer).setPosition(pivot);
+  tmpSpin.makeRotationX(spin).setPosition(s.x, 0, 0);
+  tmpMat.multiplyMatrices(groupMatrix, tmpPivot).multiply(tmpSpin);
+  s.pool.mesh.setMatrixAt(s.index, tmpMat);
+  s.pool.mesh.instanceMatrix.needsUpdate = true;
+}
+
+// ─────────── Carteles laterales compartidos ───────────
+const decalCache = new Map<string, THREE.Material>();
 
 function wheelGeometry(radius: number, width: number, hub = '#c9ccd1'): THREE.BufferGeometry {
   const key = `${radius.toFixed(2)}-${width.toFixed(2)}-${hub}`;
@@ -38,6 +144,37 @@ function wheelGeometry(radius: number, width: number, hub = '#c9ccd1'): THREE.Bu
 const GLASS = '#223a5e';
 const DARK = '#2b2d33';
 const CHROME = '#d8dde3';
+
+/**
+ * Los dos carteles laterales (izquierdo y derecho). En los vehículos del juego (`shared`) van en una
+ * sola malla y la textura se pinta una vez para todos los que llevan el mismo texto.
+ */
+function sideDecals(text: string, sub: string, bg: string, fg: string, w: number, h: number, x: number, y: number, z: number, shared: boolean): THREE.Mesh[] {
+  if (!shared) {
+    return [1, -1].map((s) => {
+      const d = sideDecal(text, sub, bg, fg, w, h);
+      d.position.set(s * x, y, z);
+      d.rotation.y = (s * Math.PI) / 2;
+      return d;
+    });
+  }
+  const key = `${text}|${sub}|${bg}|${fg}`;
+  let mat = decalCache.get(key);
+  if (!mat) {
+    const tmp = sideDecal(text, sub, bg, fg, 1, 1);
+    tmp.geometry.dispose();
+    mat = tmp.material as THREE.Material;
+    decalCache.set(key, mat);
+  }
+  const a = new THREE.PlaneGeometry(w, h).rotateY(Math.PI / 2).translate(x, y, z);
+  const b = new THREE.PlaneGeometry(w, h).rotateY(-Math.PI / 2).translate(-x, y, z);
+  const geo = mergeGeometries([a, b], false)!;
+  a.dispose();
+  b.dispose();
+  const m = new THREE.Mesh(geo, mat);
+  m.userData.decal = true;
+  return [m];
+}
 
 /** Pinta un cartel lateral con texto (para la furgoneta de reparto y la de la banda). */
 function sideDecal(text: string, sub: string, bg: string, fg: string, w: number, h: number): THREE.Mesh {
@@ -59,10 +196,17 @@ function sideDecal(text: string, sub: string, bg: string, fg: string, w: number,
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshLambertMaterial({ map: tex, transparent: true }));
+  m.userData.decal = true;
   return m;
 }
 
-export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
+/**
+ * Crea el modelo de un vehículo. Con `scene` (vehículos del juego) las ruedas son instancias
+ * compartidas añadidas a esa escena y los carteles se comparten; sin ella (maquetas del ático),
+ * todo va dentro del grupo como mallas normales.
+ */
+export function makeVehicleMesh(spec: VehicleSpec, color: string, scene?: THREE.Object3D): VehicleMesh {
+  const live = !!scene;
   const b = new GeoBuilder();
   const L = new GeoBuilder(); // luces
   const { x: hx, y: hy, z: hz } = spec.half;
@@ -115,26 +259,16 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
         b.box(W * 0.8, 0.06, boxLen * 0.6, DARK, 0, bottom + H * 0.97 + 0.05, -0.3);
         b.box(0.6, 0.35, 0.5, '#c8915a', 0.3, bottom + H * 0.97 + 0.26, -0.2);
         b.box(0.45, 0.28, 0.4, '#b07b48', -0.35, bottom + H * 0.97 + 0.22, -0.6);
-        for (const s of [1, -1]) {
-          const d = sideDecal('CONTRA\nREEMBOLSO', 'Pagas al recibir · ¡o no!', '#ffd23f', '#1b1030', boxLen * 0.85, H * 0.6);
-          d.position.set(s * (hx + 0.012), bottom + H * 0.55, -hz + boxLen / 2);
-          d.rotation.y = s * Math.PI / 2;
-          decals.push(d);
-        }
+        decals.push(...sideDecals('CONTRA\nREEMBOLSO', 'Pagas al recibir · ¡o no!', '#ffd23f', '#1b1030', boxLen * 0.85, H * 0.6, hx + 0.012, bottom + H * 0.55, -hz + boxLen / 2, live));
         b.box(W * 1.005, 0.12, boxLen * 0.98, '#ff4f81', 0, bottom + H * 0.2, -hz + boxLen / 2);
       } else if (spec.kind === 'gangvan') {
-        for (const s of [1, -1]) {
-          const d = sideDecal('↩ LOS\nDEVUELTOS', 'Te lo devolvemos... a golpes', '#6c3bd1', '#ffd23f', boxLen * 0.85, H * 0.6);
-          d.position.set(s * (hx + 0.012), bottom + H * 0.55, -hz + boxLen / 2);
-          d.rotation.y = s * Math.PI / 2;
-          decals.push(d);
-        }
+        decals.push(...sideDecals('↩ LOS\nDEVUELTOS', 'Te lo devolvemos... a golpes', '#6c3bd1', '#ffd23f', boxLen * 0.85, H * 0.6, hx + 0.012, bottom + H * 0.55, -hz + boxLen / 2, live));
       } else if (spec.kind === 'policevan') {
         b.box(W * 1.005, 0.3, boxLen * 0.98, '#f1faee', 0, bottom + H * 0.45, -hz + boxLen / 2);
         const sb = new GeoBuilder();
         sb.box(0.5, 0.14, 0.25, '#ff2040', 0.35, 0, 0);
         sb.box(0.5, 0.14, 0.25, '#2060ff', -0.35, 0, 0);
-        siren = new THREE.Mesh(sb.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
+        siren = new THREE.Mesh(sb.build(), sirenMaterial);
         siren.position.set(0, bottom + H + 0.12, hz - cabLen * 0.6);
       } else if (isTruck) {
         b.box(W * 1.005, 0.14, boxLen * 0.98, shade(color, 0.8), 0, bottom + H * 0.25, -hz + boxLen / 2);
@@ -202,7 +336,7 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
       const sb = new GeoBuilder();
       sb.box(0.3, 0.15, 0.3, '#ff9f1c', 0.5, 0, 0);
       sb.box(0.3, 0.15, 0.3, '#ff9f1c', -0.5, 0, 0);
-      siren = new THREE.Mesh(sb.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
+      siren = new THREE.Mesh(sb.build(), sirenMaterial);
       siren.position.set(0, bottom + H + 0.05, hz - cab / 2);
       break;
     }
@@ -223,12 +357,7 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
       b.box(W * 0.9, H * 0.18, D * 0.2, '#111', 0, bottom + H * 0.72, hz - D * 0.15);
       b.box(W * 1.04, 0.5, 0.3, '#222', 0, bottom + 0.45, hz + 0.1); // parachoques ariete
       for (let i = 0; i < 5; i++) b.box(0.06, 0.4, 0.3, '#888', -0.8 + i * 0.4, bottom + 0.45, hz + 0.28, 0.3, 0, 0);
-      for (const s of [1, -1]) {
-        const d = sideDecal('↩ EL\nDEVOLUCIÓN', 'Nada llega. Todo vuelve.', '#4a2a8a', '#ffd23f', D * 0.5, H * 0.5);
-        d.position.set(s * (hx + 0.012), bottom + H * 0.55, -D * 0.14);
-        d.rotation.y = s * Math.PI / 2;
-        decals.push(d);
-      }
+      decals.push(...sideDecals('↩ EL\nDEVOLUCIÓN', 'Nada llega. Todo vuelve.', '#4a2a8a', '#ffd23f', D * 0.5, H * 0.5, hx + 0.012, bottom + H * 0.55, -D * 0.14, live));
       lightsFront(bottom + 0.7, hz + 0.02, hx * 0.7);
       lightsBack(bottom + 0.7, -hz - 0.02, hx * 0.8);
       break;
@@ -280,18 +409,33 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
         const sb = new GeoBuilder();
         sb.box(0.45, 0.14, 0.25, '#ff2040', 0.3, 0, 0);
         sb.box(0.45, 0.14, 0.25, '#2060ff', -0.3, 0, 0);
-        siren = new THREE.Mesh(sb.build(), new THREE.MeshBasicMaterial({ vertexColors: true }));
+        siren = new THREE.Mesh(sb.build(), sirenMaterial);
         siren.position.set(0, bottom + H + 0.14, cabZ);
       }
     }
   }
 
-  const bodyGeo = b.build();
+  let bodyGeo: THREE.BufferGeometry;
+  let lights: THREE.Mesh;
+  if (live && !L.empty) {
+    // faros y pilotos dentro de la carrocería (atributo `glow`): un draw call menos por coche
+    const bg = withGlow(b.build(), 0);
+    const lg = withGlow(L.build(), 1);
+    bodyGeo = mergeGeometries([bg, lg], false)!;
+    bg.dispose();
+    lg.dispose();
+    bodyGeo.computeBoundingSphere();
+    bodyGeo.computeBoundingBox();
+    lights = new THREE.Mesh(new THREE.BufferGeometry(), headlightMaterial);
+    lights.visible = false;
+  } else {
+    bodyGeo = b.build();
+    lights = new THREE.Mesh(L.empty ? new THREE.BufferGeometry() : L.build(), headlightMaterial);
+  }
   const body = new THREE.Mesh(bodyGeo, vehicleBodyMaterial);
   body.castShadow = true;
   body.receiveShadow = true;
   group.add(body);
-  const lights = new THREE.Mesh(L.empty ? new THREE.BufferGeometry() : L.build(), headlightMaterial);
   group.add(lights);
   for (const d of decals) group.add(d);
   if (siren) group.add(siren);
@@ -305,25 +449,37 @@ export function makeVehicleMesh(spec: VehicleSpec, color: string): VehicleMesh {
     [spec.wheelX, spec.wheelZBack],
     [-spec.wheelX, spec.wheelZBack],
   ];
+  // vehículos del juego: ruedas como instancias compartidas (si el cupo se llena, mallas normales)
+  let pool: WheelPool | null = null;
+  if (scene) {
+    pool = wheelPools.get(wg) ?? null;
+    if (!pool) wheelPools.set(wg, (pool = new WheelPool(wg)));
+    if (pool.mesh.parent !== scene) scene.add(pool.mesh);
+  }
+  const slots: (WheelSlot | null)[] = [];
   positions.forEach(([x, z], i) => {
     const pivot = new THREE.Object3D();
     pivot.position.set(x, spec.wheelY - spec.suspension, z);
     const visible = !spec.twoWheels || i % 2 === 0;
-    if (visible) {
+    const offX = spec.twoWheels ? -x : 0; // la moto lleva las ruedas centradas
+    const slot = visible && pool ? pool.alloc(offX) : null;
+    slots.push(slot);
+    if (visible && !slot) {
       const m = new THREE.Mesh(wg, wheelMaterial);
       m.castShadow = true;
-      if (spec.twoWheels) m.position.x = -x; // centrada
+      m.position.x = offX;
       pivot.add(m);
     }
     group.add(pivot);
     wheels.push(pivot);
   });
 
-  return { group, body, wheels, lights, siren, bodyGeo };
+  return { group, body, wheels, lights, siren, bodyGeo, wheelSlots: pool ? slots : null };
 }
 
 /** Enciende faros de noche (material compartido). */
 export function setHeadlightsNight(night: number) {
   const k = 0.55 + night * 0.9;
   headlightMaterial.color.setRGB(k, k, k);
+  lightK.value = k;
 }

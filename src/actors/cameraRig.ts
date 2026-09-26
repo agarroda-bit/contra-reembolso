@@ -1,14 +1,27 @@
 // Cámara en tercera persona: a pie (con hombro al apuntar) y persiguiendo al vehículo.
-// No atraviesa paredes: lanza un rayo desde el personaje hasta la cámara y la acerca si choca.
+// No atraviesa paredes: lanza una bolita desde el personaje hasta la cámara y la acerca si choca.
+// Las cosas finas (farolas, troncos, bolardos, papeleras) no la empujan: pasa a través de ellas.
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
-import { SOLID } from '../core/physics';
+import { RAPIER, G, groups, SOLID } from '../core/physics';
 
 export type CameraMode = 'foot' | 'vehicle' | 'free' | 'cinematic';
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
+const tmpDesired = new THREE.Vector3();
+const tmpLook = new THREE.Vector3();
+const NO_ROT = { x: 0, y: 0, z: 0, w: 1 };
+const CAM_GROUPS = groups(G.ALL, SOLID);
+/** Radio de la "bolita" de la cámara (más que el plano cercano: no se ve el interior de las paredes). */
+const CAM_RADIUS = 0.25;
+let camBall: RAPIER.Ball | null = null;
+let shoulderRay: RAPIER.Ray | null = null;
+/** Obstáculos finos que la cámara ignora (cilindros estrechos: farolas, árboles, postes, bolardos). */
+function solidEnough(c: RAPIER.Collider): boolean {
+  return !(c.shapeType() === RAPIER.ShapeType.Cylinder && c.radius() < 0.5);
+}
 
 export class CameraRig implements System {
   name = 'cameraRig';
@@ -24,6 +37,8 @@ export class CameraRig implements System {
   vehicleHeading = 0;
   aiming = false;
   sprinting = false;
+  /** Turbo del vehículo pisado (un poco más de campo de visión). */
+  boosting = false;
   /** Distancia base en vehículo (cada vehículo la ajusta: la furgoneta más lejos). */
   vehicleDistance = 7.5;
   vehicleHeight = 2.4;
@@ -31,6 +46,8 @@ export class CameraRig implements System {
   private shoulder = 0;
   private fovExtra = 0;
   private idleLook = 0;
+  /** Distancia que dejan las paredes: se acerca de golpe y se vuelve a alejar poco a poco. */
+  private colDist = 99;
   private readonly smoothPos = new THREE.Vector3();
   private initialized = false;
   /** Colisores a ignorar por la cámara (el propio vehículo). */
@@ -110,7 +127,9 @@ export class CameraRig implements System {
       const speedK = Math.min(1, Math.abs(this.targetSpeed) / 35);
       distTarget = this.vehicleDistance + speedK * 3.5;
       heightOff = this.vehicleHeight;
-      this.fovExtra += (speedK * 12 - this.fovExtra) * Math.min(1, realDt * 2);
+      // más velocidad = más campo de visión; con el turbo, un empujón extra
+      const fovTarget = speedK * 12 + (this.boosting ? 7 : 0);
+      this.fovExtra += (fovTarget - this.fovExtra) * Math.min(1, realDt * (this.boosting ? 3 : 2));
     } else {
       this.pitch = THREE.MathUtils.clamp(this.pitch, -1.2, 0.9);
       distTarget = this.aiming ? 2.1 : 4.4;
@@ -131,18 +150,36 @@ export class CameraRig implements System {
     const pivot = tmpV.copy(this.target);
     pivot.y += heightOff;
     const right = this.rightXZ(tmpV2);
-    pivot.addScaledVector(right, this.shoulder);
+    let shoulder = this.shoulder;
+    if (shoulder > 0.05) {
+      // hombro pegado a una pared: no desplazar el pivote dentro de ella
+      if (!shoulderRay) shoulderRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
+      shoulderRay.origin.x = pivot.x;
+      shoulderRay.origin.y = pivot.y;
+      shoulderRay.origin.z = pivot.z;
+      shoulderRay.dir.x = right.x;
+      shoulderRay.dir.y = 0;
+      shoulderRay.dir.z = right.z;
+      const sh = g.physics.world.castRay(shoulderRay, shoulder + CAM_RADIUS, true, undefined, CAM_GROUPS, undefined, this.excludeBody ?? undefined, solidEnough);
+      if (sh) shoulder = Math.max(0, sh.timeOfImpact - CAM_RADIUS);
+    }
+    pivot.addScaledVector(right, shoulder);
 
     // Dirección desde el pivote hasta la cámara
     const cp = Math.cos(this.pitch);
     tmpDir.set(Math.sin(this.yaw) * cp, -Math.sin(this.pitch), Math.cos(this.yaw) * cp).normalize();
 
-    // Colisión con el mundo
+    // Colisión con el mundo: una bolita desde el pivote hacia la cámara (ignora lo fino)
     let d = this.dist;
-    const hit = g.physics.raycast(pivot, tmpDir, d + 0.3, SOLID, this.excludeBody);
-    if (hit) d = Math.max(0.35, hit.distance - 0.3);
+    if (!camBall) camBall = new RAPIER.Ball(CAM_RADIUS);
+    const hit = g.physics.world.castShape(pivot, NO_ROT, tmpDir, camBall, 0, d + 0.1, false, undefined, CAM_GROUPS, undefined, this.excludeBody ?? undefined, solidEnough);
+    if (hit) d = Math.max(0.35, hit.time_of_impact - 0.05);
+    // acercarse por una pared es instantáneo; volver a alejarse, suave (sin "bombeo" al pasar junto a esquinas)
+    if (d < this.colDist || !this.initialized) this.colDist = d;
+    else this.colDist = Math.min(d, this.colDist + realDt * (this.mode === 'vehicle' ? 7 : 5));
+    d = this.colDist;
 
-    const desired = new THREE.Vector3().copy(pivot).addScaledVector(tmpDir, d);
+    const desired = tmpDesired.copy(pivot).addScaledVector(tmpDir, d);
     // nunca por debajo del suelo
     if (g.world) {
       const gy = g.world.heightAt(desired.x, desired.z) + 0.35;
@@ -163,8 +200,7 @@ export class CameraRig implements System {
     }
     cam.position.copy(this.smoothPos);
     // mirar al pivote proyectado un poco hacia delante
-    const look = pivot.clone().addScaledVector(tmpDir, -6);
-    cam.lookAt(look);
+    cam.lookAt(tmpLook.copy(pivot).addScaledVector(tmpDir, -6));
   }
 
   /** Coloca la cámara detrás de un rumbo dado (al empezar, al reaparecer). */

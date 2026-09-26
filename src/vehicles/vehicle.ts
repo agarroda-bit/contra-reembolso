@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import type { Game } from '../core/game';
 import { RAPIER, G, groups } from '../core/physics';
 import { VEHICLES, type VehicleKind, type VehicleSpec } from './types';
-import { makeVehicleMesh, type VehicleMesh } from './meshes';
+import { makeVehicleMesh, releaseWheels, setWheelInstance, type VehicleMesh } from './meshes';
 
 export interface VehicleControls {
   throttle: number; // -1..1 (negativo = freno/marcha atrás)
@@ -17,12 +17,20 @@ export type Driver = { kind: 'player' } | { kind: 'npc'; npc: any } | null;
 const tmpQ = new THREE.Quaternion();
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+const tmpTq = new THREE.Vector3();
+const tmpFwd = new THREE.Vector3();
+const tmpGroupM = new THREE.Matrix4();
+const TWO_PI = Math.PI * 2;
 const UP = new THREE.Vector3(0, 1, 0);
 let nextId = 1;
-/** Escala de los frenos de Rapier (medida en pruebas/vehiculos.html?medir). */
-const BRAKE_K = 1.2;
+/** Escala de los frenos de Rapier (medida en pruebas/vehiculos.html?medir): de 90 km/h a 0 en ~30 m. */
+const BRAKE_K = 1.6;
+/** Freno de mano (ruedas traseras), aparte del freno normal. */
+const HANDBRAKE_K = 0.6;
 /** Escala global del motor. */
 const ENGINE_K = 1.55;
+/** En el aire la gravedad pesa menos: saltos más largos y vistosos (la del mundo es muy fuerte, −22). */
+const AIR_GRAVITY = 0.62;
 
 export class Vehicle {
   readonly id = nextId++;
@@ -46,6 +54,10 @@ export class Vehicle {
   sinking = false;
   /** Tiempo desde que está volcado. */
   private flipTimer = 0;
+  /** Tiempo encallado sin ruedas en el suelo y sin moverse (encima de algo). */
+  private beachedTimer = 0;
+  /** true mientras va por el aire con la gravedad rebajada. */
+  private airborne = false;
   private steerSmooth = 0;
   private prevVel = new THREE.Vector3();
   private wheelSpin = [0, 0, 0, 0];
@@ -71,7 +83,7 @@ export class Vehicle {
     const s = this.spec;
     this.color = color ?? s.colors[Math.floor(Math.random() * s.colors.length)];
     this.health = s.health;
-    this.mesh = makeVehicleMesh(s, this.color);
+    this.mesh = makeVehicleMesh(s, this.color, game.scene);
     game.scene.add(this.mesh.group);
 
     const w = game.physics.world;
@@ -173,7 +185,10 @@ export class Vehicle {
   }
 
   fixedUpdate(dt: number) {
-    if (this.destroyed) return;
+    if (this.destroyed) {
+      if (this.airborne && !this.disposed) this.setAirborne(false);
+      return;
+    }
     const s = this.spec;
     const c = this.controller;
     const ctl = this.controls;
@@ -222,8 +237,8 @@ export class Vehicle {
     // Freno de mano: bloquea detrás y quita agarre (derrape)
     const grip = s.friction * (1 + up.tires * 0.12);
     if (ctl.handbrake) {
-      c.setWheelBrake(2, s.brake * 0.5 * BRAKE_K);
-      c.setWheelBrake(3, s.brake * 0.5 * BRAKE_K);
+      c.setWheelBrake(2, s.brake * HANDBRAKE_K);
+      c.setWheelBrake(3, s.brake * HANDBRAKE_K);
       c.setWheelFrictionSlip(2, grip * 0.35);
       c.setWheelFrictionSlip(3, grip * 0.35);
       c.setWheelSideFrictionStiffness(2, 0.35);
@@ -245,41 +260,76 @@ export class Vehicle {
       this.wheelContact[i] = c.wheelIsInContact(i);
       if (this.wheelContact[i]) contacts++;
     }
+    // Derrape arcade: con el freno de mano el coche rota con decisión hacia donde giras; al soltarlo
+    // (o al contravolantear) se frena el trompo, para que derrapar sea fácil de controlar.
+    if (contacts >= 2 && !s.twoWheels) {
+      const w = this.body.angvel();
+      if (ctl.handbrake && absSpeed > 5 && Math.abs(ctl.steer) > 0.1) {
+        // volante a la derecha (steer > 0) = giro negativo alrededor de Y
+        const target = -(this.speed < 0 ? -1 : 1) * ctl.steer * 3 * THREE.MathUtils.clamp(1500 / s.mass, 0.35, 1);
+        if (Math.sign(w.y) !== Math.sign(target) || Math.abs(w.y) < Math.abs(target)) {
+          this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, true);
+        }
+      } else if (!ctl.handbrake && this.slip > 2.5 && ctl.steer * w.y >= 0) {
+        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * 2.5)), z: w.z }, true);
+      }
+    }
+
     const r = this.body.rotation();
     tmpQ.set(r.x, r.y, r.z, r.w);
     const bodyUp = tmpV2.set(0, 1, 0).applyQuaternion(tmpQ);
     const av = this.body.angvel();
     const mass = s.mass;
+    const lv = this.body.linvel();
     if (contacts === 0) {
+      if (this.airTime === 0) this.takeOff(tmpQ, absSpeed, lv.y);
       this.airTime += dt;
-      // control en el aire: nivela el coche poco a poco y permite girar
-      const levelK = mass * 2.2;
-      const tq = new THREE.Vector3().crossVectors(bodyUp, UP).multiplyScalar(levelK);
-      this.body.applyTorqueImpulse({ x: tq.x * dt * 3, y: -ctl.steer * mass * 0.6 * dt, z: tq.z * dt * 3 }, true);
-      this.body.setAngvel({ x: av.x * 0.995, y: av.y, z: av.z * 0.995 }, true);
+      // control en el aire: nivela el coche y permite girar
+      const tq = tmpTq.crossVectors(bodyUp, UP);
+      if (this.driver?.kind === 'player' && bodyUp.y > 0.5) {
+        // el del jugador se mantiene plano en el aire: aterriza sobre las ruedas y no clava el morro
+        this.body.applyTorqueImpulse({ x: 0, y: -ctl.steer * mass * 0.6 * dt, z: 0 }, true);
+        const w = this.body.angvel();
+        const k = Math.min(1, dt * 5);
+        this.body.setAngvel({ x: w.x + (tq.x * 2.5 - w.x) * k, y: w.y, z: w.z + (tq.z * 2.5 - w.z) * k }, true);
+      } else {
+        const levelK = mass * 2.2;
+        this.body.applyTorqueImpulse({ x: tq.x * levelK * dt * 3, y: -ctl.steer * mass * 0.6 * dt, z: tq.z * levelK * dt * 3 }, true);
+        this.body.setAngvel({ x: av.x * 0.995, y: av.y, z: av.z * 0.995 }, true);
+      }
     } else {
-      if (this.airTime > 0.6) this.game.events.emit('vehicle:landed' as any, { vehicle: this, air: this.airTime } as any);
+      if (this.airborne) this.setAirborne(false);
+      // air = segundos en el aire; fall = velocidad vertical al tocar el suelo (m/s), mejor medida del golpe
+      if (this.airTime > 0.6) this.game.events.emit('vehicle:landed' as any, { vehicle: this, air: this.airTime, fall: Math.max(0, -this.prevVel.y) } as any);
       this.airTime = 0;
       // carga aerodinámica: pega al suelo a alta velocidad
       const down = Math.min(absSpeed, 50) * mass * 0.12;
       this.body.applyImpulse({ x: -bodyUp.x * down * dt, y: -bodyUp.y * down * dt, z: -bodyUp.z * down * dt }, true);
       // anti-vuelco: momento que mantiene derecho
-      const tq = new THREE.Vector3().crossVectors(bodyUp, UP).multiplyScalar(mass * (s.twoWheels ? 14 : 5));
+      const tq = tmpTq.crossVectors(bodyUp, UP).multiplyScalar(mass * (s.twoWheels ? 14 : 5));
       this.body.applyTorqueImpulse({ x: tq.x * dt, y: 0, z: tq.z * dt }, true);
     }
     if (s.twoWheels) {
-      // la moto no vuelca: amortigua el balanceo
-      this.body.setAngvel({ x: av.x * 0.9, y: av.y, z: av.z * 0.8 }, true);
+      // la moto no vuelca: amortigua el balanceo (con el giro ya corregido arriba)
+      const w = this.body.angvel();
+      this.body.setAngvel({ x: w.x * 0.9, y: w.y, z: w.z * 0.8 }, true);
     }
 
-    // Volcado: se endereza solo a los 2,5 s si va despacio
-    if (bodyUp.y < 0.35 && absSpeed < 3) {
+    // Volcado (o de lado contra una pared): se endereza solo a los 2,5 s si va despacio
+    if ((bodyUp.y < 0.35 || (contacts <= 1 && bodyUp.y < 0.7)) && absSpeed < 3 && !this.sinking) {
       this.flipTimer += dt;
       if (this.flipTimer > 2.5) this.flipUpright();
     } else this.flipTimer = 0;
+    // Encallado encima de algo (sin ruedas en el suelo y quieto): también se recoloca
+    if (contacts === 0 && absSpeed < 1 && Math.abs(lv.y) < 0.5 && !this.sinking) {
+      this.beachedTimer += dt;
+      if (this.beachedTimer > 3) {
+        this.beachedTimer = 0;
+        this.flipUpright();
+      }
+    } else this.beachedTimer = 0;
 
     // Impactos: cambio brusco de velocidad
-    const lv = this.body.linvel();
     // derrape: velocidad lateral en ejes del coche
     tmpQ.set(r.x, r.y, r.z, r.w).invert();
     const localV = tmpV.set(lv.x, lv.y, lv.z).applyQuaternion(tmpQ);
@@ -301,6 +351,20 @@ export class Vehicle {
         this.body.setAngularDamping(3);
       }
     }
+  }
+
+  /** Despegue: gravedad rebajada y, si sale de una rampa, un empujón extra hacia arriba (saltos chulos). */
+  private takeOff(rot: THREE.Quaternion, absSpeed: number, vy: number) {
+    this.setAirborne(true);
+    const fwd = tmpFwd.set(0, 0, 1).applyQuaternion(rot);
+    if (fwd.y > 0.15 && vy > 1.5 && absSpeed > 8 && this.speed > 0) {
+      this.body.applyImpulse({ x: 0, y: Math.min(3, absSpeed * 0.1) * this.spec.mass, z: 0 }, true);
+    }
+  }
+
+  private setAirborne(on: boolean) {
+    this.airborne = on;
+    this.body.setGravityScale(on ? AIR_GRAVITY : 1, true);
   }
 
   impact(dv: number) {
@@ -382,12 +446,20 @@ export class Vehicle {
     g.quaternion.set(r.x, r.y, r.z, r.w);
     const c = this.controller;
     const s = this.spec;
+    const slots = this.mesh.wheelSlots;
+    if (slots) tmpGroupM.compose(g.position, g.quaternion, g.scale);
     for (let i = 0; i < 4; i++) {
       const pivot = this.mesh.wheels[i];
       const susp = c.wheelSuspensionLength(i) ?? s.suspension;
       pivot.position.y = s.wheelY - susp;
       const steer = i < 2 ? c.wheelSteering(i) ?? 0 : 0;
-      this.wheelSpin[i] += (this.speed / s.wheelRadius) * dt;
+      this.wheelSpin[i] = (this.wheelSpin[i] + (this.speed / s.wheelRadius) * dt) % TWO_PI;
+      const slot = slots?.[i];
+      if (slot) {
+        // rueda compartida (InstancedMesh): se coloca con su matriz de mundo
+        setWheelInstance(slot, tmpGroupM, pivot.position, steer, this.wheelSpin[i]);
+        continue;
+      }
       pivot.rotation.set(0, 0, 0);
       pivot.rotation.y = steer;
       const wheel = pivot.children[0];
@@ -411,8 +483,12 @@ export class Vehicle {
     this.driver = null;
     const g = this.game;
     g.scene.remove(this.mesh.group);
+    releaseWheels(this.mesh);
     this.mesh.bodyGeo.dispose();
     this.mesh.lights.geometry.dispose();
+    this.mesh.siren?.geometry.dispose();
+    // carteles laterales: la geometría es de este vehículo (la textura es compartida)
+    for (const ch of this.mesh.group.children) if (ch.userData.decal && (ch as THREE.Mesh).isMesh) (ch as THREE.Mesh).geometry.dispose();
     g.physics.untag(this.collider);
     g.physics.world.removeVehicleController(this.controller);
     g.physics.world.removeRigidBody(this.body);

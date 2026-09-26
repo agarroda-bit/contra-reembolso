@@ -8,8 +8,11 @@ import { RAPIER, G, groups } from '../core/physics';
 import { fx as rnd } from '../core/rng';
 
 const burntMaterial = new THREE.MeshLambertMaterial({ color: '#2a2622', flatShading: true });
+/** Materiales de las piezas que salen volando, uno por color (no uno nuevo por pieza). */
+const debrisMaterials = new Map<string, THREE.Material>();
 const tmpV = new THREE.Vector3();
 const tmpL = new THREE.Vector3();
+const tmpE = new THREE.Vector3();
 
 interface Debris {
   body: RAPIER.RigidBody;
@@ -37,6 +40,11 @@ export class VehicleDamageFx implements System {
 
   update(dt: number) {
     const cam = this.game.camera.position;
+    // olvidar los temporizadores de vehículos que ya no existen (el tráfico va y viene)
+    if (this.timers.size > this.vm.list.length + 30) {
+      const alive = new Set(this.vm.list.map((v) => v.id));
+      for (const id of this.timers.keys()) if (!alive.has(id)) this.timers.delete(id);
+    }
     for (const v of this.vm.list) {
       let t = this.timers.get(v.id);
       if (!t) this.timers.set(v.id, (t = { smoke: 0, fire: 0, burning: 0, dead: 0 }));
@@ -62,7 +70,7 @@ export class VehicleDamageFx implements System {
       const hp = v.health / v.spec.health;
       if (hp < 0.45 && !far) {
         // humo del motor
-        const engine = v.localToWorld(tmpL.set(0, v.spec.half.y * 0.4, v.spec.half.z * 0.75), new THREE.Vector3());
+        const engine = v.localToWorld(tmpL.set(0, v.spec.half.y * 0.4, v.spec.half.z * 0.75), tmpE);
         t.smoke -= dt;
         if (t.smoke <= 0) {
           t.smoke = hp < 0.2 ? 0.06 : 0.14;
@@ -115,12 +123,14 @@ export class VehicleDamageFx implements System {
     const big = v.spec.mass > 2500;
     this.particles?.explosion(pos, big);
     g.events.emit('explosion', { pos: pos.clone(), radius: big ? 9 : 7, big });
-    if (big || this.vm.current === v) g.slowMo(0.9, 0.35);
+    // cámara lenta si es la tuya o una grande que se ve de cerca (no por un camión que revienta a 200 m)
+    if (this.vm.current === v || (big && pos.distanceTo(g.camera.position) < 70)) g.slowMo(0.9, 0.35);
     // carrocería quemada
     v.mesh.body.material = burntMaterial;
     v.mesh.lights.visible = false;
     if (v.mesh.siren) v.mesh.siren.visible = false;
-    for (const c of v.mesh.group.children) if ((c as THREE.Mesh).isMesh && c !== v.mesh.body && c !== v.mesh.lights) (c as THREE.Mesh).visible = (c as THREE.Mesh).geometry.type !== 'PlaneGeometry';
+    // los carteles laterales se queman
+    for (const c of v.mesh.group.children) if ((c as THREE.Mesh).isMesh && (c.userData.decal || (c as THREE.Mesh).geometry.type === 'PlaneGeometry')) c.visible = false;
     // salto del chasis
     const m = v.spec.mass;
     v.body.applyImpulse({ x: (rnd.next() - 0.5) * m * 3, y: m * 7, z: (rnd.next() - 0.5) * m * 3 }, true);
@@ -178,7 +188,9 @@ export class VehicleDamageFx implements System {
       RAPIER.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2).setDensity(80).setCollisionGroups(groups(G.DEBRIS, G.GROUND | G.STATIC | G.VEHICLE)),
       body,
     );
-    const mesh = new THREE.Mesh(this.debrisGeo, new THREE.MeshLambertMaterial({ color, flatShading: true }));
+    let mat = debrisMaterials.get(color);
+    if (!mat) debrisMaterials.set(color, (mat = new THREE.MeshLambertMaterial({ color, flatShading: true })));
+    const mesh = new THREE.Mesh(this.debrisGeo, mat);
     mesh.scale.set(sx, sy, sz);
     mesh.castShadow = true;
     this.game.scene.add(mesh);

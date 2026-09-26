@@ -34,6 +34,18 @@ export class VehicleManager implements System {
 
   constructor(private game: Game) {
     game.mod.vehicles = this;
+    // sensaciones: la cámara tiembla con los golpes fuertes y al aterrizar de un salto
+    game.events.on('vehicle:impact' as any, (e: any) => {
+      if (e.vehicle !== this.current || e.dv < 7) return;
+      game.events.emit('camera:shake', { amount: Math.min(1.1, (e.dv - 6) * 0.055) });
+      // en moto o patinete, un choque fuerte te hace salir volando
+      const v = e.vehicle as Vehicle;
+      if (v.spec.twoWheels && e.dv > 12 && !this.transition && this.player.state === 'vehicle') this.eject(v, e.dv);
+    });
+    game.events.on('vehicle:landed' as any, (e: any) => {
+      if (e.vehicle !== this.current) return;
+      game.events.emit('camera:shake', { amount: Math.min(0.45, e.air * 0.28) });
+    });
   }
 
   spawn(kind: VehicleKind, pos: THREE.Vector3, heading: number, color?: string): Vehicle {
@@ -162,6 +174,7 @@ export class VehicleManager implements System {
         cam.target.y -= v.spec.half.y * 0.5;
         cam.vehicleHeading = v.heading;
         cam.targetSpeed = v.speed;
+        cam.boosting = v.controls.boost && v.boost > 0.02 && v.controls.throttle > 0.1;
         cam.vehicleDistance = v.spec.camDistance;
         cam.vehicleHeight = v.spec.camHeight;
         cam.excludeBody = v.body;
@@ -195,17 +208,26 @@ export class VehicleManager implements System {
   hintText: string | null = null;
 
   /** Motores y derrapes: el del jugador siempre, y los 3 más cercanos con motor en marcha. */
+  private audioNear: Vehicle[] = [];
+  private audioDist = new Map<Vehicle, number>();
   private updateAudio() {
     const audio = this.game.mod.audio;
     if (!audio?.ctx) return;
     const cam = this.game.camera.position;
-    const near = this.list
-      .filter((v) => !v.destroyed && (v === this.current || v.driver))
-      .map((v) => ({ v, d: v.getPosition(tmpV).distanceToSquared(cam) }))
-      .filter((x) => x.d < 70 * 70 || x.v === this.current)
-      .sort((a, b) => (a.v === this.current ? -1 : b.v === this.current ? 1 : a.d - b.d))
-      .slice(0, 4);
-    for (const { v } of near) {
+    const near = this.audioNear;
+    const dist = this.audioDist;
+    near.length = 0;
+    dist.clear();
+    for (const v of this.list) {
+      if (v.destroyed || !(v === this.current || v.driver)) continue;
+      const d = v === this.current ? -1 : v.getPosition(tmpV).distanceToSquared(cam);
+      if (d > 70 * 70) continue;
+      dist.set(v, d);
+      near.push(v);
+    }
+    near.sort((a, b) => dist.get(a)! - dist.get(b)!);
+    if (near.length > 4) near.length = 4;
+    for (const v of near) {
       const s = v.spec;
       const sp = Math.abs(v.speed);
       const gearSpan = s.maxSpeed / 5;
@@ -213,7 +235,7 @@ export class VehicleManager implements System {
       const within = (sp - gear * gearSpan) / gearSpan;
       const thr = Math.max(0, v.controls.throttle);
       const rpm = Math.min(1, 0.12 + within * 0.7 + thr * 0.12 + (v.wheelContact.some((c) => c) ? 0 : thr * 0.3));
-      const pos = v.getPosition(new THREE.Vector3());
+      const pos = v.getPosition(tmpV);
       audio.engine(v.id, s.kind, pos, rpm, thr, v === this.current ? 1.2 : 0.8);
       if (v.slip > 4.5 && sp > 4) audio.loop('skid' + v.id, 'skid', pos, Math.min(0.5, (v.slip - 4.5) / 10), Math.min(1, sp / 30));
       if (v.sirenOn) audio.loop('siren' + v.id, 'siren', pos, 0.8);
@@ -333,6 +355,26 @@ export class VehicleManager implements System {
     this.game.events.emit('vehicle:exit', { vehicle: v });
   }
 
+  /** Sale despedido por encima del manillar (choque fuerte en moto). */
+  private eject(v: Vehicle, dv: number) {
+    const p = this.player;
+    const out = v.getPosition(new THREE.Vector3());
+    out.y += v.spec.half.y + 0.9;
+    this.detachPlayer(v);
+    p.teleport(out);
+    p.heading = v.heading;
+    const h = v.heading;
+    const k = Math.min(12, dv * 0.7);
+    p.push.set(Math.sin(h) * k, 5 + Math.min(4, dv * 0.2), Math.cos(h) * k);
+    p.pose = 'knocked';
+    p.poseTimer = 1.5;
+    p.hurt(Math.min(30, dv * 1.2), { cause: 'salir volando de la moto' });
+    this.game.events.emit('camera:shake', { amount: 0.8 });
+    this.game.events.emit('toast', { text: '¡Has salido volando por encima del manillar!', color: '#ff7b54', time: 2 });
+    this.transition = { kind: 'exit', t: 0, dur: 0.3, vehicle: v, from: out.clone(), to: out.clone() };
+    this.game.events.emit('vehicle:exit', { vehicle: v });
+  }
+
   private detachPlayer(v: Vehicle) {
     const p = this.player;
     v.driver = null;
@@ -348,6 +390,7 @@ export class VehicleManager implements System {
     const cam = this.cam;
     cam.mode = 'foot';
     cam.excludeBody = null;
+    cam.boosting = false;
   }
 
   /** Sacar al jugador sin animación (muerte, vehículo destruido, misión). */

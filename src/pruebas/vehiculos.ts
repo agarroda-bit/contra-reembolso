@@ -81,6 +81,17 @@ async function main() {
       const h1 = v.heading; step(60);
       let dh2 = v.heading - h1; dh2 = Math.atan2(Math.sin(dh2), Math.cos(dh2));
       r.drift = +Math.abs(dh2).toFixed(2); r.driftOk = !v.upsideDown;
+      // toque de freno de mano a 60 km/h (como en una esquina): 0,4 s girando con el freno de mano,
+      // luego se suelta y se endereza 1 s. Buen derrape = gira bastante y acaba sin trompo (yawEnd bajo).
+      reset(); v.controls.throttle = 1; n = 0;
+      while (v.speed < 16.7 && n < 1200) { step(1); n++; }
+      const h3 = v.heading;
+      v.controls.steer = 1; v.controls.handbrake = true; v.controls.throttle = 0.4; step(24);
+      v.controls.handbrake = false; v.controls.steer = 0; v.controls.throttle = 0.5; step(60);
+      let dh3 = v.heading - h3; dh3 = Math.atan2(Math.sin(dh3), Math.cos(dh3));
+      r.tapTurn = +Math.abs(dh3).toFixed(2);
+      r.tapYawEnd = +Math.abs(v.body.angvel().y).toFixed(2);
+      r.tapKmh = +(v.speed * 3.6).toFixed(0);
       results[kind] = r;
       vm.remove(v);
     }
