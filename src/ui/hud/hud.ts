@@ -270,7 +270,8 @@ export class HudImpl implements Hud {
   }
 
   private changed(key: string, v: unknown): boolean {
-    if (this.last[key] === v) return false;
+    // Object.is: un NaN que llegue de otro sistema no reescribe el DOM en cada frame
+    if (Object.is(this.last[key], v)) return false;
     this.last[key] = v;
     return true;
   }

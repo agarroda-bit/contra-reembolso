@@ -2,7 +2,7 @@
 
 /** «1.234 €» (siempre con punto de millares, también con 4 cifras). */
 export function formatMoney(n: number, withSign = false): string {
-  const v = Math.round(n);
+  const v = Number.isFinite(n) ? Math.round(n) : 0;
   const abs = Math.abs(v);
   const digits = String(abs).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const sign = v < 0 ? '−' : withSign ? '+' : '';
