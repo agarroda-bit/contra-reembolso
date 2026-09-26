@@ -741,7 +741,8 @@ export class Animator {
     else if (v <= 6) C = 1.25 + 1.25 * ((v - 2) / 4);
     else C = 2.5 * Math.pow(v / 6, 0.6);
     C *= g.stride;
-    this.phase = (this.phase + (v * dt) / C) % 1;
+    // el root avanza en metros del mundo y el cuerpo va escalado: el paso también
+    this.phase = (this.phase + (v * dt) / (C * this.bodyScale)) % 1;
     const ph = this.phase;
     const s = lerp(0.58, 0.36, run);
     const S = C * s;
@@ -940,11 +941,11 @@ export class Animator {
     o[CH.hy] = seatHip(RIDE_LAYOUT.seatY, this.bodyScale);
     o[CH.hz] = -0.02;
     R(o, B.hips, 0.2, 0, 0);
-    for (let side = 1; side >= -1; side -= 2) {
-      R(o, side > 0 ? B.thighL : B.thighR, -1.2, 0, side * 0.3);
-      R(o, side > 0 ? B.shinL : B.shinR, 1.25, 0, 0);
-      R(o, side > 0 ? B.footL : B.footR, -0.25, 0, -side * 0.3);
-    }
+    // pies en el suelo del vehículo (RIDE_LAYOUT.feet), rodillas abiertas
+    const F = RIDE_LAYOUT.feet, k = 1 / this.bodyScale;
+    legs(o, F.halfWidth * k - HIP_X, F.z * k, F.y * k, -(F.halfWidth * k - HIP_X), F.z * k, F.y * k);
+    AR(o, B.thighL, 0, 0, 0.12);
+    AR(o, B.thighR, 0, 0, -0.12);
     const t = this.t;
     const yaw = wave(t * 0.5, this.seed) * 0.08;
     R(o, B.spine, 0.18 + Math.sin(t * 2) * 0.01, 0, -yaw * 0.5);
@@ -1170,10 +1171,10 @@ export class Animator {
     // levanta la cabeza para mirar la cinta (x positivo = hacia el pecho = arriba)
     R(o, B.neck, 0.2 + Math.max(0, Math.sin(t * 2.3)) * 0.45, 0, 0);
     R(o, B.head, 0.12, Math.sin(t * 3) * 0.3, 0);
-    R(o, B.thighL, -0.07 + Math.sin(t * 7) * 0.05, 0, 0.03);
-    R(o, B.thighR, -0.07 + Math.sin(t * 7 + PI) * 0.05, 0, -0.03);
-    R(o, B.footL, 0.2 + Math.sin(t * 11) * 0.2, 0.2, 0);
-    R(o, B.footR, 0.2 + Math.sin(t * 11 + 1) * 0.2, -0.2, 0);
+    R(o, B.thighL, -0.1 + Math.sin(t * 7) * 0.03, 0, 0.03);
+    R(o, B.thighR, -0.1 + Math.sin(t * 7 + PI) * 0.03, 0, -0.03);
+    R(o, B.footL, 0.25 + Math.sin(t * 11) * 0.15, 0.2, 0);
+    R(o, B.footR, 0.25 + Math.sin(t * 11 + 1) * 0.15, -0.2, 0);
     o[CH.tape] = 1;
     o[CH.mouth] = 0.25 + Math.max(0, Math.sin(t * 4)) * 0.4;
     o[CH.mouthW] = 0.6;

@@ -139,6 +139,12 @@ function propFor(pose: string): THREE.Object3D | null {
     stem.rotation.x = 0.35;
     const bar = new THREE.Mesh(new THREE.BoxGeometry(L.barHalfWidth * 2 + 0.12, 0.035, 0.035), darkMat);
     bar.position.set(L.bar.x, L.bar.y, L.bar.z);
+    // reposapiés donde apoya las suelas
+    for (const sx of [1, -1]) {
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.3), darkMat);
+      pad.position.set(sx * L.feet.halfWidth, L.feet.y - 0.015, L.feet.z);
+      g.add(pad);
+    }
     for (const z of [-0.55, 0.75]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 10), darkMat);
       w.rotation.z = Math.PI / 2;
@@ -190,7 +196,7 @@ const shootAll = params.get('disparo') === '1';
 
 const actors: Actor[] = [];
 const count = cara ? 2 : kinds.length;
-const spacing = 1.5;
+const spacing = 1.32;
 for (let i = 0; i < count; i++) {
   const kind = cara ? (i === 0 ? 'repartidor' : 'devuelto') : kinds[i];
   const look = randomLook(rng, kind);
@@ -255,14 +261,14 @@ if (cara) {
   camera.lookAt(x, 0.85, 0);
   camera.fov = 40;
 } else {
-  camera.position.set(0, 1.55, 10.2);
-  camera.lookAt(0, 0.82, 0);
+  camera.position.set(0, 1.5, 9.1);
+  camera.lookAt(0, 0.88, 0);
   camera.fov = 40;
 }
 camera.updateProjectionMatrix();
 document.getElementById('titulo')!.textContent = cara
   ? 'Personajes — primer plano de caras'
-  : `Personajes — ${poseParam ?? (aimParam ? 'apuntando ' + aimParam : speedParam ? 'velocidad ' + speedParam + ' m/s' : 'una pose cada uno')}`;
+  : `Personajes — ${poseParam ?? (aimParam ? 'apuntando ' + aimParam : speedParam ? 'velocidad ' + speedParam + ' m/s' : aireParam ? 'en el aire (' + aireParam + ')' : params.has('wobble') ? 'colocado' : 'una pose cada uno')}`;
 
 // etiquetas
 const labelBox = document.getElementById('etiquetas')!;

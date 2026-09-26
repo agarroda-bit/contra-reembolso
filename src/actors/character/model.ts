@@ -345,7 +345,7 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   // alturas según la complexión (el cuerpo tumbado tiene la espalda a 0,135 m)
   const tapes: [number, number, number][] = [
     [-0.28, 0.135 + frontZ + 0.014, 0.25 * bw + 0.08],
-    [0.27, 0.135 + 0.08 * lw + 0.012, 0.2 * lw + 0.06],
+    [0.27, 0.135 + 0.08 * lw + 0.032, 0.2 * lw + 0.06],
     [0.68, 0.135 + 0.06 * lw + 0.02, 0.15 * lw + 0.05],
   ];
   for (const [z, h, w] of tapes) {
