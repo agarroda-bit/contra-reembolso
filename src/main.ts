@@ -123,11 +123,14 @@ async function boot() {
  */
 async function warmUp(game: Game, menus: Menus | null) {
   try {
-    await Promise.race([game.renderer.compileAsync(game.scene, game.camera), new Promise((r) => setTimeout(r, 10000))]);
+    // sin compilación en paralelo (p. ej. WebGL por software) compilar todo de golpe congela el arranque
+    // decenas de segundos: entonces solo se prepara lo que se ve primero (como hace game.warmShaders)
+    const parallel = game.renderer.extensions.has('KHR_parallel_shader_compile');
+    if (parallel) await Promise.race([game.renderer.compileAsync(game.scene, game.camera), new Promise((r) => setTimeout(r, 10000))]);
     // y un dibujado de prueba, tapado por la pantalla de carga: sube a la tarjeta gráfica las mallas y
     // texturas que se ven al empezar (detrás del jugador y, si hay menú, la vista de la isla) y prepara las sombras
     game.mod.cameraRig?.postUpdate?.(1 / 60);
-    game.render();
+    if (parallel || !menus) game.render();
     if (menus) {
       menus.update(0);
       game.render();
