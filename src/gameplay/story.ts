@@ -104,6 +104,12 @@ function gangNear(g: Game, p: THREE.Vector3, r: number): number {
   for (const m of (g.mod.gang?.members ?? []) as Npc[]) if (m.alive && !m.removed && m.position.distanceTo(p) < r) n++;
   return n;
 }
+/** «Supermercado El Carrito Loco» → «el Supermercado El Carrito Loco» (para que las frases suenen bien). */
+function withArticle(name: string): string {
+  if (/^(Supermercado|Videoclub|Bar|Casino|Club|Taller|Estanco)\b/.test(name)) return 'el ' + name;
+  if (/^(Panadería|Óptica|Armería|Tienda|Oficina|Taberna|Joyería|Frutería)\b/.test(name)) return 'la ' + name;
+  return name;
+}
 function msg(g: Game, from: { id: string; name: string; avatar: string }, text: string) {
   g.mod.messages?.receive(from.id, from.name, from.avatar, text);
 }
@@ -149,16 +155,16 @@ function missions(): Mission[] {
       id: 'reloj', num: 1, title: 'El reloj de la señora Puri', icon: '⌚', fame: 2, reward: 1500, fameReward: 100,
       pitch: 'Un reloj de oro de 50.000 € para una señora de la Colina. Los Devueltos lo saben. Todo el mundo lo sabe.',
       intro: (c) =>
-        `Recoge un reloj de oro de 50.000 € en ${c.data.shop.name} (Centro: la joyería está de obras y lo guardan allí, entre los yogures) y llévaselo a la señora Puri, en la Colina, sin un rasguño. Ojo, que Los Devueltos se han enterado. Yo no he sido.`,
+        `Recoge un reloj de oro de 50.000 € en ${withArticle(c.data.shop.name)} (Centro: la joyería está de obras y lo guardan allí, entre los yogures) y llévaselo a la señora Puri, en la Colina, sin un rasguño. Ojo, que Los Devueltos se han enterado. Yo no he sido.`,
       outro: '¡Reloj entregado! La señora Puri dice que es el repartidor más guapo que ha visto. Y eso que ve fatal. Toma tu parte.',
       failText: 'El reloj ha acabado en manos (moradas) equivocadas.',
       steps: [
         {
-          objective: (c) => `Recoge el reloj en ${c.data.shop.name} (E en la puerta)`,
+          objective: (c) => `Recoge el reloj en ${withArticle(c.data.shop.name)} (E en la puerta)`,
           target: (c) => c.data.shop.door,
           enter: (c) => {
             const shops = c.g.world.pois.filter((p) => p.kind === 'shop');
-            c.data.shop = shops.find((p) => p.district === 'centro') ?? shops[0] ?? poi(c.g, 'clothes');
+            c.data.shop = shops.find((p) => p.id === 'shop-super') ?? shops.find((p) => p.district === 'centro') ?? shops[0] ?? poi(c.g, 'clothes');
             c.data.dest = vanSpotIn(c.g, 'colina');
           },
           update: (c) => {
