@@ -32,6 +32,7 @@ import { CombatHud } from './ui/combatHud';
 import { RandomEvents } from './gameplay/randomEvents';
 import { PhotoMode } from './ui/photoMode';
 import { Achievements } from './gameplay/achievements';
+import { Daily } from './gameplay/daily';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -104,6 +105,7 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
     add(new RandomEvents(game));
     add(new PhotoMode(game));
     add(new Achievements(game));
+    add(new Daily(game));
   }
 
   installDayNight(game);
