@@ -4,6 +4,7 @@ import type { Game, System } from '../core/game';
 import type { CharacterLook, HairStyle } from '../core/contracts';
 import type { Quality } from '../core/settings';
 import { SaveSystem } from '../gameplay/save';
+import { fmt } from '../gameplay/economy';
 
 export const SKINS = ['#ffe0c4', '#f1c27d', '#e0ac69', '#c68642', '#a0673c', '#8d5524', '#5c3a21'];
 export const HAIRS: { id: HairStyle; name: string }[] = [
@@ -127,7 +128,7 @@ export class Menus implements System {
     col.className = 'col';
     col.innerHTML = `<div class="cr-logo">CONTRA<br>REEMBOLSO<small>Pagas al recibir. O no.</small></div>`;
     const save = SaveSystem.peek();
-    col.appendChild(this.button('▶ Continuar', save ? `Día ${save.day} · ${Math.round(save.cash + save.bank).toLocaleString('es-ES')} € · fama ${Math.round(save.fame)}` : 'No hay partida guardada', () => this.onContinue?.(), !save));
+    col.appendChild(this.button('▶ Continuar', save ? `Día ${save.day} · ${fmt(save.cash + save.bank)} · fama ${Math.round(save.fame)}` : 'No hay partida guardada', () => this.onContinue?.(), !save));
     col.appendChild(this.button('✚ Nueva partida', save ? 'Empieza de cero (borra la partida guardada)' : 'Crea a tu repartidor', () => this.showCreate()));
     col.appendChild(this.button('⚙ Opciones', null, () => this.showOptions(() => this.showMain())));
     col.appendChild(this.button('⌨ Controles', null, () => this.showControls(() => this.showMain())));

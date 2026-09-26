@@ -1,6 +1,7 @@
 // Bocadillos de diálogo sobre la cabeza de la gente, y números que saltan ("+45 €").
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
+import { fmt } from '../gameplay/economy';
 
 interface Bubble {
   el: HTMLDivElement;
@@ -45,7 +46,7 @@ export class Bubbles implements System {
       if (!p) return;
       const pos = p.position.clone();
       pos.y += 2.2;
-      this.number(pos, (e.delta > 0 ? '+' : '−') + Math.round(Math.abs(e.delta)).toLocaleString('es-ES') + ' €', e.delta > 0 ? '#7CFC7C' : '#ff5a7a');
+      this.number(pos, (e.delta > 0 ? '+' : '−') + fmt(Math.abs(e.delta)), e.delta > 0 ? '#7CFC7C' : '#ff5a7a');
     });
   }
 

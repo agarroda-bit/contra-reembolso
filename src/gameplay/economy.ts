@@ -102,6 +102,9 @@ export class Economy implements System {
   }
 }
 
+/** 1234 → "1.234 €" (con punto de miles siempre, también en números de 4 cifras). */
 export function fmt(euros: number): string {
-  return Math.round(euros).toLocaleString('es-ES') + ' €';
+  const n = Math.round(euros);
+  const s = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (n < 0 ? '−' : '') + s + ' €';
 }
