@@ -20,10 +20,27 @@ const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpMuzzle = new THREE.Vector3();
 const tmpAim = new THREE.Vector3();
-/** Segundos de tregua tras reaparecer: las emboscadas que salgan cerca esperan apostadas sin atacar. */
+/**
+ * Tregua tras reaparecer: mientras no te vayas de la zona donde has reaparecido (ver `truceZone`),
+ * las emboscadas que salgan cerca esperan al acecho sin atacar. Los guardias de la guarida que estén
+ * cerca no se enfadan solo por verte durante estos segundos.
+ */
 const TRUCE = 45;
-/** Radio de la tregua alrededor del punto de reaparición. */
+/** Radio de la tregua alrededor del punto de reaparición (te vas de la zona a TRUCE_RADIUS + 20 m). */
 const TRUCE_RADIUS = 130;
+/** Segundos que esperan al acecho los de una emboscada en tregua antes de cansarse e irse. */
+const LURK_WAIT = 90;
+/** Segundos que la banda se acuerda de a cuántos les derribaste en una emboscada (para no mandarlos otra vez a todos). */
+const AMBUSH_MEMORY = 300;
+
+/** Una emboscada en un sitio: cuántos eran, cuántos has derribado y cuántos siguen por ahí. */
+interface AmbushGroup {
+  pos: THREE.Vector3;
+  size: number;
+  down: number;
+  live: number;
+  at: number;
+}
 
 interface Chase extends ChaseNav {
   van: Vehicle;
@@ -46,9 +63,14 @@ export class Gang implements System {
   private territoryWarned = 0;
   /** Desactivar persecuciones aleatorias (tutorial, misiones tranquilas). */
   calm = false;
-  /** Tregua tras reaparecer (ver TRUCE): hasta cuándo y alrededor de dónde. */
+  /** Tregua tras reaparecer (ver TRUCE): hasta cuándo para los guardias y alrededor de dónde. */
   private truceUntil = -1;
   private readonly truceAt = new THREE.Vector3();
+  /** El jugador aún no se ha ido de la zona donde reapareció (mientras tanto sigue la tregua ahí). */
+  private truceZone = false;
+  /** Emboscadas recientes (ver AMBUSH_MEMORY) y a cuál pertenece cada miembro. */
+  private groups: AmbushGroup[] = [];
+  private groupOf = new Map<Npc, AmbushGroup>();
 
   constructor(private game: Game) {
     game.mod.gang = this;
@@ -66,6 +88,12 @@ export class Gang implements System {
       const n = e.npc as Npc;
       if (n.role !== 'devuelto') return;
       game.events.emit('gang:killed' as any, { npc: n } as any);
+      const grp = this.groupOf.get(n);
+      if (grp) {
+        grp.down++;
+        grp.live--;
+        this.groupOf.delete(n);
+      }
       // a veces sueltan dinero o munición
       const r = rnd.next();
       const pos = n.position.clone();
@@ -84,9 +112,10 @@ export class Gang implements System {
     game.events.on('player:respawn', () => {
       this.clearChases();
       // tregua: lo que salga cerca de donde reapareces (p. ej. la emboscada del rescate de un empleado
-      // junto a la oficina) espera apostado en vez de ir a por ti nada más levantarte
+      // junto a la oficina) espera al acecho en vez de ir a por ti nada más levantarte, mientras no te vayas de allí
       this.truceUntil = game.time.elapsed + TRUCE;
       this.truceAt.copy(game.mod.player.position);
+      this.truceZone = true;
       this.calmDown();
     });
   }
@@ -160,6 +189,7 @@ export class Gang implements System {
       b.mode = 'idle';
       b.calmUntil = until;
       b.unseenFor = 0;
+      b.lurk = false;
       m.aiming = false;
       (b as any).robber = false;
       if (this.guards.includes(m)) {
@@ -183,6 +213,31 @@ export class Gang implements System {
     return !this.game.physics.raycast(tmpV.set(p.x, p.y + 21, p.z), tmpV2.set(0, -1, 0), 19.5, G.STATIC);
   }
 
+  /**
+   * La emboscada de este sitio si hubo una hace poco y aún no la has terminado (si no, una nueva).
+   * Así, si derribas a 2 de 3 y te vas a curarte, al volver no salen otra vez los 3.
+   */
+  private ambushGroup(pos: THREE.Vector3, count: number): AmbushGroup {
+    const now = this.game.time.elapsed;
+    // (los que se han borrado hace un momento, p. ej. al reaparecer, ya no siguen por ahí)
+    for (const m of this.groupOf.keys()) if (m.removed) this.leaveGroup(m);
+    let w = 0;
+    let found: AmbushGroup | null = null;
+    for (const grp of this.groups) {
+      if (now - grp.at > AMBUSH_MEMORY || (grp.down >= grp.size && grp.live <= 0)) continue;
+      this.groups[w++] = grp;
+      if (!found && grp.down < grp.size && grp.pos.distanceToSquared(pos) < 15 * 15) found = grp;
+    }
+    this.groups.length = w;
+    if (found) {
+      found.at = now;
+      return found;
+    }
+    const grp: AmbushGroup = { pos: pos.clone(), size: count, down: 0, live: 0, at: now };
+    this.groups.push(grp);
+    return grp;
+  }
+
   /** Emboscada: `count` miembros alrededor de `pos`, ya enfadados. */
   ambush(pos: THREE.Vector3, count = 3, weapon?: WeaponId): Npc[] {
     const out: Npc[] = [];
@@ -191,9 +246,13 @@ export class Gang implements System {
     // en su sitio hasta que llegues; si no, cruzarían media isla (o se borrarían por estar lejos)
     const cur = this.vm.current;
     const ppos = cur ? cur.getPosition(tmpV2) : this.game.mod.player.position;
-    // recién reaparecido y cerca de donde reapareces: también apostados, y sin enfadarse solo por verte
-    const truce = this.game.time.elapsed < this.truceUntil && pos.distanceTo(this.truceAt) < TRUCE_RADIUS;
-    const posted = truce || ppos.distanceTo(pos) > 120;
+    // recién reaparecido y cerca de donde reapareces: al acecho (esperan sin atacar salvo que te acerques
+    // mucho o les ataques, y si no vas se cansan y se van: nada de quedarse plantados delante de la oficina)
+    const lurk = this.truceZone && pos.distanceTo(this.truceAt) < TRUCE_RADIUS;
+    const posted = !lurk && ppos.distanceTo(pos) > 120;
+    // los que ya derribaste aquí hace poco no vuelven
+    const grp = this.ambushGroup(pos, count);
+    if (grp.size !== count || grp.down > 0 || grp.live > 0) count = Math.max(1, grp.size - grp.down - grp.live);
     for (let i = 0; i < count; i++) {
       // un sitio a 7-14 m, fuera de los edificios y, si se puede, donde no se vea aparecer
       let p: THREE.Vector3 | null = null;
@@ -208,15 +267,21 @@ export class Gang implements System {
       }
       p ??= fallback ?? pos.clone();
       p.y = this.game.world.heightAt(p.x, p.z);
-      const m = this.spawnMember(p, weapon, !posted);
+      const m = this.spawnMember(p, weapon, !posted && !lurk);
+      const b = m.brain as CombatBrain;
       if (posted) {
-        (m.brain as CombatBrain).home = p.clone();
-        (m.brain as CombatBrain).holdAt = p.clone();
-        if (truce) (m.brain as CombatBrain).calmUntil = this.truceUntil;
+        b.home = p.clone();
+        b.holdAt = p.clone();
+      } else if (lurk) {
+        // (al acecho, `calmUntil` es hasta cuándo esperan antes de irse)
+        b.lurk = true;
+        b.calmUntil = this.game.time.elapsed + LURK_WAIT;
       }
+      grp.live++;
+      this.groupOf.set(m, grp);
       out.push(m);
     }
-    if (!posted) this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
+    if (!posted && !lurk) this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
     return out;
   }
 
@@ -271,6 +336,9 @@ export class Gang implements System {
     if (!p || !g.world) return;
     const h = this.hideout;
 
+    // la tregua tras reaparecer se acaba al irte de la zona
+    if (this.truceZone && p.position.distanceTo(this.truceAt) > TRUCE_RADIUS + 20) this.truceZone = false;
+
     // guardias de la guarida
     if (h) {
       const d = p.position.distanceTo(h.door);
@@ -311,6 +379,7 @@ export class Gang implements System {
     for (let i = this.members.length - 1; i >= 0; i--) {
       const m = this.members[i];
       if (m.removed) {
+        this.leaveGroup(m);
         this.members.splice(i, 1);
         continue;
       }
@@ -318,10 +387,23 @@ export class Gang implements System {
       const farLimit = (m.brain as CombatBrain)?.home ? 420 : 200;
       if (m.position.distanceTo(p.position) > farLimit && !m.vehicle) {
         this.npcs.remove(m);
+        this.leaveGroup(m);
         this.members.splice(i, 1);
         continue;
       }
       const b = m.brain as CombatBrain;
+      // al acecho: si uno se enfada (te ha visto muy cerca o le has dado) o llegas al sitio de la emboscada
+      // (aunque estén detrás de una esquina), salen todos los de alrededor; si se cansan de esperar o te
+      // vas de la zona de la tregua, se van
+      if (b.lurk && m.alive) {
+        const spot = this.groupOf.get(m)?.pos;
+        if (b.aggro || m.position.distanceToSquared(p.position) < 6 * 6 || (spot && spot.distanceToSquared(p.position) < 10 * 10)) this.wakeLurkers(m);
+        else if (g.time.elapsed > b.calmUntil || !this.truceZone) {
+          b.lurk = false;
+          b.bored = true;
+          b.calmUntil = g.time.elapsed + 30;
+        }
+      }
       // los que bajan de la furgoneta intentan sacarte del vehículo y quitarte los paquetes
       // (solo si siguen a por ti y estás cerca: no cruzan media isla cada vez que paras)
       const cur = this.vm.current;
@@ -336,6 +418,7 @@ export class Gang implements System {
         // (lo de si se le ve, cada 10 frames: es un rayo)
         if (dp > 35 && (g.time.frame + m.id) % 10 === 0 && offscreen(g, m.position)) {
           this.npcs.remove(m);
+          this.leaveGroup(m);
           this.members.splice(i, 1);
           continue;
         }
@@ -397,6 +480,27 @@ export class Gang implements System {
         if (tempting && this.chases.length === 0 && rnd.next() < 0.6) this.startChase();
       }
     }
+  }
+
+  /** Ya no está (sin haber caído): deja de contar como uno de los que siguen en su emboscada. */
+  private leaveGroup(m: Npc) {
+    const grp = this.groupOf.get(m);
+    if (!grp) return;
+    grp.live--;
+    this.groupOf.delete(m);
+  }
+
+  /** Salta la emboscada de los que estaban al acecho alrededor de `m`. */
+  private wakeLurkers(m: Npc) {
+    for (const o of this.members) {
+      const ob = o.brain as CombatBrain | undefined;
+      if (!ob || (o !== m && (!ob.lurk || o.removed || !o.alive || o.position.distanceTo(m.position) > 30))) continue;
+      ob.lurk = false;
+      ob.calmUntil = 0;
+      ob.aggro = true;
+      ob.bored = false;
+    }
+    this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
   }
 
   private lastRob = -99;

@@ -52,6 +52,11 @@ export interface CombatBrain {
   goalBuf?: THREE.Vector3;
   /** Banda: dónde te vio por última vez (si te pierde de vista, va ahí y no a donde estás de verdad). */
   seenAt?: THREE.Vector3;
+  /**
+   * Al acecho: emboscada montada junto a donde acabas de reaparecer. Se queda esperando sin atacar
+   * aunque te vea; solo se enfada si te acercas mucho (LURK_WAKE) o le atacas.
+   */
+  lurk?: boolean;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
@@ -73,6 +78,8 @@ const ACC_GANG = 0.4;
 const ACC_POLICE = 0.46;
 /** Segundos sin verte (ni que les hagas daño) tras los que la banda deja de buscarte. */
 const LOSE_INTEREST = 25;
+/** Los que están al acecho (ver `lurk`) solo se enfadan si te ven a menos de esto. */
+const LURK_WAKE = 12;
 const tmpSide = new THREE.Vector3();
 
 const tmpV = new THREE.Vector3();
@@ -141,8 +148,8 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
     b.los = len < 70 && !hit;
     // la banda se acuerda de dónde te vio: si te escondes, te busca ahí (no sabe dónde estás de verdad)
     if (b.los && b.side === 'gang') b.hunt = (b.seenAt ??= new THREE.Vector3()).copy(target);
-    // (en tregua, p. ej. recién reaparecido, no se enfadan solo por verte)
-    if (b.los && dist < 45 && game.time.elapsed >= b.calmUntil) {
+    // (en tregua, p. ej. recién reaparecido, no se enfadan solo por verte; al acecho, solo si te acercas mucho)
+    if (b.los && (b.lurk ? dist < LURK_WAKE : dist < 45 && game.time.elapsed >= b.calmUntil)) {
       b.aggro = true;
       b.bored = false;
     }
