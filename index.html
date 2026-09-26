@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#1b1030" />
     <title>CONTRA REEMBOLSO</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E" />
     <meta name="description" content="Repartes paquetes contra reembolso en Puerto Paquete. Cobras, conduces, disparas y huyes." />
@@ -17,8 +18,8 @@
       #carga h1 { font-size: clamp(40px, 8vw, 96px); margin: 0; font-weight: 900; letter-spacing: -2px; color: #ffd23f; text-shadow: 5px 5px 0 #1b1030; transform: rotate(-3deg); }
       #carga .barra { width: min(420px, 70vw); height: 14px; border-radius: 8px; background: rgba(0,0,0,.35); margin-top: 36px; overflow: hidden; border: 3px solid #1b1030; }
       #carga .barra i { display: block; height: 100%; width: 5%; background: #ffd23f; transition: width .3s; }
-      #carga .consejo { margin-top: 22px; font-size: 18px; max-width: 640px; text-align: center; padding: 0 16px; opacity: .92; min-height: 2.6em; }
-      #carga .estado { margin-top: 8px; font-size: 13px; opacity: .6; }
+      #carga .consejo { margin-top: 22px; font-size: 19px; font-weight: 600; line-height: 1.35; max-width: 660px; text-align: center; padding: 0 16px; min-height: 2.7em; text-shadow: 0 2px 0 rgba(27,16,48,.5); }
+      #carga .estado { margin-top: 8px; font-size: 14px; font-weight: 700; opacity: .85; text-shadow: 0 1px 0 rgba(27,16,48,.6); }
     </style>
   </head>
   <body>
@@ -28,7 +29,7 @@
       <h1>CONTRA REEMBOLSO</h1>
       <div class="barra"><i></i></div>
       <div class="consejo"></div>
-      <div class="estado">Cargando…</div>
+      <div class="estado" role="status">Cargando…</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

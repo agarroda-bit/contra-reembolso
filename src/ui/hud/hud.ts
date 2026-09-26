@@ -377,7 +377,11 @@ export class HudImpl implements Hud {
   private updateJobs(hud: HudState) {
     const jobs = hud.jobs;
     const $ = this.$;
-    if (this.changed('jobsN', jobs.length)) $.encargos.classList.toggle('hud-oculto', jobs.length === 0);
+    if (this.changed('jobsN', jobs.length)) {
+      $.encargos.classList.toggle('hud-oculto', jobs.length === 0);
+      // con 4 o más encargos, tarjetas de una línea: si no, en 720 px bajarían hasta el minimapa
+      $.encargos.classList.toggle('hud-tl--muchos', jobs.length >= 4);
+    }
     // quitar los que ya no están (bucle simple: sin crear funciones por frame)
     if (this.jobViews.size) {
       for (const [id, v] of this.jobViews) {

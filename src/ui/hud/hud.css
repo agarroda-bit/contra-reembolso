@@ -323,6 +323,12 @@
   100% { transform: none; }
 }
 .hud-encargo__fila { display: flex; align-items: center; gap: 10px; }
+.hud-tl--muchos { gap: 6px; }
+.hud-tl--muchos .hud-encargos__lista { gap: 5px; }
+.hud-tl--muchos .hud-encargo { padding: 5px 9px 5px 12px; }
+.hud-tl--muchos .hud-encargo__titulo { -webkit-line-clamp: 1; font-size: 14px; }
+.hud-tl--muchos .hud-encargo__tiempo { padding: 4px 7px 3px; font-size: 15px; }
+.hud-tl--muchos .hud-encargo__integridad { margin-top: 4px; }
 .hud-encargo__titulo {
   flex: 1;
   min-width: 0;
@@ -646,7 +652,7 @@
   letter-spacing: 0.1em;
   color: var(--cr-amarillo);
 }
-.hud-vehiculo__info { display: flex; flex-direction: column; gap: 8px; width: 212px; }
+.hud-vehiculo__info { display: flex; flex-direction: column; gap: 8px; width: 244px; }
 .hud-vehiculo__nombre {
   font: 900 14px/1.1 var(--cr-fuente);
   letter-spacing: 0.04em;
