@@ -22,6 +22,17 @@ export const VIP = { x0: 9, x1: 15, z0: -11, z1: 7, h: 0.6 };
 /** Escalones de subida a la zona VIP (hueco del cordón). */
 export const STAIRS = { x0: 7.9, x1: 9, z0: 3.6, z1: 5.8 };
 export const PORTERO_SPOT = new THREE.Vector3(8.15, 0, 6.55);
+/** Cava de champán de la zona VIP (junto a la escalera) y dónde espera la camarera. */
+export const FRIDGE = new THREE.Vector3(9.95, VIP.h, 6.3);
+export const WAITRESS_SPOT = new THREE.Vector3(10.85, VIP.h, 5.55);
+/** Camino de la camarera hasta tu mesa (el último punto es donde deja la botella). */
+export const WAITRESS_PATH = [
+  new THREE.Vector3(10.85, VIP.h, 5.55),
+  new THREE.Vector3(10.95, VIP.h, 3.65),
+  new THREE.Vector3(11.5, VIP.h, 2.4),
+];
+/** Hacia dónde mira la camarera al dejar la botella (hacia la mesa). */
+export const WAITRESS_SERVE_HEADING = Math.atan2(12.7 - 11.5, 1.4 - 2.4);
 
 /** Reservados VIP: sofás en U contra la pared este. El último (el más cercano a la escalera) es el tuyo. */
 export const BOOTHS = [-8.2, -3.4, 1.4];

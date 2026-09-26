@@ -480,9 +480,11 @@ export class ClubFx {
     }
   }
 
-  /** Bengala en la punta de una botella (local) durante unos segundos. */
-  sparkler(pos: THREE.Vector3, seconds = 6) {
-    this.emitters.push({ p: pos.clone(), t: seconds });
+  /** Bengala en la punta de una botella (local) durante unos segundos. Devuelve el emisor (se puede mover). */
+  sparkler(pos: THREE.Vector3, seconds = 6): { p: THREE.Vector3; t: number } {
+    const e = { p: pos.clone(), t: seconds };
+    this.emitters.push(e);
+    return e;
   }
 
   /** ¡Fshhhh! Chorros de CO2 a los lados del DJ. */

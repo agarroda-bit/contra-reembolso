@@ -7,7 +7,7 @@ import { GeoBuilder, vertexColorMaterial, shade } from '../../../core/geo';
 import type { InteriorContext } from '../index';
 import {
   ROOM, FLOOR, DJ, BAR, STOOLS, VIP, STAIRS, BOOTHS, MY_BOOTH, BOOTH, PODIUMS, PODIUM_R, PODIUM_H,
-  HIGH_TABLES, BALL,
+  HIGH_TABLES, BALL, FRIDGE,
 } from './layout';
 import { neonCanvas, neonText, neonPath, SCRIPT_FONT, NEON_FONT } from './textures';
 
@@ -363,6 +363,20 @@ export function buildRoom(ctx: InteriorContext): RoomParts {
       }
     }
   });
+  // cava de champán con puerta de cristal iluminada (de aquí sale la camarera con las botellas)
+  {
+    const f = FRIDGE;
+    lit.box(0.85, 1.7, 0.62, '#1c1a24', f.x, f.y + 0.85, f.z);
+    glow.box(0.7, 1.45, 0.02, '#9fe8ff', f.x, f.y + 0.88, f.z - 0.32);
+    for (let s = 0; s < 3; s++) {
+      glow.box(0.66, 0.02, 0.02, '#e8fbff', f.x, f.y + 0.4 + s * 0.45, f.z - 0.335);
+      for (let i = 0; i < 4; i++) glow.cyl(0.035, 0.035, 0.24, 6, '#1f6b3c', f.x - 0.24 + i * 0.16, f.y + 0.54 + s * 0.45, f.z - 0.345);
+    }
+    shiny.box(0.04, 0.5, 0.05, C.chrome, f.x + 0.3, f.y + 0.95, f.z - 0.36);
+    glow.box(0.85, 0.04, 0.04, C.gold, f.x, f.y + 1.72, f.z - 0.3);
+    ctx.addBox(f.x, f.y + 0.85, f.z, 0.43, 0.85, 0.31);
+  }
+
   // plantas entre reservados
   for (const [x, z] of [[14.35, (BOOTHS[0] + BOOTHS[1]) / 2], [14.35, (BOOTHS[1] + BOOTHS[2]) / 2], [14.3, 6.2], [9.9, -10.4]]) {
     palm(lit, shiny, x, VIP.h, z);

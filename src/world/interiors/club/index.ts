@@ -139,7 +139,13 @@ export class ClubInterior implements InteriorInstance {
   private lampGroup: THREE.Object3D | null = null;
   private fade: HTMLDivElement;
   private playerLocal = new THREE.Vector3();
+  private playerLocal2 = new THREE.Vector3();
   private seatedAt: THREE.Vector3 | null = null;
+  /** Botellas pagadas que la camarera aún no ha dejado en la mesa. */
+  private pending = 0;
+  /** Bengala de la botella que lleva la camarera (sigue a su mano). */
+  private carry: { p: THREE.Vector3; t: number } | null = null;
+  private tipLocal = new THREE.Vector3(0, 0.42, 0);
 
   constructor(ctx: InteriorContext, readonly state: ClubState) {
     this.game = ctx.game;
@@ -189,6 +195,9 @@ export class ClubInterior implements InteriorInstance {
 
   onExit() {
     this.inside = false;
+    this.crowd.finishDeliveries();
+    if (this.carry) this.carry.t = 0;
+    this.carry = null;
     this.music.stop();
     this.fx.setActive(false);
     this.root.visible = false;
@@ -220,7 +229,7 @@ export class ClubInterior implements InteriorInstance {
     this.setRope(has || (inVip && this.ropeOpen), force);
     this.room.boothSign.redraw((g, w, h) => drawBoothSign(g, w, h, has));
     this.room.boothSignMat.opacity = has ? 1 : 0.55;
-    this.showBottles(st.bottlesTonight);
+    this.showBottles(st.bottlesTonight - this.pending);
   }
 
   private setRope(open: boolean, instant = false) {
@@ -229,7 +238,7 @@ export class ClubInterior implements InteriorInstance {
     if (instant) this.ropeAnim = open ? 1 : 0;
   }
 
-  private showBottles(n: number) {
+  private showBottles(n: number): number {
     const b = this.room.bottles;
     const slots = this.room.bottleSlots;
     const m = new THREE.Matrix4();
@@ -239,8 +248,9 @@ export class ClubInterior implements InteriorInstance {
       m.compose(slots[i], q, new THREE.Vector3(1, 1, 1));
       b.setMatrixAt(i, m);
     }
-    b.count = Math.min(n, slots.length);
+    b.count = Math.max(0, Math.min(n, slots.length));
     b.instanceMatrix.needsUpdate = true;
+    return b.count;
   }
 
   private localPlayer(): THREE.Vector3 {
@@ -420,24 +430,21 @@ export class ClubInterior implements InteriorInstance {
       this.djSay(pick(DJ_TABLE));
       g.events.emit('toast', { text: `${pick(TABLE_TOASTS)} +${CLUB_FAME.table} FAMA`, color: '#ffd23f', time: 4 });
       // plano de cine: la cámara se acerca al reservado
-      this.cinematic(new THREE.Vector3(5.5, 3.8, 5.4), new THREE.Vector3(9.9, 2.5, 3.6), table.clone().setY(table.y + 0.9), 3.4);
+      this.cinematic(new THREE.Vector3(4.8, 4.2, 1.6), new THREE.Vector3(10.2, 2.7, -0.4), table.clone().setY(table.y + 0.9), 3.4);
     });
   }
 
   /** Botella: aparece en tu mesa con bengala, confeti, bocina y aplausos. */
   celebrateBottle() {
     const g = this.game;
-    const st = this.state;
-    this.showBottles(st.bottlesTonight);
-    const i = Math.min(st.bottlesTonight, this.room.bottleSlots.length) - 1;
-    const slot = this.room.bottleSlots[Math.max(0, i)];
-    const tip = slot.clone().setY(slot.y + 0.4);
-    this.fx.sparkler(tip, 7);
-    this.fx.confettiBurst(tip, 50, 4);
+    // la camarera sale de la cava con la botella en alto y la bengala encendida
+    const first = !this.crowd.delivering;
+    this.pending++;
+    this.crowd.deliver(() => this.bottleArrives());
+    const tip = this.myTable.clone().setY(this.myTable.y + 0.9);
     this.fx.confettiRain(4);
     this.startParty(15, 4);
     this.crowd.cheer(this.myTable, 12, 5);
-    g.mod.audio?.play('pop');
     g.mod.audio?.play('cheer', { volume: 0.8 });
     g.mod.particles?.emit?.('confetti', this.toWorld(tip), { count: 24 });
     this.showLed(LED_BOTTLE, 20);
@@ -451,8 +458,27 @@ export class ClubInterior implements InteriorInstance {
       this.myPose = 'dance';
       this.setPlayerDance(Math.floor(Math.random() * 6));
     }
-    const t = this.myTable;
-    this.cinematic(new THREE.Vector3(10.4, 2.3, 3.9), new THREE.Vector3(10.9, 2.0, 3.0), tip.clone().setY(tip.y - 0.2), 2.6);
+    if (first) this.cinematic(new THREE.Vector3(9.9, 2.7, -1.0), new THREE.Vector3(10.4, 2.3, -0.3), new THREE.Vector3(11.6, 1.3, 2.4), 3.4);
+  }
+
+  /** La camarera deja la botella en tu mesa: ¡pop!, confeti y la bengala sigue ardiendo en la mesa. */
+  private bottleArrives() {
+    const g = this.game;
+    this.pending = Math.max(0, this.pending - 1);
+    const n = this.showBottles(this.state.bottlesTonight - this.pending);
+    const slot = this.room.bottleSlots[Math.max(0, n - 1)];
+    const tip = slot.clone().setY(slot.y + 0.4);
+    if (this.carry) {
+      this.carry.p.copy(tip);
+      this.carry.t = 4.5;
+      this.carry = null;
+    } else this.fx.sparkler(tip, 4.5);
+    this.fx.confettiBurst(tip, 45, 4);
+    if (this.inside) {
+      g.mod.audio?.play('pop');
+      g.mod.particles?.emit?.('confetti', this.toWorld(tip), { count: 20 });
+      this.crowd.cheer(this.myTable, 8, 2.5);
+    }
   }
 
   /** Te sientas en tu reservado (con fundido si vienes de lejos). */
@@ -470,8 +496,8 @@ export class ClubInterior implements InteriorInstance {
       // cámara de frente y un poco de lado para verte en tu trono de terciopelo
       const cam = this.game.mod.cameraRig;
       if (cam) {
-        cam.yaw = -1.22;
-        cam.pitch = -0.32;
+        cam.yaw = -1.92;
+        cam.pitch = -0.3;
       }
     };
     if (instant) doIt();
@@ -613,6 +639,15 @@ export class ClubInterior implements InteriorInstance {
         this.cooldowns.barman = 24;
         bub.say(this.crowd.worldPos(this.crowd.barman), pick(BARMAN_LINES), 2.8);
       }
+    }
+
+    // bengala de la botella que va en la mano de la camarera
+    const hb = this.crowd.handBottle;
+    if (hb.visible) {
+      hb.updateWorldMatrix(true, false);
+      const tip = hb.localToWorld(this.playerLocal2.copy(this.tipLocal)).sub(this.origin);
+      if (!this.carry) this.carry = this.fx.sparkler(tip, 30);
+      this.carry.p.copy(tip);
     }
 
     // pantalla LED: vuelve a su texto
