@@ -113,9 +113,13 @@ export class Particles implements System {
       chip: makePool(s, chipGeo, new THREE.MeshLambertMaterial({ flatShading: true }), 500, true),
       flat: makePool(s, flatGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), 700),
     };
+    // Las luces de destello están SIEMPRE en la escena (a intensidad 0 cuando no se usan): si se
+    // encendieran y apagaran con visible, cambiaría el número de luces y three tendría que
+    // recompilar todos los shaders en el primer tiro o explosión (medido: medio segundo congelado).
     for (let i = 0; i < 2; i++) {
       const light = new THREE.PointLight('#ffb347', 0, 18, 1.6);
-      light.visible = false;
+      light.name = 'destello';
+      light.position.set(0, -500, 0);
       s.add(light);
       this.flashes.push({ light, t: 0, dur: 0, peak: 0 });
     }
@@ -170,7 +174,6 @@ export class Particles implements System {
     f.t = 0;
     f.dur = dur;
     f.peak = intensity;
-    f.light.visible = true;
   }
 
   /** Explosión visual completa (sin daño: el daño lo pone quien la provoca). */
@@ -198,8 +201,7 @@ export class Particles implements System {
       if (f.t < f.dur) {
         f.t += dt;
         const k = 1 - f.t / f.dur;
-        f.light.intensity = f.peak * k * k;
-        if (f.t >= f.dur) f.light.visible = false;
+        f.light.intensity = f.t >= f.dur ? 0 : f.peak * k * k;
       }
     }
     for (const key in this.pools) {

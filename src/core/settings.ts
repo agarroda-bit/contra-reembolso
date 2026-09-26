@@ -28,12 +28,13 @@ export interface QualityPreset {
   drawDistance: number; // metros hasta la niebla total
   density: number; // multiplicador de tráfico y peatones
   maxLights: number; // luces reales de farola cerca del jugador
+  charShadowDistance: number; // metros: más lejos, los personajes no proyectan sombra
 }
 
 export const QUALITY: Record<Quality, QualityPreset> = {
-  baja: { pixelRatio: 0.75, shadows: false, shadowMapSize: 512, drawDistance: 170, density: 0.5, maxLights: 0 },
-  media: { pixelRatio: 1, shadows: true, shadowMapSize: 1024, drawDistance: 240, density: 0.8, maxLights: 2 },
-  alta: { pixelRatio: 1.5, shadows: true, shadowMapSize: 2048, drawDistance: 330, density: 1, maxLights: 4 },
+  baja: { pixelRatio: 0.75, shadows: false, shadowMapSize: 512, drawDistance: 170, density: 0.5, maxLights: 0, charShadowDistance: 0 },
+  media: { pixelRatio: 1, shadows: true, shadowMapSize: 1024, drawDistance: 240, density: 0.8, maxLights: 2, charShadowDistance: 35 },
+  alta: { pixelRatio: 1.5, shadows: true, shadowMapSize: 2048, drawDistance: 330, density: 1, maxLights: 4, charShadowDistance: 50 },
 };
 
 const KEY = 'contra-reembolso:opciones';

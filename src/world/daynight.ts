@@ -5,6 +5,7 @@ import type { Game } from '../core/game';
 import { SkyDome } from './sky/skydome';
 import { Clouds } from './sky/clouds';
 import { sampleSky, SKY_STRIDE, OFF } from './sky/palette';
+import { characterLod } from '../actors/character/rig';
 
 export interface DayNight {
   /** Cambia la hora del mundo (0..24) y lo aplica al momento. */
@@ -167,6 +168,7 @@ export function installDayNight(game: Game): DayNight {
     const fog = scene.fog as THREE.Fog | null;
     clouds.setRange(fog?.far ?? game.camera.far * 0.75, game.camera.far);
     if (slots.length !== lampCount(q.maxLights)) buildLampPool(q.maxLights);
+    characterLod.shadowDistance = q.shadows ? q.charShadowDistance : Infinity;
   }
   applyQuality();
   const offSettings = game.events.on('settings', () => applyQuality());
@@ -314,6 +316,7 @@ export function installDayNight(game: Game): DayNight {
 
     // ── Sombras que siguen al jugador, ajustadas a la rejilla de texels ──
     const cam = game.camera;
+    characterLod.eye.copy(cam.position);
     cam.getWorldDirection(tmp);
     tmp.y = 0;
     if (tmp.lengthSq() < 1e-6) tmp.set(0, 0, -1);

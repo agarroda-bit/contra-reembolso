@@ -30,6 +30,20 @@ const _X = new THREE.Vector3(1, 0, 0);
 
 let seedCounter = 7;
 
+/**
+ * Detalle según la distancia, compartido por todos los personajes (lo ajusta el ciclo día/noche
+ * cada frame con la cámara y la calidad).
+ */
+export const characterLod = {
+  /** Desde dónde se mira (la cámara). */
+  eye: new THREE.Vector3(),
+  /**
+   * Más lejos de esto (metros) el personaje no proyecta sombra: a esa distancia la sombra son
+   * cuatro píxeles y cada sombra es otro dibujo entero del muñeco. Infinity = siempre.
+   */
+  shadowDistance: Infinity,
+};
+
 export class Character implements CharacterRig {
   readonly root = new THREE.Group();
   /** Escala según la altura del look. */
@@ -117,6 +131,12 @@ export class Character implements CharacterRig {
   update(dt: number, p: CharacterAnimParams) {
     this.anim.update(dt, p);
     this.apply();
+    // sombra solo de cerca (posición del frame anterior: de sobra para esto)
+    const e = this.root.matrixWorld.elements;
+    const eye = characterLod.eye;
+    const dx = e[12] - eye.x, dy = e[13] - eye.y, dz = e[14] - eye.z;
+    const sd = characterLod.shadowDistance;
+    this.mesh.castShadow = dx * dx + dy * dy + dz * dz < sd * sd;
   }
 
   /** Copia la pose calculada a los huesos. */
