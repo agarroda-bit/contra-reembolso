@@ -8,6 +8,7 @@ import type { VehicleKind } from './types';
 import type { Player } from '../actors/player';
 import type { CameraRig } from '../actors/cameraRig';
 import { SOLID } from '../core/physics';
+import { CUSTOM_ENGINES, customEngine, honk, muteEngines, sweepEngines } from './sounds';
 
 /** Lo que tiene que cumplir un conductor NPC para que se le pueda sacar del coche. */
 export interface NpcDriver {
@@ -164,7 +165,8 @@ export class VehicleManager implements System {
       if (g.input.enabled && g.input.pressed('horn') && this.hornCooldown <= 0) {
         this.hornCooldown = 0.3;
         v.hornTimer = 0.5;
-        g.events.emit('vehicle:horn' as any, { vehicle: v } as any);
+        honk(g, v);
+        g.events.emit('vehicle:honk' as any, { vehicle: v, player: true } as any);
       }
       v.hornTimer = Math.max(0, v.hornTimer - dt);
       // cámara de persecución
@@ -208,6 +210,10 @@ export class VehicleManager implements System {
 
   private readonly hudVehicle = { name: '', speedKmh: 0, health: 0, packages: 0, capacity: 0 };
 
+  pausedUpdate() {
+    muteEngines(this.game);
+  }
+
   /** Pista "F — Subir a…" para la interfaz. */
   hintText: string | null = null;
 
@@ -217,6 +223,7 @@ export class VehicleManager implements System {
   private updateAudio() {
     const audio = this.game.mod.audio;
     if (!audio?.ctx) return;
+    sweepEngines(this.game);
     const cam = this.game.camera.position;
     const near = this.audioNear;
     const dd = this.audioD;
@@ -254,7 +261,9 @@ export class VehicleManager implements System {
       const grounded = wc[0] || wc[1] || wc[2] || wc[3];
       const rpm = Math.min(1, 0.12 + within * 0.7 + thr * 0.12 + (grounded ? 0 : thr * 0.3));
       const pos = v.getPosition(tmpV);
-      audio.engine(v.id, s.kind, pos, rpm, thr, v === this.current ? 1.2 : 0.8);
+      const vol = v === this.current ? 1.2 : 0.8;
+      // los vehículos locos nuevos llevan su propio motor (cortacésped, diésel, eléctrico...)
+      if (!CUSTOM_ENGINES.has(s.kind) || !customEngine(this.game, v, rpm, thr, vol, (v as any).engineExtra ?? 0)) audio.engine(v.id, s.kind, pos, rpm, thr, vol);
       if (v.slip > 4.5 && sp > 4) audio.loop(v.skidKey, 'skid', pos, Math.min(0.5, (v.slip - 4.5) / 10), Math.min(1, sp / 30));
       if (v.sirenOn) audio.loop(v.sirenKey, 'siren', pos, 0.8);
     }
