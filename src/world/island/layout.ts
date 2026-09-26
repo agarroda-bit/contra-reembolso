@@ -59,6 +59,8 @@ export interface FillParams {
   districts?: DistrictId[];
   /** Marca el solar entero como YARD y deja que el constructor marque la casa. */
   yard?: boolean;
+  /** Variación de fachada permitida dentro de un tramo (curvas). */
+  tol?: number;
 }
 
 const FREEISH = [OCC.FREE] as const;
@@ -116,7 +118,7 @@ export class Layout {
         if (this.occ.get(bx, bz) !== OCC.FREE) ok = false;
       }
       if (ok && p.districts && !p.districts.includes(districtRaw(q.x + nx * (pr.d + 5), q.z + nz * (pr.d + 5)))) ok = false;
-      if (ok && cur && Math.abs(pr.d - cur[2]) < 0.8) {
+      if (ok && cur && Math.abs(pr.d - cur[2]) < (p.tol ?? 0.8)) {
         cur[1] = s;
         cur[2] = Math.max(cur[2], pr.d);
       } else {
@@ -169,10 +171,12 @@ export class Layout {
     const nx = -tz * side, nz = tx * side;
     // fachada = la acera más ancha a lo largo del tramo
     let front = 0;
+    const inset = Math.min(1.0, (sb - sa) * 0.1);
     for (let k = 0; k <= 4; k++) {
-      const q = pathAt(path, Math.max(0, Math.min(L - 0.01, sa + ((sb - sa) * k) / 4)))!;
+      const q = pathAt(path, Math.max(0, Math.min(L - 0.01, sa + inset + ((sb - sa - 2 * inset) * k) / 4)))!;
       const qn = { x: -q.dz * side, z: q.dx * side };
       const pr = this.probe(q.x, q.z, qn.x, qn.z, def.width);
+      if (pr.d >= def.width / 2 + 11.9) continue; // no hay fachada (cruce)
       // distancia de la línea de fachada al punto medio de la cuerda
       const off = pr.d + ((q.x - A.x) * nx + (q.z - A.z) * nz);
       front = Math.max(front, off);
@@ -255,7 +259,27 @@ export class Layout {
     }
     if (best < 0) return null;
     const params: FillParams = { kind: p.kind ?? 'special', wMin: W, wMax: W, dMin: D, dMax: D, setback: p.setback ?? 0, push: p.push, yard: p.yard };
-    return this.placeSpan(best, bestSide, bestS - W / 2, bestS + W / 2, params, special, D);
+    const lot = this.placeSpan(best, bestSide, bestS - W / 2, bestS + W / 2, params, special, D);
+    if (!lot && (globalThis as any).__debugLots) {
+      const path = this.net.paths[best];
+      const q = pathAt(path, bestS)!;
+      const nx = -q.dz * bestSide, nz = q.dx * bestSide;
+      const pr = this.probe(q.x, q.z, nx, nz, this.net.defs[best].width);
+      const cx = q.x + nx * (pr.d + D / 2), cz = q.z + nz * (pr.d + D / 2);
+      const rot = Math.atan2(-nx, -nz);
+      const bad: Record<number, number> = {};
+      let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9;
+      this.occ.forRect(cx, cz, W / 2, D / 2, rot, (k) => {
+        const v = this.occ.data[k];
+        if (v !== OCC.FREE) {
+          bad[v] = (bad[v] ?? 0) + 1;
+          const x = (k % this.occ.n) - 320, z = Math.floor(k / this.occ.n) - 320;
+          bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); bz0 = Math.min(bz0, z); bz1 = Math.max(bz1, z);
+        }
+      });
+      console.warn('[isla] bloqueo', special, this.net.defs[best].name, 'lado', bestSide, 'fachada', pr.d.toFixed(1), JSON.stringify(bad), 'x', bx0, bx1, 'z', bz0, bz1);
+    }
+    return lot;
   }
 
   /** Marca a mano una zona reservada (plazas, patios, rampas...). */

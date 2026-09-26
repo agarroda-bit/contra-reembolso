@@ -28,6 +28,12 @@ import { PlanCtx, Special, Out } from './special';
 import { planPort } from './port';
 import { planCentro } from './centro';
 import { streetFurniture } from './street';
+import { planPoligono } from './poligono';
+import { planColina } from './colina';
+import { planViejo } from './viejo';
+import { deliverySpots, bayParking, shopPois } from './data';
+import { drawMap, MAP_PX } from './map';
+import { makeGlowTexture } from './materials';
 
 export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const t0 = performance.now();
@@ -53,7 +59,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const layout = new Layout(net, occ, rng.fork('lotes'), roadH);
   const extraPads: Pad[] = [];
   const pc: PlanCtx = { layout, occ, net, rng: rng.fork('especiales'), shape, pads: extraPads, roadH };
-  const specials: Special[] = [...planPort(pc), ...planCentro(pc)];
+  const specials: Special[] = [...planPort(pc), ...planCentro(pc), ...planPoligono(pc), ...planColina(pc), ...planViejo(pc)];
   fillGeneric(layout, net, rng);
 
   const pads: Pad[] = layout.lots.map((l) => ({ x: l.x, z: l.z, hw: l.hw + 0.5, hd: l.hd + 0.5, rot: l.rot, h: l.h, blend: l.kind === 'chalet' ? 10 : 3 }));
@@ -64,7 +70,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const t1 = performance.now();
 
   // ── terreno ──
-  const ground = new ChunkSet(HALF, 160);
+  const ground = new ChunkSet(HALF, 128);
   const C = {
     sand: lin('#ecd9a4').clone(),
     wet: lin('#d8c28c').clone(),
@@ -82,7 +88,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   terrain.buildMesh(ground, (x, z, h, slope) => {
     if (h < 0.6) return tmp.copy(C.wet);
     if (h < 1.25) return tmp.copy(C.sand);
-    if (slope > 1.25) return tmp.copy(C.rock);
+    if (slope > 1.6) return tmp.copy(C.rock);
     const v = occ.get(x, z);
     const d = districtRaw(x, z);
     let c: THREE.Color;
@@ -91,10 +97,10 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) c = d === 'colina' ? C.grassColina : d === 'poligono' ? C.poligono : C.grass;
     else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
     tmp.copy(c);
-    if (slope > 0.55) tmp.lerp(C.dirt, smoothstep(0.55, 1.25, slope));
+    if (slope > 0.8) tmp.lerp(C.dirt, smoothstep(0.8, 1.6, slope) * 0.8);
     if (shape.coastDist(x, z) < 26) tmp.lerp(C.sand, smoothstep(2.4, 1.25, h));
     return tmp;
-  });
+  }, (x, z) => occ.get(x, z) === OCC.BUILDING);
   const groundMat = makeGroundMaterial();
   for (const m of ground.toMeshes(groundMat, 'terreno', false, true)) game.scene.add(m);
   const col = terrain.colliderData();
@@ -110,8 +116,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const ctx: Ctx = {
     game,
     rng: rng.fork('edificios'),
-    solid: new ChunkSet(HALF, 160),
-    win: new ChunkSet(HALF, 160),
+    solid: new ChunkSet(HALF, 128),
+    win: new ChunkSet(HALF, 128),
     signs,
     props,
     pave,
@@ -161,6 +167,11 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   // ── mobiliario urbano y vegetación ──
   streetFurniture(ctx, out);
 
+  // ── datos: portales de entrega, aparcamientos, tiendas ──
+  deliverySpots(ctx, layout.lots, out);
+  bayParking(ctx, out);
+  shopPois(ctx, layout.lots, out);
+
   // ── mallas ──
   for (const m of pave.meshes()) game.scene.add(m);
   for (const m of ctx.solid.toMeshes(solidMat, 'edificios', true, true)) game.scene.add(m);
@@ -169,8 +180,44 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   props.build(game, solidMat);
   const sea = buildSea(game, u, heightAt, solidMat);
 
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
+  // ── charcos de luz falsos bajo las farolas (se ven de noche) ──
+  const bulbs = props.bulbs();
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: makeGlowTexture(),
+    color: '#ffc46b',
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -8,
+  });
+  const glowGeo = new THREE.PlaneGeometry(1, 1);
+  glowGeo.rotateX(-Math.PI / 2);
+  const glow = new THREE.InstancedMesh(glowGeo, glowMat, bulbs.length);
+  glow.name = 'charcos-de-luz';
+  {
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), n = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    bulbs.forEach((bb, i) => {
+      const gy = heightAt(bb.x, bb.z);
+      const r = Math.min(22, Math.max(5, (bb.y - gy) * 1.7));
+      terrain.normalAt(bb.x, bb.z, n);
+      q.setFromUnitVectors(up, n);
+      glow.setMatrixAt(i, m.compose(p.set(bb.x, gy + 0.07, bb.z), q, sc.set(r, 1, r)));
+    });
+  }
+  glow.visible = false;
+  glow.frustumCulled = false;
+  game.scene.add(glow);
+
+  // ── mapa ──
+  const trees: { x: number; z: number; type: string }[] = [];
+  for (const [type, arr] of props.list) {
+    if (!['palm', 'pine', 'olive', 'cypress', 'orange', 'bush'].includes(type)) continue;
+    for (const it of arr) trees.push({ x: it.x, z: it.z, type });
+  }
+  const canvas = drawMap(ctx, DISTRICTS, trees);
 
   // que las consultas de física funcionen ya (Rapier actualiza su BVH al dar un paso)
   game.physics.world.step();
@@ -195,17 +242,19 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     deliverySpots: out.delivery,
     parkingSpots: out.parking,
     collectibles: ctx.collectibles,
-    lampPositions: props.bulbs(),
+    lampPositions: bulbs,
     playerSpawn: spawn,
     ramps: ctx.ramps,
     breakableSpots: ctx.breakables,
     specialVehicleSpots: ctx.specials,
     mapCanvas: canvas,
-    mapPixelSize: 10,
+    mapPixelSize: MAP_PX,
     setNight(n: number) {
       u.uNight.value = n;
       if (Math.abs(n - night) < 0.002) return;
       night = n;
+      glow.visible = n > 0.04;
+      glowMat.opacity = Math.min(1, n * 1.2) * 0.6;
       for (const o of out.nightMeshes) {
         o.visible = n > 0.25;
         const m = (o as any).nightMat as THREE.Material & { opacity: number } | undefined;

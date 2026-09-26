@@ -3,11 +3,12 @@ import type { District, DistrictId } from '../../core/contracts';
 import { RoadNet, pathLength } from './network';
 
 export const DISTRICTS: District[] = [
-  { id: 'puerto', name: 'El Puerto', color: '#2ec4b6', center: { x: 0, z: 222 } },
-  { id: 'centro', name: 'El Centro', color: '#ff9f1c', center: { x: 0, z: 32 } },
-  { id: 'colina', name: 'La Colina', color: '#7bc043', center: { x: 0, z: -190 } },
-  { id: 'poligono', name: 'El Polígono', color: '#6c8ebf', center: { x: 190, z: 30 } },
-  { id: 'viejo', name: 'El Barrio Viejo', color: '#ff6b9a', center: { x: -175, z: 30 } },
+  // centros en sitios transitables (se usan para teletransportarse en modo depuración)
+  { id: 'puerto', name: 'El Puerto', color: '#2ec4b6', center: { x: -20, z: 228 } },
+  { id: 'centro', name: 'El Centro', color: '#ff9f1c', center: { x: 0, z: 46 } },
+  { id: 'colina', name: 'La Colina', color: '#7bc043', center: { x: -40, z: -189 } },
+  { id: 'poligono', name: 'El Polígono', color: '#6c8ebf', center: { x: 208, z: -8 } },
+  { id: 'viejo', name: 'El Barrio Viejo', color: '#ff6b9a', center: { x: -172, z: 47 } },
 ];
 
 /** Barrio por posición (sin mirar si es mar). */

@@ -9,6 +9,7 @@ import { buildIsland } from '../world/island';
 
 async function boot() {
   await RAPIER.init();
+  (globalThis as any).__debugLots = true;
   const params = new URLSearchParams(location.search);
   const game = new Game(document.getElementById('app')!, document.getElementById('ui')!);
   const t0 = performance.now();
@@ -148,7 +149,39 @@ async function boot() {
   log(`escena: ${meshes} mallas, ${(triTot / 1000).toFixed(0)}k triángulos`);
   log(Object.entries(triBy).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}k`).join(' · '));
 
+  // perfil de coste de dibujo por grupo (fuerza a la GPU a terminar con readPixels)
+  (window as any).__prof = () => {
+    const r = game.renderer, gl = r.getContext();
+    const px = new Uint8Array(4);
+    const time = () => {
+      const t0 = performance.now();
+      r.render(game.scene, game.camera);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return Math.round(performance.now() - t0);
+    };
+    game.stop();
+    time();
+    const res: Record<string, number> = { total: time() };
+    const groups: Record<string, THREE.Object3D[]> = {};
+    game.scene.children.forEach((o) => {
+      const k = (o.name || o.type).replace(/-\d+$/, '');
+      (groups[k] ??= []).push(o);
+    });
+    for (const [k, arr] of Object.entries(groups)) {
+      const vis = arr.map((o) => o.visible);
+      arr.forEach((o) => (o.visible = false));
+      res[k] = res.total - time();
+      arr.forEach((o, i) => (o.visible = vis[i]));
+    }
+    r.shadowMap.enabled = false;
+    res.sinSombras = time();
+    r.shadowMap.enabled = true;
+    game.start();
+    return res;
+  };
+
   const info = document.getElementById('info')!;
+  if (params.get('limpio') === '1') info.style.display = 'none';
   game.addSystem({
     name: 'info',
     postUpdate: () => {

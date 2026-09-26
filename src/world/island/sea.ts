@@ -108,7 +108,7 @@ export function buildSea(game: Game, u: WorldUniforms, heightAt: (x: number, z: 
 function seaGrid(): THREE.BufferGeometry {
   const outer = [-5000, -3000, -1800, -1200, -800, -560];
   const coords: number[] = [...outer];
-  for (let v = -400; v <= 400; v += 8) coords.push(v);
+  for (let v = -400; v <= 400; v += 12.5) coords.push(v);
   for (let i = outer.length - 1; i >= 0; i--) coords.push(-outer[i]);
   const n = coords.length;
   const pos = new Float32Array(n * n * 3);

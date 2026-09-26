@@ -29,11 +29,18 @@ export class RoadMeshes {
     if (s1 - s0 < 0.05) return;
     const A = this.net.nodes[e.a];
     const rx = -e.dz, rz = e.dx;
-    const n = Math.max(1, Math.ceil((s1 - s0) / step));
     const c = lin(color).clone();
     const across = Math.abs(lat1 - lat0) > 7 ? 2 : 1;
-    for (let i = 0; i < n; i++) {
-      const sa = s0 + ((s1 - s0) * i) / n, sb = s0 + ((s1 - s0) * (i + 1)) / n;
+    // Bajo la calle el terreno es un plano (la altura de la calle es lineal a lo largo del tramo), así que
+    // en el centro del tramo bastan trozos largos; cerca de los cruces, trozos cortos.
+    const cuts: number[] = [s0];
+    for (let s = s0; s < s1 - 0.01; ) {
+      const nearEnd = s < 11 || s > e.len - 11 || e.district === 'colina';
+      s = Math.min(s1, s + (nearEnd ? step : Math.max(step, 12)));
+      cuts.push(s);
+    }
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const sa = cuts[i], sb = cuts[i + 1];
       for (let k = 0; k < across; k++) {
         const la = lat0 + ((lat1 - lat0) * k) / across, lb = lat0 + ((lat1 - lat0) * (k + 1)) / across;
         const p = (s: number, l: number) => {

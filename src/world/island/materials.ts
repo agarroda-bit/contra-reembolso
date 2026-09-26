@@ -142,3 +142,39 @@ export function makeGlowTexture(): THREE.CanvasTexture {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
+
+/** Material aditivo para haces de luz: se desvanece hacia la punta (uv.y) y por los bordes. */
+export function makeBeamMaterial(color: string): THREE.ShaderMaterial & { opacity: number } {
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uOpacity: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv;
+      varying float vFres;
+      void main() {
+        vUv = uv;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec3 n = normalize(mat3(modelMatrix) * normal);
+        vec3 v = normalize(cameraPosition - wp.xyz);
+        vFres = abs(dot(n, v));
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform vec3 uColor;
+      uniform float uOpacity;
+      varying vec2 vUv;
+      varying float vFres;
+      void main() {
+        float a = uOpacity * pow(vUv.y, 1.6) * smoothstep(0.0, 0.6, vFres);
+        gl_FragColor = vec4(uColor * a, a);
+      }`,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+  }) as THREE.ShaderMaterial & { opacity: number };
+  Object.defineProperty(m, 'opacity', {
+    get: () => m.uniforms.uOpacity.value,
+    set: (v: number) => (m.uniforms.uOpacity.value = v),
+  });
+  return m;
+}

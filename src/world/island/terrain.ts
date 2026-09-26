@@ -119,7 +119,7 @@ export class Terrain {
   }
 
   /** Malla visual troceada (sin los triángulos que quedan bajo el agua). */
-  buildMesh(chunks: ChunkSet, colorAt: (x: number, z: number, h: number, slope: number) => THREE.Color) {
+  buildMesh(chunks: ChunkSet, colorAt: (x: number, z: number, h: number, slope: number) => THREE.Color, hidden?: (x: number, z: number) => boolean) {
     const r = this.r, h = this.h;
     const tmp = new THREE.Color();
     for (let j = 0; j < this.n; j++) {
@@ -128,8 +128,10 @@ export class Terrain {
         const x0 = -HALF + i * CELL, z0 = -HALF + j * CELL, x1 = x0 + CELL, z1 = z0 + CELL;
         const h00 = h[k], h10 = h[k + 1], h01 = h[k + r], h11 = h[k + r + 1];
         const b = chunks.at(x0 + CELL / 2, z0 + CELL / 2);
-        // triángulo 1: v00, v01, v10
-        if (h00 > -0.7 || h01 > -0.7 || h10 > -0.7) {
+        // triángulo 1: v00, v01, v10 (se omite si queda entero bajo un edificio)
+        const hid00 = hidden ? hidden(x0 + 0.2, z0 + 0.2) : false, hid11 = hidden ? hidden(x1 - 0.2, z1 - 0.2) : false;
+        const hid01 = hidden ? hidden(x0 + 0.2, z1 - 0.2) : false, hid10 = hidden ? hidden(x1 - 0.2, z0 + 0.2) : false;
+        if ((h00 > -0.7 || h01 > -0.7 || h10 > -0.7) && !(hid00 && hid01 && hid10)) {
           const cx = x0 + CELL / 3, cz = z0 + CELL / 3;
           const hm = (h00 + h01 + h10) / 3;
           const sl = Math.hypot(h10 - h00, h01 - h00) / CELL;
@@ -137,7 +139,7 @@ export class Terrain {
           b.triW(x0, h00, z0, x0, h01, z1, x1, h10, z0, tmp);
         }
         // triángulo 2: v10, v01, v11
-        if (h10 > -0.7 || h01 > -0.7 || h11 > -0.7) {
+        if ((h10 > -0.7 || h01 > -0.7 || h11 > -0.7) && !(hid10 && hid01 && hid11)) {
           const cx = x0 + (2 * CELL) / 3, cz = z0 + (2 * CELL) / 3;
           const hm = (h10 + h01 + h11) / 3;
           const sl = Math.hypot(h11 - h01, h11 - h10) / CELL;

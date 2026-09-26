@@ -9,6 +9,7 @@ import { PlanCtx, Special, Out, manualLot, stairs, jumpRamp, collectible, makePo
 import { glass, rollerDoor, facadeFrame, baseDepth } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, FONT_IMPACT, FONT, FONT_FUN, FONT_SERIF } from './signs';
+import { makeBeamMaterial } from './materials';
 
 export const YELLOW = '#ffd23f';
 export const NAVY = '#1b1030';
@@ -58,6 +59,15 @@ function buildPort(ctx: Ctx, out: Out, office: Lot, lonja: Lot) {
     if (x > -66 && x < -14) continue;
     ctx.props.add('palm', x, QUAY_H, 176.5, x, 1.05);
   }
+  // torres de iluminación y farolas del paseo del muelle
+  for (const [x, z] of [[98, 214], [151, 214], [44, 214], [80, 244], [140, 244], [-40, 232], [-100, 232], [10, 188]] as const) {
+    ctx.props.add('mast', x, QUAY_H, z, Math.atan2(-x + 60, -z + 215), 1);
+  }
+  for (let x = -145; x <= 35; x += 22) {
+    if (x > -130 && x < -118) continue;
+    ctx.props.add('lampOld', x, QUAY_H, QUAY_Z - 5.5, 0, 1);
+  }
+  for (const x of [-86, -74, 14, 26]) ctx.props.add('bin', x, QUAY_H, QUAY_Z - 3.2, 0, 1);
   // bancos mirando al mar
   for (const x of [-92, -80, 8, 20, 32]) ctx.props.add('bench', x, QUAY_H, QUAY_Z - 3, Math.PI, 1);
   ctx.paved.push({ x: 15, z: 218, hw: 170, hd: 44, rot: 0, color: '#c9c3b6' });
@@ -100,7 +110,9 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   const H1 = 4.6, H = 9;
   const y0 = baseDepth(ctx, lot);
   b.frame(lot.x, lot.h, lot.z, lot.rot);
-  b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, YELLOW, SKIP.NY | SKIP.PY);
+  // el amarillo corporativo brilla un poco (la fachada mira al norte y casi siempre está en sombra)
+  const glowY = [0.42, 0.3, 0.02, 0.45];
+  b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, YELLOW, SKIP.NY | SKIP.PY, glowY);
   b.quadL(-hw, H, hd, hw, H, hd, hw, H, -hd, -hw, H, -hd, '#cfc6b4');
   // peto azul marino
   for (const [x, z, sx, sz] of [[0, hd - 0.15, hw * 2, 0.3], [0, -hd + 0.15, hw * 2, 0.3], [hw - 0.15, 0, 0.3, hd * 2], [-hw + 0.15, 0, 0.3, hd * 2]]) {
@@ -738,15 +750,7 @@ function buildLighthouse(ctx: Ctx, out: Out) {
   const beamGeo = new THREE.ConeGeometry(4, 60, 10, 1, true);
   beamGeo.translate(0, -30, 0);
   beamGeo.rotateZ(Math.PI / 2);
-  const beamMat = new THREE.MeshBasicMaterial({
-    color: '#fff1b0',
-    transparent: true,
-    opacity: 0.0,
-    blending: THREE.AdditiveBlending,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    fog: false,
-  });
+  const beamMat = makeBeamMaterial('#fff1b0');
   const beam = new THREE.Group();
   for (const r of [0, Math.PI]) {
     const m = new THREE.Mesh(beamGeo, beamMat);

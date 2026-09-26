@@ -1,13 +1,13 @@
 // Mobiliario y vegetación repetidos: se dibujan con InstancedMesh (una llamada por tipo).
 import * as THREE from 'three';
 import type { Game } from '../../core/game';
-import { GeoBuilder, lin } from './geo';
+import { GeoBuilder, lin, SKIP } from './geo';
 import { makeColliderHelpers } from './ctx';
 
 export type PropType =
   | 'palm' | 'pine' | 'olive' | 'cypress' | 'orange' | 'bush'
   | 'lamp' | 'lampOld' | 'lampWall'
-  | 'bench' | 'bin' | 'bollard' | 'pot' | 'tlight' | 'hydrant' | 'lounger' | 'umbrella' | 'barTable' | 'noray' | 'crateStack' | 'tyres';
+  | 'bench' | 'bin' | 'bollard' | 'pot' | 'tlight' | 'hydrant' | 'lounger' | 'umbrella' | 'barTable' | 'noray' | 'crateStack' | 'tyres' | 'mast';
 
 interface Inst {
   x: number;
@@ -26,25 +26,25 @@ function geoPalm(): GeoBuilder {
   const trunk = '#9a7650', trunk2 = '#86664a';
   // tronco curvo en 6 tramos
   let x = 0, y = 0;
-  const segs = 6;
+  const segs = 5;
   for (let i = 0; i < segs; i++) {
-    const h = 1.2;
-    const r0 = 0.24 - i * 0.018, r1 = 0.24 - (i + 1) * 0.018;
-    const nx = x + 0.1 + i * 0.03;
+    const h = 1.44;
+    const r0 = 0.24 - i * 0.022, r1 = 0.24 - (i + 1) * 0.022;
+    const nx = x + 0.12 + i * 0.04;
     b.frame(0, 0, 0, 0);
     // tronco de cono inclinado: aproximamos con cilindro desplazado
-    b.cyl(x, y, 0, r0, r1, h, 6, i % 2 ? trunk : trunk2, false, false);
+    b.cyl(x, y, 0, r0, r1, h, 5, i % 2 ? trunk : trunk2, false, false);
     x = nx;
     y += h * 0.98;
   }
   const top = y;
   // cocos
-  b.blob(x + 0.15, top - 0.15, 0.1, 0.16, 0.16, 0.16, '#6b4a2a');
-  b.blob(x - 0.1, top - 0.2, -0.12, 0.15, 0.15, 0.15, '#7a5530');
-  // hojas: 8 palmas que caen
+  b.box(x + 0.15, top - 0.15, 0.1, 0.28, 0.28, 0.28, '#6b4a2a', SKIP.NY);
+  b.box(x - 0.12, top - 0.2, -0.12, 0.26, 0.26, 0.26, '#7a5530', SKIP.NY);
+  // hojas: 7 palmas que caen
   const leaf = ['#3f9a3c', '#4fae45', '#358a36'];
-  for (let i = 0; i < 8; i++) {
-    const a = (i / 8) * Math.PI * 2 + (i % 2) * 0.2;
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + (i % 2) * 0.2;
     const ca = Math.cos(a), sa = Math.sin(a);
     const L1 = 1.9, L2 = 1.8;
     const w = 0.55;
@@ -113,15 +113,15 @@ function geoBush(): GeoBuilder {
 }
 
 function geoLamp(): GeoBuilder {
-  // farola de avenida: poste, brazo curvo y luminaria. Bombilla a (1.3, 6.35, 0)
+  // farola de avenida: poste, brazo y luminaria. Bombilla a (1.3, 6.3, 0)
   const b = new GeoBuilder();
   const c = '#39424e';
-  b.cyl(0, 0, 0, 0.2, 0.2, 0.5, 6, c, true);
-  b.cyl(0, 0.5, 0, 0.11, 0.08, 5.9, 6, c, true);
-  b.boxRot(0.45, 6.25, 0, 1.0, 0.1, 0.1, 0, 0, -0.35, c);
-  b.box(1.05, 6.45, 0, 0.9, 0.1, 0.12, c);
-  b.box(1.3, 6.47, 0, 0.9, 0.18, 0.5, '#2c333c');
-  b.box(1.3, 6.35, 0, 0.7, 0.08, 0.38, '#fff3d6', 0, [WARM[0] * 2.2, WARM[1] * 2.2, WARM[2] * 2.2, 0]);
+  b.cyl(0, 0, 0, 0.2, 0.2, 0.5, 5, c, true);
+  b.cyl(0, 0.5, 0, 0.11, 0.08, 5.95, 5, c, false);
+  b.boxRot(0.55, 6.3, 0, 1.2, 0.1, 0.1, 0, 0, -0.25, c, SKIP.NY);
+  b.box(1.3, 6.47, 0, 0.9, 0.18, 0.5, '#2c333c', SKIP.NY);
+  b.quadL(0.85, 6.37, 0.2, 1.75, 6.37, 0.2, 1.75, 6.37, -0.2, 0.85, 6.37, -0.2, '#fff3d6', [WARM[0] * 2.2, WARM[1] * 2.2, WARM[2] * 2.2, 0]);
+  b.quadL(0.85, 6.37, -0.2, 1.75, 6.37, -0.2, 1.75, 6.37, 0.2, 0.85, 6.37, 0.2, '#fff3d6', [WARM[0] * 2.2, WARM[1] * 2.2, WARM[2] * 2.2, 0]);
   return b;
 }
 
@@ -177,10 +177,8 @@ function geoBollard(): GeoBuilder {
 function geoPot(): GeoBuilder {
   const b = new GeoBuilder();
   b.cyl(0, 0, 0, 0.26, 0.36, 0.55, 6, '#c8643b', false);
-  b.blob(0, 0.72, 0, 0.36, 0.28, 0.36, '#4f8f3f', 0.1, 3);
-  b.box(0.12, 0.92, 0.05, 0.14, 0.14, 0.14, '#e8394d');
-  b.box(-0.12, 0.88, -0.1, 0.13, 0.13, 0.13, '#f25c8c');
-  b.box(0.0, 0.95, -0.16, 0.12, 0.12, 0.12, '#e8394d');
+  b.box(0, 0.68, 0, 0.62, 0.3, 0.62, '#4f8f3f', SKIP.NY);
+  b.box(0.08, 0.9, 0.04, 0.36, 0.18, 0.36, '#e8394d', SKIP.NY);
   return b;
 }
 
@@ -188,11 +186,11 @@ function geoTLight(): GeoBuilder {
   // semáforo: la cabeza mira a +Z
   const b = new GeoBuilder();
   const c = '#2f3540';
-  b.cyl(0, 0, 0, 0.09, 0.09, 3.1, 6, c, true);
-  b.box(0, 3.55, 0.05, 0.36, 1.0, 0.28, '#23272e');
-  b.box(0, 3.88, 0.2, 0.2, 0.2, 0.04, '#ff3b30', 0, [1.2, 0.1, 0.05, 0.35]);
-  b.box(0, 3.56, 0.2, 0.2, 0.2, 0.04, '#6b5a1a', 0, [0.2, 0.15, 0.0, 0.2]);
-  b.box(0, 3.24, 0.2, 0.2, 0.2, 0.04, '#1a5a2a', 0, [0.0, 0.3, 0.1, 0.2]);
+  b.cyl(0, 0, 0, 0.09, 0.09, 3.1, 5, c, false);
+  b.box(0, 3.55, 0.05, 0.36, 1.0, 0.28, '#23272e', SKIP.NY);
+  b.panelZ(0, 3.88, 0.2, 0.2, 0.2, '#ff3b30', [1.2, 0.1, 0.05, 0.35]);
+  b.panelZ(0, 3.56, 0.2, 0.2, 0.2, '#6b5a1a', [0.2, 0.15, 0.0, 0.2]);
+  b.panelZ(0, 3.24, 0.2, 0.2, 0.2, '#1a5a2a', [0.0, 0.3, 0.1, 0.2]);
   return b;
 }
 
@@ -258,6 +256,20 @@ function geoCrateStack(): GeoBuilder {
   return b;
 }
 
+function geoMast(): GeoBuilder {
+  // torre de iluminación del puerto: bombillas a 16 m
+  const b = new GeoBuilder();
+  const c = '#8a9098';
+  b.cyl(0, 0, 0, 0.5, 0.5, 0.6, 8, '#6c7078', true);
+  b.cyl(0, 0.6, 0, 0.28, 0.18, 15.2, 6, c, false);
+  b.box(0, 15.9, 0, 3.2, 0.25, 0.4, c);
+  for (const x of [-1.2, -0.4, 0.4, 1.2]) {
+    b.box(x, 16.2, 0.1, 0.6, 0.5, 0.35, '#3a3f47');
+    b.box(x, 16.05, 0.29, 0.5, 0.35, 0.03, '#fff3d6', 0, [1.0 * 2.4, 0.8 * 2.4, 0.5 * 2.4, 0]);
+  }
+  return b;
+}
+
 function geoTyres(): GeoBuilder {
   const b = new GeoBuilder();
   for (let i = 0; i < 4; i++) b.cyl(0, i * 0.26, 0, 0.42, 0.42, 0.24, 8, i % 2 ? '#222326' : '#2c2d31', i === 3);
@@ -269,7 +281,7 @@ const GEOS: Record<PropType, () => GeoBuilder> = {
   lamp: geoLamp, lampOld: geoLampOld, lampWall: geoLampWall,
   bench: geoBench, bin: geoBin, bollard: geoBollard, pot: geoPot, tlight: geoTLight, hydrant: geoHydrant,
   lounger: geoLounger, umbrella: geoUmbrella, barTable: geoBarTable,
-  noray: geoNoray, crateStack: geoCrateStack, tyres: geoTyres,
+  noray: geoNoray, crateStack: geoCrateStack, tyres: geoTyres, mast: geoMast,
 };
 
 /** Posición local de la bombilla de cada tipo de farola. */
@@ -277,9 +289,10 @@ export const BULB: Partial<Record<PropType, [number, number, number]>> = {
   lamp: [1.3, 6.3, 0],
   lampOld: [0, 3.75, 0],
   lampWall: [0, -0.32, 0.55],
+  mast: [0, 16, 0.3],
 };
 
-const CAST: Partial<Record<PropType, boolean>> = { palm: true, pine: true, olive: true, cypress: true, orange: true, lamp: true, lampOld: true, bench: true, tlight: true, umbrella: true };
+const CAST: Partial<Record<PropType, boolean>> = { palm: true, pine: true, olive: true, cypress: true, orange: true, bench: true, umbrella: true };
 
 export class Props {
   readonly list = new Map<PropType, Inst[]>();
@@ -349,6 +362,9 @@ export class Props {
           case 'cypress':
           case 'orange':
             col.cyl(it.x, it.y + 2, it.z, 2, 0.3 * it.s);
+            break;
+          case 'mast':
+            col.cyl(it.x, it.y + 8, it.z, 8, 0.35);
             break;
           case 'lamp':
           case 'lampOld':

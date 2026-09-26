@@ -12,6 +12,7 @@ import { clothesline, glass } from './buildings';
 import { ADS } from './names';
 import { fitText, roundRect, FONT_IMPACT, FONT } from './signs';
 import { districtRaw } from './plan';
+import { findFree } from './colina';
 
 /** Rejilla para no poner dos cosas demasiado cerca. */
 class Spacing {
@@ -324,15 +325,16 @@ export function streetFurniture(ctx: Ctx, out: Out) {
     ctx.occ.markRect(px, pz, 5, 1.2, rot, OCC.PROP);
   }
 
-  // ── obras con conos y vallas (rompibles) ──
-  const works: [number, number, number][] = [[130, 25, 0], [-75, -60, Math.PI / 2], [205, 95, 0], [-10, 140, 0]];
-  for (const [wx, wz, rot] of works) {
-    const fx = Math.cos(rot), fz = -Math.sin(rot);
+  // ── obras con conos y vallas (rompibles) en solares libres ──
+  const works: [number, number][] = [[-100, 226], [60, -140], [-230, 150], [240, -60], [-60, 150]];
+  for (const [wx0, wz0] of works) {
+    const spot = findFree(ctx.occ, wx0, wz0, 24, 6);
+    if (!spot) continue;
     for (let i = -2; i <= 2; i++) {
-      const x = wx + fx * i * 2.2, z = wz + fz * i * 2.2;
-      if (ctx.occ.get(x, z) === OCC.BUILDING) continue;
-      ctx.breakables.push({ kind: i % 2 ? 'cone' : 'fence', pos: ground(ctx, x, z), rotY: rot });
+      const x = spot.x + i * 2.2, z = spot.z;
+      ctx.breakables.push({ kind: i % 2 ? 'cone' : 'fence', pos: ground(ctx, x, z), rotY: 0 });
     }
+    ctx.occ.markRect(spot.x, spot.z, 6, 1, 0, OCC.PROP);
   }
 
   // ── vegetación suelta: pinos, olivos, palmeras y arbustos donde hay campo libre ──

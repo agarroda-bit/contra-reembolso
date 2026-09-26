@@ -107,23 +107,30 @@ export function manualLot(layout: Layout, x: number, z: number, hw: number, hd: 
  * Escalera exterior pegada a una pared: sube desde (x0, y0, z0) en la dirección `dir` (rumbo) hasta subir `rise`.
  * Dibuja peldaños y pone una rampa lisa como colisor (pendiente ~32°) + barandilla.
  */
-export function stairs(ctx: Ctx, b: GeoBuilder, x0: number, y0: number, z0: number, dir: number, rise: number, width = 1.3, color = '#d8d2c6', rail = '#2a2c31') {
+export function stairs(ctx: Ctx, b: GeoBuilder, x0: number, y0: number, z0: number, dir: number, rise: number, width = 1.3, color = '#d8d2c6', rail = '#2a2c31', railSide = 1, solid = true) {
   const stepH = 0.2, stepD = 0.32;
   const n = Math.ceil(rise / stepH);
   const run = n * stepD;
   const fx = Math.sin(dir), fz = Math.cos(dir);
   b.frame(x0, y0, z0, dir);
-  for (let i = 0; i < n; i++) {
-    const top = (i + 1) * (rise / n);
-    b.box(0, top / 2, i * stepD + stepD / 2, width, top, stepD, color, SKIP.NY | SKIP.NZ);
-  }
-  // barandilla del lado libre (+x local)
   const L = Math.hypot(run, rise);
   const ang = Math.atan2(rise, run);
-  b.boxRot(width / 2 - 0.03, rise / 2 + 0.95, run / 2, 0.05, 0.05, L, -ang, 0, 0, rail);
+  for (let i = 0; i < n; i++) {
+    const top = (i + 1) * (rise / n);
+    if (solid) b.box(0, top / 2, i * stepD + stepD / 2, width, top, stepD, color, SKIP.NY | SKIP.NZ);
+    else b.box(0, top - 0.09, i * stepD + stepD / 2, width, 0.18, stepD, color);
+  }
+  if (!solid) {
+    // zancas bajo los peldaños
+    for (const sx of [-width / 2 + 0.08, width / 2 - 0.08]) b.boxRot(sx, rise / 2 - 0.25, run / 2, 0.12, 0.3, L, -ang, 0, 0, rail);
+    b.box(0, rise / 2 - 0.2, run - 0.3, 0.16, rise - 0.4, 0.16, rail);
+  }
+  // barandilla del lado libre (+x local)
+  const rx = railSide * (width / 2 - 0.03);
+  b.boxRot(rx, rise / 2 + 0.95, run / 2, 0.05, 0.05, L, -ang, 0, 0, rail);
   for (let i = 0; i <= 4; i++) {
     const t = i / 4;
-    b.box(width / 2 - 0.03, rise * t + 0.5, run * t, 0.04, 1.0, 0.04, rail);
+    b.box(rx, rise * t + 0.5, run * t, 0.04, 1.0, 0.04, rail);
   }
   // colisor: rampa lisa sobre los peldaños
   const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-ang, dir, 0, 'YXZ'));
@@ -165,6 +172,11 @@ export function jumpRamp(ctx: Ctx, x: number, z: number, heading: number, len = 
   ctx.box(x + fx * (hl - 0.2), y + height / 2, z + fz * (hl - 0.2), width / 2, height / 2, 0.2, heading);
   ctx.ramps.push({ pos: new THREE.Vector3(x - fx * hl, y, z - fz * hl), heading });
   ctx.foot.push({ x, z, hw: width / 2, hd: hl, rot: heading, color: '#ffcc1a', height: 1 });
+}
+
+/** Longitud horizontal que ocupa una escalera de `rise` metros. */
+export function stairRun(rise: number): number {
+  return Math.ceil(rise / 0.2) * 0.32;
 }
 
 /** Paquete perdido coleccionable (el marcador lo pinta otro módulo; aquí solo la posición). */

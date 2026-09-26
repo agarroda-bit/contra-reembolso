@@ -8,6 +8,7 @@ import { PlanCtx, Special, Out, collectible, makePoi, poiAt, ground, doorPoint, 
 import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, flatRoof, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, shopSign, FONT_IMPACT, FONT, FONT_SCRIPT, FONT_SERIF, FONT_FUN } from './signs';
+import { makeBeamMaterial } from './materials';
 
 const GOLD = '#e8c25a';
 
@@ -108,6 +109,8 @@ function buildPlaza(ctx: Ctx, out: Out) {
     if (Math.abs(x) < 4) continue;
     for (const z of [cz - 20.2, cz + 20.2]) ctx.props.add('bollard', x, ctx.heightAt(x, z), z, 0, 1);
   }
+  // papeleras fijas
+  for (const [dx, dz] of [[-16, -8], [16, -8], [-16, 8], [16, 8], [-36, 0], [36, 0]]) ctx.props.add('bin', cx + dx, ctx.heightAt(cx + dx, cz + dz), cz + dz, 0, 1);
   // quiosco de prensa
   const kx = -30, kz = cz - 3;
   const ky = ctx.heightAt(kx, kz);
@@ -124,7 +127,7 @@ function buildPlaza(ctx: Ctx, out: Out) {
   for (let i = 0; i < 2; i++) ctx.breakables.push({ kind: 'bench', pos: ground(ctx, -12 + i * 24, cz + 17), rotY: Math.PI });
   // carrito de golf del casino, al borde de la plaza frente al casino
   ctx.specials.push({ kind: 'golf', pos: ground(ctx, 30, 15.5), heading: -Math.PI / 2 });
-  collectible(ctx, cx, y + 4.6, cz);
+  collectible(ctx, cx + 3.6, y + 0.35, cz);
 }
 
 // ───────────────────────── Casino La Suerte Loca ─────────────────────────
@@ -234,9 +237,10 @@ function exposedSide(ctx: Ctx, lot: Lot, k: number): boolean {
 
 /** Dos haces de luz que barren el cielo de noche. */
 function searchlights(ctx: Ctx, out: Out, p: { x: number; z: number }, y: number, color: string) {
-  const geo = new THREE.ConeGeometry(3.2, 90, 10, 1, true);
+  const geo = new THREE.ConeGeometry(6, 90, 12, 1, true);
+  geo.rotateX(Math.PI);
   geo.translate(0, 45, 0);
-  const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
+  const mat = makeBeamMaterial(color);
   const g = new THREE.Group();
   const beams: THREE.Mesh[] = [];
   for (let i = 0; i < 2; i++) {
