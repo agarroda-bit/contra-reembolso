@@ -129,15 +129,69 @@ export class Traffic implements System {
     const v = this.vm.spawn(kind, pos, this.roads.heading(edge, dir));
     const driver = this.npcs.spawn('driver', randomLookFor(this.rng, 'civil'), pos);
     driver.enterVehicle(v);
-    const brain: CarBrain = {
+    (v as any).brain = this.newBrain(edge, dir, t);
+    this.cars.push(v);
+    return v;
+  }
+
+  /** Cerebro nuevo de coche de carril (sin nada de antes: ni atascos, ni rodeos, ni persecuciones). */
+  private newBrain(edge: number, dir: 1 | -1, t: number): CarBrain {
+    const e = this.roads.g.edges[edge];
+    return {
       edge, dir, t, next: null,
       cruise: (e.district === 'centro' || e.district === 'viejo' ? 10 : 13) * (0.85 + rnd.next() * 0.3),
       blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'lane',
     };
-    (v as any).brain = brain;
-    this.cars.push(v);
-    return v;
   }
+
+  /**
+   * Sitio para que aparezca un coche: una calle a 70-170 m del jugador y fuera del encuadre (con la
+   * cámara lejos del jugador, como en la vista aérea del menú, vale lo que quede lejos de ella).
+   */
+  private pickSpawn(focus: THREE.Vector3): { edge: number; dir: 1 | -1; t: number } | null {
+    const edges = this.roads.edgesInRing(focus, 70, 170);
+    if (!edges.length) return null;
+    const cam = this.game.camera.position;
+    const eid = edges[Math.floor(rnd.next() * edges.length)];
+    const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
+    const t = 0.2 + rnd.next() * 0.6;
+    const p = this.roads.lanePoint(eid, dir, t, 0, tmpO);
+    const camFar = cam.distanceTo(focus) > 50;
+    return !this.inView(p, 4) || (camFar && p.distanceTo(cam) > 80) ? { edge: eid, dir, t } : null;
+  }
+
+  /**
+   * Un coche del tráfico que se ha quedado lejos reaparece en otro sitio con el mismo conductor, en vez
+   * de borrarlo y crear otro (muñeco, mallas y cuerpo de Rapier nuevos). Solo si está como nuevo: sin
+   * daños ni abolladuras, sin pasajeros, sin haberlo conducido el jugador y circulando por su carril.
+   * false = no se puede (se borra como siempre).
+   */
+  private recycle(v: Vehicle, brain: CarBrain, driver: any, focus: THREE.Vector3): boolean {
+    if (this.cars.length > this.target) return false;
+    if (!v.transient || v.owned || v.destroyed || v.disposed || v.sinking || v.onFire || v.dented) return false;
+    if (v.health < v.spec.health || v.packages || v.lastDriven >= 0 || v === this.vm.current) return false;
+    if ((v as any).fleet || (v as any).homeSpot) return false;
+    if (brain.mode !== 'lane' || !driver || driver.removed || driver.vehicle !== v || driver.hostile || driver.police) return false;
+    for (const n of this.npcs.list) if (n.vehicle === v && n !== driver) return false;
+    // unos pocos intentos de encontrarle sitio (fuera del encuadre y sin otro coche encima)
+    let spot: { edge: number; dir: 1 | -1; t: number } | null = null;
+    const pos = tmpO;
+    for (let k = 0; k < 4 && !spot; k++) {
+      spot = this.pickSpawn(focus);
+      if (!spot) continue;
+      this.roads.lanePoint(spot.edge, spot.dir, spot.t, this.roads.g.edges[spot.edge].width / 4, pos);
+      if (this.vm.nearest(pos, 7, (o) => o !== v)) spot = null;
+    }
+    if (!spot) return false;
+    v.resetForReuse();
+    v.place(pos, this.roads.heading(spot.edge, spot.dir));
+    this.game.mod.vehicleFx?.forget?.(v);
+    (v as any).brain = this.newBrain(spot.edge, spot.dir, spot.t);
+    this.recycled++;
+    return true;
+  }
+  /** Coches reciclados (para pruebas). */
+  recycled = 0;
 
   /** ¿Se ve este punto (esfera de radio r) desde la cámara? Hay que llamar antes a updateFrustum(). */
   private inView(p: THREE.Vector3, r = 3): boolean {
@@ -216,6 +270,7 @@ export class Traffic implements System {
         continue;
       }
       if (far || !brain) {
+        if (far && brain && this.recycle(v, brain, driverNpc, focus)) continue;
         this.cars.splice(i, 1);
         if (driverNpc) this.npcs.remove(driverNpc);
         if (v !== this.vm.current && !v.owned) this.vm.remove(v);
@@ -238,17 +293,9 @@ export class Traffic implements System {
     if (this.spawnTimer <= 0) {
       this.spawnTimer = 0.4;
       if (this.cars.length < this.target) {
-        const edges = this.roads.edgesInRing(focus, 70, 170);
-        if (edges.length) {
-          const eid = edges[Math.floor(rnd.next() * edges.length)];
-          const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
-          const t = 0.2 + rnd.next() * 0.6;
-          const p = this.roads.lanePoint(eid, dir, t, 0, tmpV);
-          // solo donde no se ve (fuera del encuadre), para que no aparezcan coches de la nada;
-          // con la cámara lejos del jugador (vista aérea del menú) vale lo que quede lejos de ella
-          const camFar = cam.distanceTo(focus) > 50;
-          if (!this.inView(p, 4) || (camFar && p.distanceTo(cam) > 80)) this.spawnCar(eid, dir, t);
-        }
+        // solo donde no se ve (fuera del encuadre), para que no aparezcan coches de la nada
+        const spot = this.pickSpawn(focus);
+        if (spot) this.spawnCar(spot.edge, spot.dir, spot.t);
       }
       if (this.parked.length < Math.round(8 * this.game.quality.density)) this.spawnParked();
     }

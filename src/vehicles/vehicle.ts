@@ -83,6 +83,8 @@ export class Vehicle {
   readonly wheelContact = [false, false, false, false];
   /** Velocidad lateral (m/s): derrape. */
   slip = 0;
+  /** true si la carrocería tiene alguna abolladura (entonces no se puede reutilizar como nuevo). */
+  dented = false;
 
   constructor(private game: Game, kind: VehicleKind, pos: THREE.Vector3, heading: number, color?: string) {
     this.spec = VEHICLES[kind];
@@ -410,6 +412,7 @@ export class Vehicle {
 
   /** Deforma la carrocería cerca del punto de impacto (dirección de la velocidad perdida). */
   private dent(dv: number) {
+    this.dented = true;
     const geo = this.mesh.bodyGeo;
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     // punto de impacto aproximado: la cara del chasis en la dirección del movimiento previo
@@ -444,6 +447,33 @@ export class Vehicle {
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.flipTimer = 0;
+  }
+
+  /**
+   * Lo deja como recién salido a la calle para reutilizarlo en otro sitio (el tráfico recicla sus coches).
+   * Solo para vehículos sin abolladuras ni destruidos: no arregla la carrocería. Después, place().
+   */
+  resetForReuse() {
+    this.health = this.spec.health;
+    this.onFire = false;
+    this.packages = 0;
+    this.sirenOn = false;
+    this.hornTimer = 0;
+    this.boost = 1;
+    this.speed = 0;
+    this.slip = 0;
+    this.flipTimer = 0;
+    this.beachedTimer = 0;
+    this.airTime = 0;
+    this.steerSmooth = 0;
+    this.onImpact = null;
+    if (this.airborne) this.setAirborne(false);
+    const c = this.controls;
+    c.throttle = 0;
+    c.steer = 0;
+    c.handbrake = false;
+    c.boost = false;
+    this.prevVel.set(0, 0, 0);
   }
 
   /** Coloca el vehículo en un sitio (teletransporte, pedir al garaje). */
