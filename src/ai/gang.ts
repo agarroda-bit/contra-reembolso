@@ -159,7 +159,10 @@ export class Gang implements System {
       p ??= fallback ?? pos.clone();
       p.y = this.game.world.heightAt(p.x, p.z);
       const m = this.spawnMember(p, weapon, !posted);
-      if (posted) (m.brain as CombatBrain).home = p.clone();
+      if (posted) {
+        (m.brain as CombatBrain).home = p.clone();
+        (m.brain as CombatBrain).holdAt = p.clone();
+      }
       out.push(m);
     }
     if (!posted) this.game.events.emit('notify', { title: '¡Emboscada!', text: 'Os estábamos esperando, repartidor 😈', from: 'Los Devueltos', icon: '↩️' });
@@ -233,7 +236,9 @@ export class Gang implements System {
           }
           if (!pos) continue;
           const m = this.spawnMember(pos);
+          // defienden la guarida: no persiguen al jugador por medio Polígono (ni se quedan atascados en la valla)
           (m.brain as CombatBrain).home = pos.clone();
+          (m.brain as CombatBrain).holdAt = pos.clone();
           this.guards.push(m);
         }
       } else if (d > 190 && this.guardsSpawned) {

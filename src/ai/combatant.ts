@@ -147,12 +147,16 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
 
   // control de carretera: si el jugador no está cerca del control, se quedan en su sitio (a cubierto tras el coche)
   if (b.holdAt && flatDist(b.holdAt, target) > 30) {
-    if (flatDist(npc.position, b.holdAt) > 2) npc.goTo(b.holdAt, true);
-    else {
+    if (flatDist(npc.position, b.holdAt) > 2) {
+      const wp = nextWaypoint(game, npc, b, b.holdAt, dt);
+      if (wp) npc.goTo(tmpGo.copy(wp).setY(npc.position.y), true);
+      else npc.stop();
+    } else {
       npc.stop();
       npc.face(target);
     }
-    npc.aiming = b.los && dist < range && !b.arrestOnly;
+    // desde su puesto devuelven el fuego también de más lejos (fallan mucho a esa distancia, pero no eres invisible)
+    npc.aiming = b.los && dist < Math.max(range, 45) && !b.arrestOnly;
     if (npc.aiming && flatDist(npc.position, b.holdAt) <= 2) tryShoot(game, npc, b, target, dist, combat, 0.7);
     return;
   }
@@ -270,13 +274,11 @@ function nextWaypoint(game: Game, npc: Npc, b: CombatBrain, goal: THREE.Vector3,
   if (!b.path || !b.path.length || b.pathTimer <= 0 || npc.blockedTime > 1.2) {
     b.pathTimer = 3 + rnd.next();
     b.path = roads.route(npc.position, goal);
-    // si se ha quedado atascado, primero un paso de lado para despegarse de la pared
+    // si se ha quedado atascado (una valla, un rincón), primero un rodeo: la dirección más despejada
+    // que no le aleje demasiado de donde quiere ir
     if (npc.blockedTime > 1.2) {
-      const side = rnd.next() < 0.5 ? 1 : -1;
-      const h = npc.heading;
-      const sx = npc.position.x + Math.cos(h) * side * 3 - Math.sin(h) * 1.5;
-      const sz = npc.position.z - Math.sin(h) * side * 3 - Math.cos(h) * 1.5;
-      if (game.world.isLand(sx, sz)) b.path.unshift(new THREE.Vector3(sx, npc.position.y, sz));
+      const detour = openDirection(game, npc.position, goal);
+      if (detour) b.path.unshift(detour);
       npc.blockedTime = 0;
     }
   }
@@ -352,6 +354,31 @@ function tryShoot(game: Game, npc: Npc, b: CombatBrain, target: THREE.Vector3, d
   // daño reducido para NPCs (justo)
   const npcDef = { ...def, damage: def.damage * (b.side === 'police' ? DMG_POLICE : DMG_GANG) * b.dmgMul };
   combat.fire({ kind: 'npc', npc, exclude: npc.collider }, npcDef, muzzle, aim, spreadMul);
+}
+
+/** Punto de rodeo: mira en 8 direcciones y elige la más despejada que más le acerque a `goal`. */
+function openDirection(game: Game, from: THREE.Vector3, goal: THREE.Vector3): THREE.Vector3 | null {
+  const o = tmpA.set(from.x, from.y + 0.7, from.z);
+  const gx = goal.x - from.x, gz = goal.z - from.z;
+  const gl = Math.hypot(gx, gz) || 1;
+  let best: THREE.Vector3 | null = null;
+  let bestScore = 0;
+  const a0 = rnd.next() * Math.PI * 2;
+  for (let i = 0; i < 8; i++) {
+    const a = a0 + (i / 8) * Math.PI * 2;
+    const d = tmpB.set(Math.cos(a), 0, Math.sin(a));
+    const hit = game.physics.raycast(o, d, 10, G.STATIC | G.VEHICLE);
+    const free = hit ? hit.distance : 10;
+    if (free < 2) continue;
+    const toward = (d.x * gx + d.z * gz) / gl;
+    const score = free * (1.3 + toward);
+    if (score > bestScore) {
+      bestScore = score;
+      const k = Math.min(free - 0.8, 6);
+      best = new THREE.Vector3(from.x + d.x * k, from.y, from.z + d.z * k);
+    }
+  }
+  return best && game.world.isLand(best.x, best.z) ? best : null;
 }
 
 /** ¿Se puede ir andando en línea recta de `from` a `to` (sin paredes ni coches en medio)? */
