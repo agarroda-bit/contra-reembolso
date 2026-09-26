@@ -2,7 +2,17 @@
 //
 // Uso: const world = buildIsland(game); game.world = world;
 // Añade a game.scene todo lo visual y a game.physics todos los colisores. Al final da un paso de física
-// para que los rayos (raycast) funcionen desde el primer momento.
+// para que los rayos (raycast) funcionen desde el primer momento. No añade luces (las pone el ciclo día/noche).
+//
+// Además del contrato, (world as any).extra trae datos útiles para otros módulos:
+//   officeVanBays: Vector3[]  plazas de furgoneta delante de la oficina (mirando a la calle, rumbo PI)
+//   garageBays: Vector3[]     plazas de exposición del concesionario Manolo
+//   paintBooth: {x,z,hw,hd,rot}   interior del túnel de Pintamóvil (dentro = pintar el coche)
+//   hideoutYard: {x,z,hw,hd,rot}  patio vallado de la guarida; hideoutDoor: Vector3 (portón del almacén)
+//   ambulance: {pos, heading}     plaza de ambulancia del centro de salud
+//   atticTerrace, mirador, plazuela, parkingRoof, lonjaRoof, lighthouse: Vector3 (sitios con encanto)
+//   climbs: [{name, a, b, c}]     recorridos para subir a azoteas/cubiertas (abajo, arriba, azotea)
+// y (world as any).terrainCollider es el colisor del terreno (trimesh).
 import * as THREE from 'three';
 import type { Game } from '../../core/game';
 import type { WorldData, DistrictId } from '../../core/contracts';
