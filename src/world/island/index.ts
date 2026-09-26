@@ -199,8 +199,10 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     if (v === OCC.YARD) c = C.garden;
     else if (x > -160 && x < 192 && z > 172.8 && z < 262.4) c = C.concrete;
     else if (urbanCore && (d === 'centro' || d === 'viejo' || d === 'puerto')) c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : C.concrete;
-    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP || (d === 'viejo' && !urbanCore && (v === OCC.BUILDING || v === OCC.RESERVED))) {
-      // (fuera del casco, el borde junto a las casas del poniente y los rincones reservados siguen siendo hierba)
+    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP || (d === 'viejo' && !urbanCore && (v === OCC.BUILDING || v === OCC.RESERVED)) || (d === 'puerto' && v === OCC.RESERVED)) {
+      // (fuera del casco, el borde junto a las casas del poniente y los rincones reservados siguen siendo hierba;
+      // la franja reservada del puerto que queda fuera del rectángulo de hormigón también: así el borde del
+      // hormigón sigue las líneas de la rejilla y no sale en dientes de sierra)
       c = d === 'colina' ? C.grassColina : d === 'poligono' && urbanCore ? C.poligono : C.grass;
       natural = true;
     } else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
