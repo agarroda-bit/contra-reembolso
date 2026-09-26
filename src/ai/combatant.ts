@@ -254,14 +254,16 @@ function nextWaypoint(game: Game, npc: Npc, b: CombatBrain, goal: THREE.Vector3,
   const d = flatDist(npc.position, goal);
   if (d < 1.2) return null;
   const roads = game.mod.traffic?.roads as Roads | undefined;
+  b.pathTimer -= dt;
   // a la vista, muy cerca o muy lejos (nadie lo ve): directo
   if (!roads || (b.los && npc.blockedTime < 0.5) || (d < 8 && npc.blockedTime < 0.5) || d > 120) {
     b.path = null;
     return goal;
   }
-  b.pathTimer -= dt;
+  // (como mucho una ruta nueva cada segundo y pico por cabeza: si te ve a ratos, no recalcula sin parar)
+  if (!b.path && b.pathTimer > 1.5 && npc.blockedTime <= 1.2) return goal;
   if (!b.path || !b.path.length || b.pathTimer <= 0 || npc.blockedTime > 1.2) {
-    b.pathTimer = 2.5 + rnd.next();
+    b.pathTimer = 3 + rnd.next();
     b.path = roads.route(npc.position, goal);
     // si se ha quedado atascado, primero un paso de lado para despegarse de la pared
     if (npc.blockedTime > 1.2) {
