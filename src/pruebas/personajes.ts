@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import type { CharacterAnimParams, CharacterPose } from '../core/contracts';
 import { Rng } from '../core/rng';
-import { makeCharacter, randomLook, DRIVE_LAYOUT, RIDE_LAYOUT, type Character, type CharacterKind } from '../actors/character';
+import { makeCharacter, randomLook, DRIVE_LAYOUT, RIDE_LAYOUT, SIT_LAYOUT, type Character, type CharacterKind } from '../actors/character';
 
 const params = new URLSearchParams(location.search);
 const W = window as any;
@@ -148,9 +148,9 @@ function propFor(pose: string): THREE.Object3D | null {
     g.add(seat, body, stem, bar);
   } else if (pose === 'sit') {
     const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.45), woodMat);
-    seat.position.set(0, 0.42, -0.08);
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.38, 0.3), darkMat);
-    leg.position.set(0, 0.19, -0.1);
+    seat.position.set(0, SIT_LAYOUT.seatY - 0.04, SIT_LAYOUT.seatZ);
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.6, SIT_LAYOUT.seatY - 0.08, 0.3), darkMat);
+    leg.position.set(0, (SIT_LAYOUT.seatY - 0.08) / 2, SIT_LAYOUT.seatZ - 0.02);
     g.add(seat, leg);
   } else return null;
   g.traverse((m) => ((m as THREE.Mesh).castShadow = true));

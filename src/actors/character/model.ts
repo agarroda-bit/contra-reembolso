@@ -182,12 +182,13 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
       M.color('#ffffff').decal(s * 0.043, 0.005, 0.0045, 0.013, 0.013);
     }
   }
-  // cara de "muerto": ojos en X y lengua fuera
-  M.setBone(B.eyesX).color('#1e1b2e');
+  // cara de "muerto": ojos en X y lengua fuera (con gafas, la X va blanca encima del cristal)
+  const xz = look.glasses ? 0.0195 : 0.003;
+  M.setBone(B.eyesX).color(look.glasses ? '#f4f4f4' : '#1e1b2e');
   for (const s of [1, -1]) {
     const ex = s * 0.054;
-    M.rotated(0, 0, Math.PI / 4, ex, 0, 0.003, () => M.decal(ex, 0, 0.003, 0.07, 0.017));
-    M.rotated(0, 0, -Math.PI / 4, ex, 0, 0.003, () => M.decal(ex, 0, 0.003, 0.07, 0.017));
+    M.rotated(0, 0, Math.PI / 4, ex, 0, xz, () => M.decal(ex, 0, xz, 0.07, 0.017));
+    M.rotated(0, 0, -Math.PI / 4, ex, 0, xz, () => M.decal(ex, 0, xz, 0.07, 0.017));
   }
   M.color('#ff6f91').box(0.014, -0.1, 0.008, 0.036, 0.046, 0.012);
 
@@ -324,12 +325,12 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   const star: [number, number][] = [];
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * Math.PI * 2;
-    const r = k % 2 === 0 ? 0.055 : 0.02;
+    const r = k % 2 === 0 ? 0.075 : 0.026;
     star.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const x = Math.sin(a) * 0.2, z = Math.cos(a) * 0.2;
+    const x = Math.sin(a) * 0.22, z = Math.cos(a) * 0.22;
     M.rotated(0, a, 0, x, 0, z, () => {
       M.poly(star, z, 1, x, 0, true);
       M.poly(star, z, -1, x, 0, true);

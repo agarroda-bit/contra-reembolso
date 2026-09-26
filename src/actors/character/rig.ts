@@ -97,6 +97,7 @@ export class Character implements CharacterRig {
     const h = this.look.height ?? 1;
     this.body.scale.setScalar(h);
     this.heightMeters = HEIGHT * h;
+    this.anim.setScale(h);
   }
 
   setLook(look: CharacterLook) {
