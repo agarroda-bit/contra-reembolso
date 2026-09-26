@@ -287,6 +287,15 @@ function buildClub(ctx: Ctx, out: Out, lot: Lot) {
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, black, SKIP.NY | SKIP.PY);
   flatRoof(b, ctx, hw, hd, H, '#2a2036', black, ctx.rng, false, 0.8);
   ctx.box(lot.x, lot.h + (y0 + H) / 2, lot.z, hw, (H - y0) / 2, hd, lot.rot);
+  // laterales a la vista: dos tiras de neón y un rombo (que de noche no sea un bloque negro)
+  for (let k = 1; k < 4; k++) {
+    if (!exposedSide(ctx, lot, k)) continue;
+    const f = facadeFrame(b, lot, k);
+    b.box(0, H - 0.35, 0.1, f.half * 2, 0.18, 0.1, '#b36bff', SKIP.NZ, purple);
+    b.box(0, 5.4, 0.1, f.half * 2, 0.14, 0.1, '#ff5fb8', SKIP.NZ, pink);
+    b.boxRot(0, 7.6, 0.12, 1.4, 1.4, 0.1, 0, 0, Math.PI / 4, '#b36bff', 0, purple);
+    b.boxRot(0, 7.6, 0.18, 1.0, 1.0, 0.1, 0, 0, Math.PI / 4, black);
+  }
   const { half } = facadeFrame(b, lot, 0);
   // tiras de neón
   b.box(0, H - 0.35, 0.12, half * 2, 0.22, 0.12, '#b36bff', SKIP.NZ, purple);

@@ -72,6 +72,40 @@ function buildPort(ctx: Ctx, out: Out, office: Lot, lonja: Lot) {
   for (const x of [-86, -74, 14, 26]) ctx.props.add('bin', x, QUAY_H, QUAY_Z - 3.2, 0, 1);
   // bancos mirando al mar
   for (const x of [-92, -80, 8, 20, 32]) ctx.props.add('bench', x, QUAY_H, QUAY_Z - 3, Math.PI, 1);
+  apronMarkings(ctx);
+}
+
+/** Marcas pintadas y palés en la explanada (para que no sea un solar de hormigón vacío). */
+function apronMarkings(ctx: Ctx) {
+  const pave = ctx.pave;
+  const WHITE = '#f4f1e8';
+  // línea amarilla de seguridad a lo largo del borde del muelle
+  pave.rect(pave.paint, 18, QUAY_Z - 1.6, 164, 0.12, 0, YELLOW, 4);
+  // carril de servicio: bordes amarillos y eje discontinuo, de la lonja a los contenedores
+  for (const z of [227, 237]) pave.rect(pave.paint, -50, z, 94, 0.1, 0, YELLOW, 4);
+  for (let x = -140; x <= 40; x += 8) pave.rect(pave.paint, x, 232, 2, 0.09, 0, WHITE, 4);
+  // flechas del carril: se circula por la derecha (hacia el este por el lado sur, hacia el oeste por el norte)
+  for (const x of [-110, -40, 30]) {
+    for (const dz of [-2.5, 2.5]) {
+      const zc = 232 + dz;
+      const dir = dz > 0 ? 1 : -1;
+      pave.rect(pave.paint, x - dir * 1.2, zc, 1.3, 0.14, 0, WHITE, 4);
+      pave.rect(pave.paint, x + dir * 0.35, zc - 0.35, 0.5, 0.1, -dir * 0.65, WHITE, 4);
+      pave.rect(pave.paint, x + dir * 0.35, zc + 0.35, 0.5, 0.1, dir * 0.65, WHITE, 4);
+    }
+  }
+  // zona de la grúa conducible: recuadro amarillo con rayas en diagonal
+  const gx = 25, gz = 246.5, h = 5.5;
+  for (const [x, z, hw, hd] of [[gx, gz - h, h, 0.12], [gx, gz + h, h, 0.12], [gx - h, gz, 0.12, h], [gx + h, gz, 0.12, h]] as const) pave.rect(pave.paint, x, z, hw, hd, 0, YELLOW, 4);
+  for (let i = -3; i <= 3; i++) {
+    const L = h * 1.35 - Math.abs(i) * 1.55;
+    if (L > 0.5) pave.rect(pave.paint, gx + i * 1.55 * 0.7071, gz - i * 1.55 * 0.7071, 0.22, L, Math.PI / 4, YELLOW, 4);
+  }
+  // plazas para camiones junto a los contenedores
+  for (let i = 0; i <= 5; i++) pave.rect(pave.paint, 150 + i * 4.5, 244, 0.1, 3.2, 0, WHITE, 4);
+  // palés con cajas repartidos
+  const stacks: [number, number, number][] = [[-104, 214, 0.2], [-100.5, 213.5, 1.1], [-146, 222, 0.6], [40, 229.5, 0.3], [43, 222, 1.4], [147, 243, 0.9], [-30, 250.5, 0.1], [-26.5, 251, 1.2]];
+  for (const [x, z, r] of stacks) ctx.props.add('crateStack', x, QUAY_H, z, r, 1.1);
 }
 
 // ───────────────────────── Oficina de reparto ─────────────────────────
@@ -112,7 +146,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
   const y0 = baseDepth(ctx, lot);
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   // el amarillo corporativo brilla un poco (la fachada mira al norte y casi siempre está en sombra)
-  const glowY = [0.2, 0.14, 0.01, 1.0]; // nivel 1: el mismo brillo de día y de noche
+  const glowY = [0.28, 0.2, 0.015, 1.0]; // nivel 1: el mismo brillo de día y de noche
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, YELLOW, SKIP.NY | SKIP.PY, glowY);
   b.quadL(-hw, H, hd, hw, H, hd, hw, H, -hd, -hw, H, -hd, '#cfc6b4');
   // peto azul marino
@@ -174,7 +208,7 @@ function buildOffice(ctx: Ctx, out: Out, lot: Lot) {
       // planta de arriba: ventanas a los lados del cartel
       for (const x of [-18.5, -14.5, 14.5, 18.5]) glass(w, x, 6.8, 0.05, 3, 2.0, [1, 0.85, 0.55, 0.2]);
       ctx.signs.define('office-main', 20, 3.2, officeSign());
-      ctx.signs.place(b, 'office-main', 0, 6.9, 0.14, 20, 3.2, 0.8);
+      ctx.signs.place(b, 'office-main', 0, 6.9, 0.14, 20, 3.2, 1.5);
       // bombillas alrededor del cartel
       for (let i = 0; i <= 20; i++) {
         const x = -10.2 + i * 1.02;

@@ -199,7 +199,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     if (v === OCC.YARD) c = C.garden;
     else if (x > -160 && x < 192 && z > 172.8 && z < 262.4) c = C.concrete;
     else if (urbanCore && (d === 'centro' || d === 'viejo' || d === 'puerto')) c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : C.concrete;
-    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) {
+    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP || (d === 'viejo' && !urbanCore && (v === OCC.BUILDING || v === OCC.RESERVED))) {
+      // (fuera del casco, el borde junto a las casas del poniente y los rincones reservados siguen siendo hierba)
       c = d === 'colina' ? C.grassColina : d === 'poligono' && urbanCore ? C.poligono : C.grass;
       natural = true;
     } else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
@@ -243,6 +244,22 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     polygonOffsetFactor: -4,
     polygonOffsetUnits: -8,
   });
+  // con niebla, un material aditivo sumaría el color de la niebla (manchas claras sobre la ciudad lejana):
+  // aquí la niebla apaga el charco en vez de teñirlo
+  glowMat.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace(
+      '#include <fog_fragment>',
+      `#ifdef USE_FOG
+        #ifdef FOG_EXP2
+          float fogK = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
+        #else
+          float fogK = smoothstep( fogNear, fogFar, vFogDepth );
+        #endif
+        gl_FragColor.rgb *= 1.0 - fogK;
+      #endif`,
+    );
+  };
+  glowMat.customProgramCacheKey = () => 'cr-glow';
   const glowGeo = new THREE.PlaneGeometry(1, 1);
   glowGeo.rotateX(-Math.PI / 2);
   const glow = new THREE.InstancedMesh(glowGeo, glowMat, bulbs.length);
@@ -280,7 +297,8 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     seaLevel: 0,
     districts: DISTRICTS,
     heightAt,
-    districtAt: (x, z) => (shape.coastDist(x, z) > 0 ? districtRaw(x, z) : null),
+    // el muelle de pescadores, el carguero y el espigón del faro están sobre el agua pero son del Puerto
+    districtAt: (x, z) => (shape.coastDist(x, z) > 0 ? districtRaw(x, z) : x > -135 && x < 205 && z > 255 && z < 318 ? 'puerto' : null),
     isRoad: (x, z) => net.isRoad(x, z),
     isLand: (x, z) => heightAt(x, z) > 0.2,
     pois: out.pois,

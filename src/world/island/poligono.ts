@@ -167,7 +167,7 @@ function buildHideout(ctx: Ctx, out: Out, lot: Lot) {
   ctx.box(tp.x, lot.h + 2.8, tp.z, 1.4, 2.8, 1.4, lot.rot);
   // coleccionable escondido detrás de las cajas
   const cp = lotPoint(lot, -hw + 2.5, wz1 + 1.5);
-  collectible(ctx, cp.x, lot.h, cp.z);
+  collectible(ctx, cp.x, ctx.heightAt(cp.x, cp.z), cp.z);
   const poi = makePoi(ctx, 'hideout', 'hideout', 'Guarida de Los Devueltos', lot, (gate0 + gate1) / 2, true, 1.2);
   out.pois.push(poi);
   const yc = lotPoint(lot, 0, (wz1 + fz) / 2);
@@ -294,7 +294,7 @@ function buildJunkyard(ctx: Ctx, out: Out, lot: Lot) {
   const gp = lotPoint(lot, 2, hd - 6);
   ctx.specials.push({ kind: 'garbage', pos: ground(ctx, gp.x, gp.z), heading: lot.rot + Math.PI / 2 });
   const hp = lotPoint(lot, hw - 2.5, -hd + 2.5);
-  collectible(ctx, hp.x, lot.h, hp.z);
+  collectible(ctx, hp.x, ctx.heightAt(hp.x, hp.z), hp.z);
   jumpRamp(ctx, lotPoint(lot, -6, hd - 14).x, lotPoint(lot, -6, hd - 14).z, lot.rot + Math.PI, 8, 4.5, 1.6);
   out.pois.push(makePoi(ctx, 'junkyard', 'junkyard', 'Desguace El Siniestro Total', lot, 0, true, 1.2));
   ctx.paved.push({ x: lot.x, z: lot.z, hw, hd, rot: lot.rot, color: '#9a8f7c' });
