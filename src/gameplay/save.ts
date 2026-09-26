@@ -88,8 +88,17 @@ export class SaveSystem implements System {
     }
   }
 
+  /**
+   * En el menú principal y en la creación del personaje todavía no hay partida en juego: guardar ahí
+   * machacaría la partida buena con una vacía (0 €, sin nada). Tampoco al cambiar de pestaña o cerrar.
+   */
+  private get inMenu(): boolean {
+    const mode = this.game.mod.menus?.mode;
+    return mode === 'main' || mode === 'create';
+  }
+
   save(silent = true) {
-    if (!this.enabled) return;
+    if (!this.enabled || this.inMenu) return;
     const g = this.game;
     const data: Record<string, any> = {
       v: VERSION,

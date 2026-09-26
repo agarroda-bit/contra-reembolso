@@ -81,8 +81,12 @@ async function boot() {
     // en el menú no llegan encargos ni persecuciones
     if (game.mod.jobs) game.mod.jobs.autoOffers = false;
     if (game.mod.gang) game.mod.gang.calm = true;
+    // ni se guarda nada: la partida guardada no se toca hasta pulsar «Continuar» o «¡A repartir!»
+    const save = game.mod.save as SaveSystem | undefined;
+    if (save) save.enabled = false;
     menus.onNewGame = (p) => {
       SaveSystem.wipe();
+      if (save) save.enabled = true;
       setProfile(p);
       player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);
       menus.play();
@@ -90,10 +94,12 @@ async function boot() {
       game.mod.save?.save();
     };
     menus.onContinue = () => {
-      game.mod.save?.readFromStorage();
-      menus.play();
+      // antes de cargar: si el tutorial se quedó a medias, al reanudarlo vuelve a parar los encargos
       if (game.mod.jobs) game.mod.jobs.autoOffers = true;
       if (game.mod.gang) game.mod.gang.calm = false;
+      save?.readFromStorage();
+      if (save) save.enabled = true;
+      menus.play();
       game.events.emit('toast', { text: `¡Hola otra vez, ${profile.name}!`, color: '#ffd23f', time: 2.5 });
     };
     menus.showMain();
