@@ -47,9 +47,15 @@ function takeE(g: Game): boolean {
   return true;
 }
 
-/** Nombre corto del cliente para las frases ("Loli (siempre en el bar)" → "Loli"). */
+/** Palabras que van delante del nombre ("Doña Puri", "Tío Ramón"): con ellas se cogen dos palabras. */
+const NAME_TITLES = new Set(['Doña', 'Don', 'Tío', 'Tía', 'Sor', 'Chef', 'Capitán', 'Profesor', 'Maese', 'El', 'La', 'Los', 'Las']);
+
+/** Nombre corto del cliente para las frases ("Loli (siempre en el bar)" → "Loli", "Tío Ramón (pescador)" → "Tío Ramón"). */
 function shortName(name: string): string {
-  return name.split(/[\s(«"]/)[0] || name;
+  const base = name.split(/[(«"]/)[0].trim() || name;
+  if (base.length <= 16) return base;
+  const words = base.split(/\s+/);
+  return NAME_TITLES.has(words[0]) && words[1] ? words[0] + ' ' + words[1] : words[0];
 }
 
 /** Frases genéricas del chat (para que no se repita siempre la misma). */
@@ -1052,7 +1058,9 @@ export class Jobs implements System {
         v.key = key;
         const label = TYPE_INFO[j.offer.type].label;
         // paquete caído o robado: se recoge donde esté, no en la tienda
-        const pick = dropped ? `¡Recupera el paquete de ${shortName(j.offer.client.name)}!` : 'Recoger: ' + j.offer.pickupName;
+        // con el nombre del cliente: dos recogidas en el mismo sitio no se confunden
+        const who = shortName(j.offer.client.name);
+        const pick = dropped ? `¡Recupera el paquete de ${who}!` : `${who} · recoger en ${j.offer.pickupName}`;
         v.entry.title = `${label !== 'Normal' ? label + ' · ' : ''}${j.state === 'pickup' ? pick : j.offer.client.name + ' · ' + j.offer.dest.label}`;
         v.marker.icon = j.state === 'pickup' ? '📦' : '🏠';
         v.marker.label = j.state === 'pickup' ? (dropped ? 'Paquete perdido' : j.offer.pickupName) : j.offer.dest.label;
