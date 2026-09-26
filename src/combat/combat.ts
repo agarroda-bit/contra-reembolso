@@ -603,8 +603,14 @@ export class Combat implements System {
         const lv = pr.body!.linvel();
         const sp = Math.hypot(lv.x, lv.y, lv.z);
         if (sp > 5 && npcs) {
-          for (const n of npcs.within(pr.pos, 1.1) as Npc[]) {
-            if (pr.hit.has(n) || !n.alive || n.vehicle || (pr.owner.kind === 'npc' && pr.owner.npc === n)) continue;
+          // choque con el cuerpo entero (de los pies a la cabeza), no solo cerca de los pies
+          const ownerNpc = pr.owner.kind === 'npc' ? pr.owner.npc : null;
+          for (const n of npcs.within(pr.pos, 2.2, nearList)) {
+            if (pr.hit.has(n) || !n.alive || n.vehicle || ownerNpc === n) continue;
+            const dy = pr.pos.y - n.position.y;
+            if (dy < -0.3 || dy > 2 || Math.hypot(pr.pos.x - n.position.x, pr.pos.z - n.position.z) > 0.85) continue;
+            // las cajas de la banda no tumban a los suyos (ni las de la policía a la policía)
+            if (ownerNpc && n.hostile && n.police === ownerNpc.police && n.role !== 'civil') continue;
             pr.hit.add(n);
             n.hurt(WEAPONS.launcher.damage, { cause: 'caja', shooter: pr.owner }, new THREE.Vector3(lv.x, 0, lv.z).normalize(), 7);
             g.mod.audio?.play('wood', { pos: pr.pos });
@@ -614,8 +620,9 @@ export class Combat implements System {
         }
         // el jugador también se lleva cajazos de la banda
         const p = this.player;
-        if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && p.position.distanceTo(pr.pos) < 1.3 && !pr.hit.size) {
-          p.hurt(15, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
+        const pdy = pr.pos.y - p.position.y;
+        if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && !pr.hit.size && pdy > -0.3 && pdy < 2 && Math.hypot(pr.pos.x - p.position.x, pr.pos.z - p.position.z) < 0.9) {
+          p.hurt(12, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
           p.push.set(lv.x * 0.3, 3, lv.z * 0.3);
           pr.hit.add(null as any);
         }
