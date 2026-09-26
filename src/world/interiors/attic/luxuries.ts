@@ -276,11 +276,13 @@ export function buildTV(): TvCtl {
       x.fillRect(px + 8, 200 - hop - 52, 14, 14);
       x.fillStyle = '#111';
       x.fillRect(px + 14, 200 - hop - 48, 6, 6);
+      // subtítulo en dos líneas (en una no cabe)
       x.fillStyle = 'rgba(0,0,0,0.55)';
-      x.fillRect(40, H - 48, W - 80, 36);
+      x.fillRect(40, H - 62, W - 80, 52);
       x.fillStyle = '#fff';
       x.font = 'italic 700 17px system-ui';
-      x.fillText('«La caja de cartón, en libertad, salta para impresionar a la hembra.»', W / 2, H - 30);
+      x.fillText('«La caja de cartón, en libertad, salta', W / 2, H - 47, W - 100);
+      x.fillText('para impresionar a la hembra.»', W / 2, H - 25, W - 100);
       x.font = '900 22px system-ui';
       outlinedText(x, 'LA VIDA SECRETA DEL CARTÓN', W / 2, 26, '#ffffff', '#1b1030', 6);
     } else {
@@ -311,7 +313,7 @@ export function buildTV(): TvCtl {
       icon(180, 150, true);
       icon(300, 175, false);
       icon(350, 140, true);
-      x.font = '900 26px system-ui';
+      x.font = '900 22px system-ui';
       outlinedText(x, 'MAÑANA: 34º Y CHUBASCOS DE PAQUETES', W / 2, 40, '#ffffff', '#1b1030', 7);
       x.font = '800 18px system-ui';
       x.fillStyle = '#1b1030';

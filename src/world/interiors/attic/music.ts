@@ -19,19 +19,22 @@ export class PartyMusic {
   private out: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private ctx: AudioContext | null = null;
+  private isPaused: (() => boolean) | null = null;
   readonly bpm = 118;
 
   get playing() {
     return this.timer !== null;
   }
 
-  start(audio: AudioLike | undefined) {
+  /** isPaused: mientras devuelva true (menús, tienda) no suenan notas nuevas. */
+  start(audio: AudioLike | undefined, isPaused?: () => boolean) {
     if (this.timer !== null || !audio) return;
+    this.isPaused = isPaused ?? null;
     const ctx = audio.ensure?.() ?? audio.ctx;
     if (!ctx || !audio.musicBus) return;
     this.ctx = ctx;
     this.out = ctx.createGain();
-    this.out.gain.value = 0.0001;
+    this.out.gain.setValueAtTime(0.0001, ctx.currentTime);
     this.out.gain.exponentialRampToValueAtTime(0.55, ctx.currentTime + 0.4);
     this.out.connect(audio.musicBus);
     if (!this.noise) {
@@ -62,6 +65,13 @@ export class PartyMusic {
     const ctx = this.ctx;
     if (!ctx || !this.out) return;
     const sixteenth = 60 / this.bpm / 4;
+    // en pausa, silencio; y si el temporizador se ha dormido (pestaña oculta), no se amontonan
+    // todas las notas atrasadas de golpe: se sigue desde ahora
+    if (this.isPaused?.()) {
+      this.next = ctx.currentTime + 0.05;
+      return;
+    }
+    if (this.next < ctx.currentTime - 0.05) this.next = ctx.currentTime + 0.02;
     while (this.next < ctx.currentTime + 0.18) {
       this.note(this.step, this.next);
       this.next += sixteenth;

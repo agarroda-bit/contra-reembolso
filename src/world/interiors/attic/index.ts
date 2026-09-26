@@ -58,7 +58,7 @@ const P = {
   statue: V(17.6, 9),
   paintings: { cuadro1: V(8.0, 17.93, 2.35), cuadro2: V(11.2, 17.93, 2.35), cuadro3: V(14.25, 17.93, 2.35) } as Record<string, THREE.Vector3>,
   garage: [V(18.7, 14.0), V(20.7, 14.0), V(22.7, 14.0), V(18.7, 16.6), V(20.7, 16.6), V(22.7, 16.6)],
-  partySwitch: V(23.85, 11.3, 1.35),
+  partySwitch: V(23.85, 12.0, 1.35), // lejos de la salida (si no, la pista «Salir» lo tapa)
 };
 
 const DREAMS = [
@@ -666,7 +666,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   f.box(0.08, 0.36, 0.8, gold, 9.5, 0.2, 11.0);
   f.cyl(0.12, 0.1, 0.18, 8, '#ff4f81', 8.4, 0.54, 11.0);
   f.box(0.5, 0.06, 0.34, '#1b1030', 9.2, 0.47, 10.9, 0, 0.3, 0);
-  box(8.75, 0.22, 11.0, 0.95, 0.22, 0.48);
+  box(8.75, 0.3, 11.0, 0.95, 0.3, 0.48); // más alto que el escalón automático: no se sube a la mesa
   // plantas en macetas doradas
   for (const [x, z] of [[13.0, 0.7], [6.3, 17.3], [15.6, 11.9], [0.8, 17.2], [23.3, 3.2]]) {
     f.cyl(0.38, 0.28, 0.7, 10, gold, x, 0.35, z);
@@ -771,10 +771,10 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   const jacTxt = texPlane(2.4, 0.6, canvasTexture(256, 64, (g, w, h) => {
     g.clearRect(0, 0, w, h);
     g.fillStyle = '#ffd23f';
-    g.font = '900 30px system-ui';
+    g.font = '900 26px system-ui';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    g.fillText('AQUÍ, UN JACUZZI', w / 2, h / 2);
+    g.fillText('AQUÍ, UN JACUZZI', w / 2, h / 2, w - 12);
   }), false, { transparent: true } as any);
   jacTxt.rotation.x = -Math.PI / 2;
   jacTxt.position.set(0, 0.002, 0);
@@ -960,9 +960,10 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
     party = 24;
     const p = game.mod.player;
     toast(game, '¡FIESTA EN EL ÁTICO! Tú solo, pero con estilo.', '#ff2e88', 2.6);
-    music.start(game.mod.audio);
+    music.start(game.mod.audio, () => game.paused);
     game.mod.audio?.play('cheer', { volume: 0.5 });
-    if (p) seats.sit(p.position.clone(), p.heading, p.position.clone(), { pose: 'dance', hint: 'E o WASD — Dejar de bailar', onStand: () => stopParty() });
+    // bailas mirando al salón (de cara a la cámara, que se queda donde estaba)
+    if (p) seats.sit(p.position.clone(), -Math.PI / 2, p.position.clone(), { pose: 'dance', hint: 'E o WASD — Dejar de bailar', onStand: () => stopParty() });
   };
   const stopParty = () => {
     if (party <= 0 && !music.playing) return;
@@ -972,7 +973,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   };
   const spots: Spot[] = [
     { pos: P3(P.panel), r: 1.7, text: 'Decorar el ático (tienda de lujos)', run: () => attic.openDecor() },
-    { pos: P3(P.bed), r: 3.05, text: 'Dormir hasta mañana (y guardar)', run: () => attic.sleep() },
+    { pos: P3(P.bed), r: 3.4, text: 'Dormir hasta mañana (y guardar)', run: () => attic.sleep() },
     {
       pos: P3(P.fridge), r: 1.6, text: 'Abrir la nevera',
       run: () => {
@@ -1010,7 +1011,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       },
     },
     {
-      pos: P3(P.jacuzzi), r: 2.3, on: () => attic.has('jacuzzi'), text: 'Meterse en el jacuzzi',
+      pos: P3(P.jacuzzi), r: 2.9, on: () => attic.has('jacuzzi'), text: 'Meterse en el jacuzzi',
       run: () => {
         const p = game.mod.player;
         seats.sit(toWorld(V(P.jacuzzi.x + 0.75, P.jacuzzi.z, -0.3)), -Math.PI / 2, toWorld(V(P.jacuzzi.x + 0.3, P.jacuzzi.z - 2.45)), { hint: 'E o WASD — Salir del jacuzzi' });

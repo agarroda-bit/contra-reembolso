@@ -244,9 +244,9 @@ function boardTexture(): THREE.CanvasTexture {
       g.fill();
       g.fillStyle = '#1b1030';
       g.font = '900 30px system-ui, sans-serif';
-      g.fillText(title, 0, -28);
+      g.fillText(title, 0, -28, 222);
       g.font = "700 25px 'Comic Sans MS', 'Chalkboard SE', system-ui, sans-serif";
-      body.split('\n').forEach((l, k) => g.fillText(l, 0, 12 + k * 32));
+      body.split('\n').forEach((l, k) => g.fillText(l, 0, 12 + k * 32, 222));
       g.restore();
     });
   });
@@ -267,7 +267,7 @@ function signTexture(level: number): THREE.CanvasTexture {
       g.save();
       g.translate(w / 2, h / 2 + 6);
       g.rotate(-0.03);
-      g.fillText('CONTRA REMBOLSO', 0, 0);
+      g.fillText('CONTRA REMBOLSO', 0, 0, w - 80);
       g.restore();
       g.strokeStyle = '#e63946';
       g.lineWidth = 8;
@@ -285,7 +285,7 @@ function signTexture(level: number): THREE.CanvasTexture {
       g.fillStyle = '#1b1030';
       g.fillRect(0, h - 26, w, 26);
       g.font = '900 104px system-ui, sans-serif';
-      g.fillText('CONTRA REEMBOLSO', w / 2, h / 2 - 8);
+      g.fillText('CONTRA REEMBOLSO', w / 2, h / 2 - 8, w - 70);
       g.fillStyle = '#ffd23f';
       g.font = '800 20px system-ui';
       g.fillText('PAQUETERÍA · PAGAS CUANDO LLEGA (SI LLEGA)', w / 2, h - 13);
@@ -317,7 +317,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     only12: new THREE.Group(),
     from2: new THREE.Group(),
     from3: new THREE.Group(),
-    upTo2: new THREE.Group(),
+    only1: new THREE.Group(),
   };
   for (const g of Object.values(lv)) root.add(g);
   const lvColliders: { min: number; max: number; c: { setEnabled(on: boolean): void } }[] = [];
@@ -349,7 +349,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
   mkFloor(marble, lv.from3, true);
 
   // ── paredes: la pared sur tiene puerta de cristal y ventanas altas ──
-  const walls = (color: string, stripe: string | null, base: string, dirty: boolean): THREE.Mesh => {
+  const walls = (color: string, stripe: string | null, base: string, dirty: boolean, crown: string): THREE.Object3D => {
     const b = new GeoBuilder();
     b.box(W + 0.6, H, 0.3, color, W / 2, H / 2, -0.15); // norte
     b.box(0.3, H, D, color, -0.15, H / 2, D / 2); // oeste
@@ -384,10 +384,19 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
         b.cyl(0.5, 0.5, 0.025, 10, '#7d6c4c', bk.x, H - 0.02, bk.z);
       }
     }
-    return meshOf(b, lam, true, true);
+    const g = new THREE.Group();
+    g.add(meshOf(b, lam, true, true));
+    // moldura bajo el techo: sin recibir sombra, tapa el borde dentado de la sombra del techo
+    const m = new GeoBuilder();
+    m.box(W, 0.3, 0.07, crown, W / 2, H - 0.15, 0.035);
+    m.box(W, 0.3, 0.07, crown, W / 2, H - 0.15, D - 0.035);
+    m.box(0.07, 0.3, D, crown, 0.035, H - 0.15, D / 2);
+    m.box(0.07, 0.3, D, crown, W - 0.035, H - 0.15, D / 2);
+    g.add(meshOf(m, lam, false, false));
+    return g;
   };
-  lv.only0.add(walls('#d9cdb2', null, '#8a7a5a', true));
-  lv.from1.add(walls('#fff3d6', '#ffd23f', '#1b1030', false));
+  lv.only0.add(walls('#d9cdb2', null, '#8a7a5a', true, '#c9bc9c'));
+  lv.from1.add(walls('#fff3d6', '#ffd23f', '#1b1030', false, '#fffaf0'));
   // techos (con algo de luz propia para que no salgan marrones)
   const ceilGeo = new THREE.BoxGeometry(W + 0.6, 0.3, D + 0.6);
   const ceil0 = new THREE.MeshLambertMaterial({ color: '#d8d0bc', emissive: '#6e6552', emissiveIntensity: 1 });
@@ -480,12 +489,12 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
 
   // ── Cartel CONTRA REEMBOLSO (cartón / lona / neón) ──
   const s0 = texPlane(4.2, 0.82, signTexture(0));
-  s0.position.set(10, 3.5, 0.05);
+  s0.position.set(10, 3.5, 0.1); // por delante de la moldura
   s0.rotation.z = 0.035;
   lv.only0.add(s0);
   const s1 = texPlane(4.4, 0.86, signTexture(1));
-  s1.position.set(10, 3.5, 0.05);
-  lv.only12.add(s1);
+  s1.position.set(10, 3.5, 0.1);
+  lv.only1.add(s1); // en el nivel 2 lo sustituye el neón
   const neonBack = new GeoBuilder();
   neonBack.box(6.8, 0.98, 0.08, '#1b1030', 10, 3.5, 0.05);
   lv.from2.add(meshOf(neonBack, lam, false, false));
@@ -566,13 +575,21 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     for (const sx of [-1, 1]) b.box(0.04, 0.74, 0.9, '#8a8f99', x + sx * 0.95, 0.37, z, 0, 0, sx * 0.3);
     b.box(0.5, 0.02, 0.35, '#ffffff', x - 0.3, 0.78, z, 0, 0.3, 0);
     b.cyl(0.05, 0.04, 0.12, 8, '#ffffff', x + 0.6, 0.83, z);
-    // silla de plástico
-    const cz = P.chair.z;
+    lv.only0.add(meshOf(b, lam, true, true));
+  }
+  // silla de plástico (aparte: si compras el sillón de jefe, desaparece)
+  const plasticChair = (() => {
+    const b = new GeoBuilder();
+    const x = P.chair.x, cz = P.chair.z;
     b.box(0.46, 0.05, 0.44, '#f2f2ea', x, 0.45, cz);
     b.box(0.46, 0.45, 0.05, '#f2f2ea', x, 0.7, cz - 0.22, 0.1, 0, 0);
     for (const [dx, dz] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) b.box(0.035, 0.45, 0.035, '#f2f2ea', x + dx, 0.22, cz + dz);
-    lv.only0.add(meshOf(b, lam, true, true));
-  }
+    const m = meshOf(b, lam, true, true);
+    lv.only0.add(m);
+    return m;
+  })();
+  // siempre hay una silla detrás de la mesa (de plástico, de oficina o el sillón): colisor fijo
+  box(P.chair.x, 0.5, P.chair.z - 0.05, 0.36, 0.5, 0.36);
   {
     const b = new GeoBuilder();
     const { x, z } = P.desk;
@@ -630,6 +647,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       b.add(new THREE.TorusGeometry(0.2, 0.012, 4, 12, Math.PI), '#8a8f99', bk.x, 0.36, bk.z, 0, 0, 0);
     });
     lv.only0.add(meshOf(b, lam, true, true));
+    for (const bk of P.buckets) lvColliders.push({ min: 0, max: 0, c: box(bk.x, 0.3, bk.z, 0.24, 0.3, 0.24) });
     const dropGeo = new THREE.SphereGeometry(0.035, 6, 5);
     const dropMat = new THREE.MeshBasicMaterial({ color: '#9fdcff' });
     P.buckets.forEach((bk, i) => {
@@ -859,6 +877,9 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     tower(18.9, 13.2, 3);
     tower(1.1, 7.6, 2);
     tower(7.8, 0.7, 4);
+    for (const [x, z, h] of [[18.9, 13.2, 1.35], [1.1, 7.6, 0.9], [7.8, 0.7, 1.8], [1.25, 5.15, 0.9], [2.2, 6.4, 0.6]] as [number, number, number][]) {
+      lvColliders.push({ min: 0, max: 0, c: box(x, h / 2, z, 0.34, h / 2, 0.32) });
+    }
     // silla rota tirada
     b.box(0.44, 0.05, 0.42, '#f2f2ea', 7.4, 0.24, 12.2, Math.PI / 2 - 0.2, 0.4, 0);
     b.box(0.44, 0.44, 0.05, '#f2f2ea', 7.6, 0.03, 12.0, 0, 0.4, 0);
@@ -970,6 +991,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
   toni.root.position.set(P.employee.x, 0, P.employee.z);
   toni.root.rotation.y = 0;
   root.add(toni.root);
+  box(P.employee.x, 0.9, P.employee.z, 0.3, 0.9, 0.3); // no se la atraviesa
   const toniTarget = { position: toWorld(P.employee) };
 
   // ── Tus repartidores (company.staff), de charla por la oficina ──
@@ -980,6 +1002,12 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     return lvl === 0 ? { x: 3.25, z: 11.4, heading: Math.PI / 2, pose: 'sit' } : { x: 3.4, z: 1.3, heading: Math.PI, pose: 'normal' };
   };
   const staffChars: { ch: Character; id: number; name: string; slot: StaffSlot; target: { position: THREE.Vector3 } }[] = [];
+  // un colisor por repartidor (se mueve a su sitio y se apaga si no hay nadie)
+  const staffCols = [0, 1, 2].map(() => {
+    const c = phys.addStaticCylinder(O.x, O.y + 0.9, O.z, 0.9, 0.3, G.STATIC);
+    c.setEnabled(false);
+    return c;
+  });
   let staffKey = '';
   const refreshStaff = () => {
     const c = game.mod.company;
@@ -993,6 +1021,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       s.ch.dispose();
     }
     staffChars.length = 0;
+    for (const c of staffCols) c.setEnabled(false);
     list.forEach((e, i) => {
       const ch = makeCharacter(randomLook(new Rng('repartidor-' + e.id), 'repartidor'));
       const slot = staffSlot(i, st.level, st.lux);
@@ -1000,6 +1029,11 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       ch.root.rotation.y = slot.heading;
       root.add(ch.root);
       staffChars.push({ ch, id: e.id, name: e.name, slot, target: { position: toWorld(V(slot.x, slot.z)) } });
+      // el que está sentado en el sofá viejo ya tiene el colisor del sofá
+      if (slot.pose !== 'sit') {
+        staffCols[i].setTranslation({ x: O.x + slot.x, y: O.y + 0.9, z: O.z + slot.z });
+        staffCols[i].setEnabled(true);
+      }
     });
   };
 
@@ -1155,7 +1189,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
     lv.only12.visible = level === 1 || level === 2;
     lv.from2.visible = level >= 2;
     lv.from3.visible = level >= 3;
-    lv.upTo2.visible = level <= 2;
+    lv.only1.visible = level === 1;
     for (const c of lvColliders) c.c.setEnabled(level >= c.min && level <= c.max);
     if (up) {
       for (let k = 0; k < 5; k++) game.mod.particles?.emit('confetti', toWorld(V(3 + k * 3.5, 6 + (k % 2) * 3, H - 0.5)), { count: 20, speed: 0.6 });
@@ -1172,6 +1206,7 @@ function buildOffice(ctx: InteriorContext): OfficeScene {
       else owned.delete(id);
     }
     officeChair.visible = level >= 1 && !st.lux.has('sillon');
+    plasticChair.visible = !st.lux.has('sillon');
     // luces según el nivel: bombilla amarilla que parpadea / fluorescente / dorado
     const col = level === 0 ? '#ffd28a' : level === 3 ? '#ffe2b0' : '#fff4e6';
     L1.color.set(col);
