@@ -33,6 +33,9 @@ const ENGINE_K = 1.55;
 const AIR_GRAVITY = 0.62;
 /** Contra qué chocan los rayos de las ruedas. */
 const WHEEL_GROUPS = groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE);
+/** Amortiguamiento normal del chasis (en el mar sube a 3: se frena y se hunde despacio). */
+const LIN_DAMPING = 0.08;
+const ANG_DAMPING = 0.9;
 
 export class Vehicle {
   readonly id = nextId++;
@@ -101,8 +104,8 @@ export class Vehicle {
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(pos.x, spawnY, pos.z)
         .setRotation({ x: tmpQ.x, y: tmpQ.y, z: tmpQ.z, w: tmpQ.w })
-        .setLinearDamping(0.08)
-        .setAngularDamping(0.9)
+        .setLinearDamping(LIN_DAMPING)
+        .setAngularDamping(ANG_DAMPING)
         .setCanSleep(true)
         .setCcdEnabled(s.maxSpeed > 30),
     );
@@ -485,6 +488,15 @@ export class Vehicle {
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.prevVel.set(0, 0, 0);
+    // Sacado del mar (rescate de un perseguidor, el garaje que te lo trae...): vuelve a ser un vehículo
+    // normal, sin el frenado del agua. Si se deja otra vez en el agua, el siguiente paso lo vuelve a marcar.
+    if (this.sinking) {
+      this.sinking = false;
+      this.body.setLinearDamping(LIN_DAMPING);
+      this.body.setAngularDamping(ANG_DAMPING);
+    }
+    this.flipTimer = 0;
+    this.beachedTimer = 0;
   }
 
   syncVisual(dt: number) {

@@ -49,6 +49,8 @@ export interface CarBrain {
   dodge?: number;
   /** Cuenta atrás para volver a mirar si el objetivo queda tapado por un edificio. */
   lookT?: number;
+  /** Segundos que lleva en el mar (persecución): pasado un momento, se recoloca en cuanto no se vea. */
+  sunk?: number;
 }
 
 const tmpV = new THREE.Vector3();
@@ -358,8 +360,9 @@ export class Traffic implements System {
   }
 
   /**
-   * Un perseguidor que no hay manera de sacar (metido en una plaza entre bolardos, en un rincón...):
-   * si nadie lo ve, se recoloca en el carril más cercano, mirando hacia su objetivo.
+   * Un perseguidor que no hay manera de sacar (metido en una plaza entre bolardos, en un rincón, en el
+   * mar...): si nadie lo ve, se recoloca en el carril más cercano, mirando hacia su objetivo. place() le
+   * quita lo de hundido (y el frenado del agua).
    */
   private rescue(v: Vehicle, brain: CarBrain, pos: THREE.Vector3): boolean {
     if (this.inView(pos, 4) || pos.distanceTo(this.game.camera.position) < 30) return false;
@@ -380,6 +383,7 @@ export class Traffic implements System {
     brain.reverse = 0;
     brain.stuck = 0;
     brain.blocked = 0;
+    brain.sunk = 0;
     return true;
   }
 
@@ -416,6 +420,16 @@ export class Traffic implements System {
     const pos = v.getPosition(tmpV);
     const speed = v.speed;
     const absSpeed = Math.abs(speed);
+
+    // Perseguidor (policía, banda, rival de carrera) en el mar: de ahí no sale solo, así que a los 3 s
+    // se recoloca en su calle en cuanto no se vea (sin esperar a chocar cinco veces contra el fondo).
+    if (v.sinking && brain.mode === 'chase' && brain.chaseTarget) {
+      brain.sunk = (brain.sunk ?? 0) + dt;
+      if (brain.sunk > 3) {
+        brain.sunk = 2; // si ahora se ve, lo vuelve a intentar dentro de 1 s
+        if (this.rescue(v, brain, pos)) return;
+      }
+    }
 
     let target: THREE.Vector3;
     let wantSpeed = brain.cruise;
