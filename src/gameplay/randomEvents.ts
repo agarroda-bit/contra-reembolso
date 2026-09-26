@@ -4,16 +4,46 @@ import type { Game, System } from '../core/game';
 import type { Npc } from '../actors/npc';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { CarBrain } from '../ai/traffic';
+import type { Roads } from '../ai/roads';
 import { randomLookFor } from '../actors/looks';
 import { Rng, fx as rnd } from '../core/rng';
+
+/** Un tramo de la ruta de la carrera: una calle recorrida en un sentido. */
+type Leg = { edge: number; dir: 1 | -1 };
 
 type Ev =
   | { kind: 'thief'; thief: Npc; victim: Npc; bag: boolean; t: number }
   | { kind: 'truck'; truck: Vehicle; drops: number; t: number; next: number }
-  | { kind: 'race'; rival: Vehicle; checkpoints: THREE.Vector3[]; idx: number; rivalIdx: number; t: number; started: boolean; accepted: boolean };
+  | {
+      kind: 'race';
+      rival: Vehicle;
+      checkpoints: THREE.Vector3[];
+      idx: number;
+      rivalIdx: number;
+      t: number;
+      started: boolean;
+      accepted: boolean;
+      /** Calles que recorre el rival, en orden (sin callejones). */
+      legs: Leg[];
+      /** Tramo en el que acaba cada punto de control. */
+      cpLeg: number[];
+      /** Tramo por el que va el rival. */
+      leg: number;
+      /** Velocidad de crucero del rival cuando arranca. */
+      cruise: number;
+      /** Segundos sin avanzar (para recolocarlo si se atasca). */
+      stuckT: number;
+      anchor: THREE.Vector3;
+    };
 
 const rng = new Rng('eventos');
 const tmpV = new THREE.Vector3();
+const tmpP = new THREE.Vector3();
+/** Metros de ruta de una carrera y distancia mínima entre puntos de control. */
+const RACE_LEN = 650;
+const RACE_CP_GAP = 110;
+/** Segundos sin avanzar para recolocar al rival en su calle. */
+const RACE_STUCK = 4.5;
 
 export class RandomEvents implements System {
   name = 'randomEvents';
@@ -83,29 +113,79 @@ export class RandomEvents implements System {
       g.mod.messages?.receive('radio-macuto', 'Radio Macuto', '📻', 'Aviso: un furgón de reparto va perdiendo paquetes por el barrio. Quien los encuentre, que se los quede. O que los devuelva. Tú sabrás.');
       this.ev = { kind: 'truck', truck, drops: 0, t: 0, next: 2 };
     } else {
-      // carrera: rival deportivo al lado
+      // carrera: rival deportivo en la calle más cercana, en su carril y mirando hacia la ruta
       const cur = g.mod.vehicles.current as Vehicle | null;
       if (!cur) return;
-      const ne = roads.nearestEdge(cur.getPosition(tmpV), true);
+      const cpos = cur.getPosition(new THREE.Vector3());
+      const ne = roads.nearestEdge(cpos, true);
       if (!ne) return;
       const e = roads.g.edges[ne.edge];
-      const pos = roads.lanePoint(ne.edge, 1, ne.t, -e.width / 4, new THREE.Vector3());
-      if (g.mod.vehicles.nearest(pos, 4)) return;
-      const rival = g.mod.vehicles.spawn('sports', pos, roads.heading(ne.edge, 1), '#e63946');
+      // arranca hacia donde mira el jugador; si por ahí la ruta sale muy corta (fondo de saco), al revés
+      const ahead: 1 | -1 = Math.cos(cur.heading - roads.heading(ne.edge, 1)) >= 0 ? 1 : -1;
+      const tOf = (d: 1 | -1) => (d === 1 ? ne.t : 1 - ne.t);
+      let dir = ahead;
+      let legs = this.raceRoute(ne.edge, dir, ne.t);
+      if (this.routeLen(legs, tOf(dir)) < 300) {
+        const bdir = -ahead as 1 | -1;
+        const back = this.raceRoute(ne.edge, bdir, ne.t);
+        if (this.routeLen(back, tOf(bdir)) > this.routeLen(legs, tOf(dir))) {
+          dir = bdir;
+          legs = back;
+        }
+      }
+      const tDir = tOf(dir);
+      // puntos de control: al final de un tramo cada ~110 m de ruta (máximo 5); el último, la meta
+      const cps: THREE.Vector3[] = [];
+      const cpLeg: number[] = [];
+      let acc = roads.length(ne.edge) * (1 - tDir);
+      for (let i = 0; i < legs.length; i++) {
+        if (i > 0) acc += roads.length(legs[i].edge);
+        const last = i === legs.length - 1;
+        if (acc < RACE_CP_GAP && !last) continue;
+        const end = this.legEnd(legs[i]);
+        // una meta pegada al punto anterior: mejor que la meta sea esta y quitar el anterior
+        if (last && acc < 50 && cps.length) {
+          cps.pop();
+          cpLeg.pop();
+        }
+        cps.push(end.clone());
+        cpLeg.push(i);
+        acc = 0;
+        if (cps.length >= 5) {
+          legs.length = i + 1;
+          break;
+        }
+      }
+      if (cps.length < 2) return;
+      // sitio de salida: en su carril, al lado del jugador si cabe o un poco por delante/detrás (nunca encima)
+      const len = roads.length(ne.edge) || 1;
+      let pos: THREE.Vector3 | null = null;
+      let tStart = tDir;
+      for (const dm of [0, 10, -10, 18, -18, 28]) {
+        const tt = tDir + dm / len;
+        if (tt < 0.03 || tt > 0.97) continue;
+        const cand = roads.lanePoint(ne.edge, dir, tt, e.width / 4, new THREE.Vector3());
+        if (cand.distanceTo(cpos) < 5.5 || g.mod.vehicles.nearest(cand, 4)) continue;
+        pos = cand;
+        tStart = tt;
+        break;
+      }
+      if (!pos) return;
+      const rival = g.mod.vehicles.spawn('sports', pos, roads.heading(ne.edge, dir), '#e63946');
       rival.transient = false;
       const driver = g.mod.npcs.spawn('driver', randomLookFor(rng, 'fiestero'), pos);
       driver.enterVehicle(rival);
-      // ruta: 4 puntos a lo largo de calles
-      const far = roads.g.nodes[Math.floor(rnd.next() * roads.g.nodes.length)].pos;
-      let route = roads.route(pos, far);
-      if (route.length < 4) route = roads.route(pos, roads.g.nodes[Math.floor(rnd.next() * roads.g.nodes.length)].pos);
-      const cps: THREE.Vector3[] = (route as THREE.Vector3[]).filter((_: THREE.Vector3, i: number) => i % 2 === 1).slice(0, 5);
-      if (cps.length < 2) {
-        g.mod.vehicles.remove(rival);
-        return;
-      }
-      (rival as any).brain = { edge: ne.edge, dir: 1, t: ne.t, next: null, cruise: 30, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: cps[0].clone() } as CarBrain;
-      this.ev = { kind: 'race', rival, checkpoints: cps, idx: 0, rivalIdx: 0, t: 0, started: false, accepted: false };
+      // conduce como el tráfico (carril, esquinas, frenar ante obstáculos) pero siguiendo la ruta de la carrera;
+      // va algo más despacio que el vehículo del jugador a tope, para que se le pueda ganar conduciendo bien
+      const cruise = THREE.MathUtils.clamp(cur.spec.maxSpeed * 0.6, 13, 20);
+      (rival as any).brain = {
+        edge: ne.edge, dir, t: tStart, next: legs[1] ? { ...legs[1] } : null,
+        cruise: 0, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'lane',
+      } as CarBrain;
+      this.ev = {
+        kind: 'race', rival, checkpoints: cps, idx: 0, rivalIdx: 0, t: 0, started: false, accepted: false,
+        legs, cpLeg, leg: 0, cruise, stuckT: 0, anchor: pos.clone(),
+      };
       g.mod.bubbles?.say(driver, '¿Una carrerita, repartidor? ¡Al que llegue primero, 500 pavos!', 4);
       g.mod.messages?.receive('carrera', 'El Niño Nitro', '🏎️', '¿Te atreves? Carrera hasta el último punto. Si ganas, 500 €. Si pierdes, me das 200.', [
         { label: '¡Vamos!', style: 'si', run: () => this.acceptRace(), valid: () => this.ev?.kind === 'race' && !this.ev.accepted },
@@ -114,11 +194,102 @@ export class RandomEvents implements System {
     }
   }
 
+  /**
+   * Ruta de la carrera desde una calle en un sentido: se encadenan calles (sin callejones, que son
+   * estrechos) sin volver a pasar por un cruce si se puede, hasta unos 650 m.
+   */
+  private raceRoute(edge: number, dir: 1 | -1, t: number): Leg[] {
+    const R: Roads = this.game.mod.traffic.roads;
+    const G = R.g;
+    const legs: Leg[] = [{ edge, dir }];
+    const e0 = G.edges[edge];
+    const visited = new Set<number>([e0.a, e0.b]);
+    let total = R.length(edge) * (dir === 1 ? 1 - t : t);
+    while (total < RACE_LEN && legs.length < 16) {
+      const last = legs[legs.length - 1];
+      const le = G.edges[last.edge];
+      const node = last.dir === 1 ? le.b : le.a;
+      const opts = (G.adjacency[node] ?? []).filter((id) => id !== last.edge && !G.edges[id].alley);
+      const fresh = opts.filter((id) => !visited.has(G.edges[id].a === node ? G.edges[id].b : G.edges[id].a));
+      const from = fresh.length ? fresh : opts;
+      if (!from.length) break;
+      const id = from[Math.floor(rnd.next() * from.length)];
+      const ne = G.edges[id];
+      const ndir: 1 | -1 = ne.a === node ? 1 : -1;
+      visited.add(ndir === 1 ? ne.b : ne.a);
+      legs.push({ edge: id, dir: ndir });
+      total += R.length(id);
+    }
+    return legs;
+  }
+
+  /** Metros de una ruta (del primer tramo solo lo que queda desde la fracción t0). */
+  private routeLen(legs: Leg[], t0: number): number {
+    const R: Roads = this.game.mod.traffic.roads;
+    let d = R.length(legs[0].edge) * (1 - t0);
+    for (let i = 1; i < legs.length; i++) d += R.length(legs[i].edge);
+    return d;
+  }
+
+  /** Cruce en el que acaba un tramo. */
+  private legEnd(l: Leg): THREE.Vector3 {
+    const R: Roads = this.game.mod.traffic.roads;
+    const e = R.g.edges[l.edge];
+    return R.g.nodes[l.dir === 1 ? e.b : e.a].pos;
+  }
+
+  /**
+   * El rival lleva un rato sin avanzar (empotrado, encajado contra el jugador…): se le recoloca unos
+   * metros más adelante en su carril de la ruta, mirando hacia donde tiene que ir.
+   */
+  private unstickRival(ev: Extract<Ev, { kind: 'race' }>) {
+    const R: Roads | undefined = this.game.mod.traffic?.roads;
+    const rv = ev.rival;
+    const rb = (rv as any).brain as CarBrain | undefined;
+    if (!R || !rb) return;
+    rv.getPosition(tmpV);
+    let k = ev.leg;
+    let leg = ev.legs[k];
+    let [a, b] = R.ends(R.g.edges[leg.edge], leg.dir);
+    let L = R.length(leg.edge) || 1;
+    let tt = ((tmpV.x - a.x) * (b.x - a.x) + (tmpV.z - a.z) * (b.z - a.z)) / (L * L) + 8 / L;
+    const vm = this.game.mod.vehicles;
+    for (let tries = 0; tries < 6; tries++) {
+      if (tt > 0.92 && ev.legs[k + 1]) {
+        k++;
+        leg = ev.legs[k];
+        [a, b] = R.ends(R.g.edges[leg.edge], leg.dir);
+        L = R.length(leg.edge) || 1;
+        tt = Math.min(0.5, 6 / L);
+      }
+      tt = THREE.MathUtils.clamp(tt, 0.05, 0.95);
+      R.lanePoint(leg.edge, leg.dir, tt, R.g.edges[leg.edge].width / 4, tmpP);
+      // que no caiga encima de otro coche ni del jugador
+      if (!vm.nearest(tmpP, 3.5, (x: Vehicle) => x !== rv) && tmpP.distanceTo(this.game.mod.player.position) > 3.5) break;
+      tt += 8 / L;
+    }
+    rv.place(tmpP, R.heading(leg.edge, leg.dir));
+    rb.edge = leg.edge;
+    rb.dir = leg.dir;
+    rb.t = tt;
+    rb.next = ev.legs[k + 1] ? { ...ev.legs[k + 1] } : null;
+    rb.reverse = rb.stuck = rb.blocked = 0;
+    rb.bypass = rb.jam = rb.tries = 0;
+    ev.leg = k;
+    ev.anchor.copy(tmpP);
+    ev.stuckT = 0;
+    this.game.mod.particles?.emit('smoke', tmpP, { count: 6 });
+  }
+
   private acceptRace() {
     const ev = this.ev;
     if (!ev || ev.kind !== 'race') return;
     ev.accepted = true;
     ev.t = 0;
+    ev.stuckT = 0;
+    ev.rival.getPosition(ev.anchor);
+    const rb = (ev.rival as any).brain as CarBrain | undefined;
+    if (rb) rb.cruise = ev.cruise;
     this.game.events.emit('toast', { text: '🏁 3… 2… 1… ¡YA!', color: '#ffd23f', time: 2 });
     this.game.mod.audio?.play('bell');
   }
@@ -203,22 +374,36 @@ export class RandomEvents implements System {
       const cur = g.mod.vehicles.current as Vehicle | null;
       const cp = ev.checkpoints;
       if (ev.idx < cp.length) g.hud.markers.push({ x: cp[ev.idx].x, z: cp[ev.idx].z, icon: '🏁', color: '#ffd23f', event: true } as any);
+      const rv = ev.rival;
+      const rb = (rv as any).brain as CarBrain | undefined;
       if (!ev.accepted) {
-        (ev.rival as any).brain.cruise = 0;
-        ev.rival.controls.throttle = 0;
-        ev.rival.controls.handbrake = true;
+        if (rb) rb.cruise = 0;
+        rv.controls.throttle = 0;
+        rv.controls.handbrake = true;
         if (ev.t > 25) this.end();
         return;
       }
-      // rival
-      const rb = (ev.rival as any).brain as CarBrain | undefined;
-      if (rb && ev.rival.driver) {
-        rb.mode = 'chase';
-        if (ev.rivalIdx < cp.length) {
-          rb.chaseTarget!.copy(cp[ev.rivalIdx]);
-          if (ev.rival.getPosition(tmpV).distanceTo(cp[ev.rivalIdx]) < 12) ev.rivalIdx++;
+      // rival: conduce por su carril y en cada cruce sigue la ruta de la carrera
+      if (rb && rv.driver?.kind === 'npc' && !rv.destroyed) {
+        rb.mode = 'lane';
+        const legs = ev.legs;
+        for (let k = ev.leg; k < legs.length; k++) {
+          if (legs[k].edge === rb.edge && legs[k].dir === rb.dir) {
+            ev.leg = k;
+            break;
+          }
         }
-        g.mod.traffic?.drive(ev.rival, dt);
+        const nx = legs[ev.leg + 1];
+        if (nx && (!rb.next || rb.next.edge !== nx.edge || rb.next.dir !== nx.dir)) rb.next = { edge: nx.edge, dir: nx.dir };
+        // puntos superados: los de tramos ya pasados, o el del tramo actual al llegar a él
+        const rp = rv.getPosition(tmpV);
+        while (ev.rivalIdx < cp.length && (ev.cpLeg[ev.rivalIdx] < ev.leg || (ev.cpLeg[ev.rivalIdx] === ev.leg && rp.distanceTo(cp[ev.rivalIdx]) < 12))) ev.rivalIdx++;
+        // atascado (contra una pared, encajado con el jugador…): tras unos segundos se le recoloca en su calle
+        if (rp.distanceTo(ev.anchor) > 4) {
+          ev.anchor.copy(rp);
+          ev.stuckT = 0;
+        } else if ((ev.stuckT += dt) > RACE_STUCK) this.unstickRival(ev);
+        g.mod.traffic?.drive(rv, dt);
       }
       // jugador
       if (cur && ev.idx < cp.length && cur.getPosition(tmpV).distanceTo(cp[ev.idx]) < 14) {
