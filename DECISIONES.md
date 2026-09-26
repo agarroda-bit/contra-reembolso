@@ -21,3 +21,12 @@ Lo que no estaba definido en el encargo y he decidido yo.
 - **Encargos:** si se acaba el tiempo, aún puedes entregar con retraso (cobras la mitad) durante 60 s; luego el cliente cancela.
 - **Paquetes FRÁGIL:** cualquier roce los daña mucho. **SOSPECHOSO:** paga el triple y hay emboscada cerca del destino. **PESADO:** solo en la furgoneta o el furgón. **URGENTE:** mitad de tiempo.
 - **Botín robado:** solo si te matan Los Devueltos (o te matan con ellos cerca). Tienes un día de juego (20 min) para asaltar la guarida; la caja fuerte solo se abre sin guardias cerca.
+- **Armas antes de la armería:** como la armería llega en la fase 5, desde la fase 3 empiezas con una pistola («el jefe te la da por si acaso») y hay un arma tirada en cada barrio (Puerto: lanzapaquetes, Centro: cinta de embalar, Viejo: subfusil, Polígono: escopeta, Colina: fusil), más botiquines y un chaleco; reaparecen a los 3 minutos. Desde la fase 6 también el paquete FRÁGIL (desguace) y la pistola de sellos (un bar).
+- **Dificultad:** pensada para jugar tranquilo. Los enemigos hacen un 30-35 % del daño de tu misma arma, fallan más de lejos y descansan entre ráfagas; la vida se recupera sola hasta 60 si pasas 8 s sin recibir daño.
+- **Daño de los vehículos:** un choque frontal a 90 km/h quita ~25 % de la vida a un coche; la furgoneta aguanta mucho.
+- **Oficina:** hasta la fase 5 la empresa se gestiona desde la puerta; desde la fase 6 se entra dentro y el tablón de la pared abre la gestión y la historia.
+- **Interiores** (club, ático, oficina): son escenarios aparte a los que se entra por la puerta con un fundido; se precargan en segundo plano a los pocos segundos de empezar para que no haya pantalla negra.
+- **Menú:** mientras estás en el menú no llegan encargos ni persecuciones.
+- **Empiezas con 0 €** en partida nueva; el jefe te da 100 € al acabar el tutorial.
+- **Fases en la web:** el juego publicado activa las fases terminadas. Con `?fase=N` en el enlace se puede probar otra fase (útil para pruebas).
+- **Pruebas con SwiftShader:** Chromium sin GPU va a 1-2 fps con la isla, así que las pruebas usan `?calidad=baja` y esperan a que pasen las cosas en vez de esperar un tiempo fijo. Los fps de verdad se miden con la GPU del Mac (`captura.mjs --gpu`).
