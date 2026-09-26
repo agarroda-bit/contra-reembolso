@@ -933,13 +933,16 @@ export class Jobs implements System {
         this.hudViews.set(j, v);
       }
       // el título solo se rehace si cambia el estado o el destino
-      const key = j.state + j.offer.dest.id;
+      const dropped = j.state === 'pickup' && !!(j as any).dropPos;
+      const key = j.state + j.offer.dest.id + (dropped ? '*' : '');
       if (v.key !== key) {
         v.key = key;
         const label = TYPE_INFO[j.offer.type].label;
-        v.entry.title = `${label !== 'Normal' ? label + ' · ' : ''}${j.state === 'pickup' ? 'Recoger: ' + j.offer.pickupName : j.offer.client.name + ' · ' + j.offer.dest.label}`;
+        // paquete caído o robado: se recoge donde esté, no en la tienda
+        const pick = dropped ? `¡Recupera el paquete de ${shortName(j.offer.client.name)}!` : 'Recoger: ' + j.offer.pickupName;
+        v.entry.title = `${label !== 'Normal' ? label + ' · ' : ''}${j.state === 'pickup' ? pick : j.offer.client.name + ' · ' + j.offer.dest.label}`;
         v.marker.icon = j.state === 'pickup' ? '📦' : '🏠';
-        v.marker.label = j.state === 'pickup' ? j.offer.pickupName : j.offer.dest.label;
+        v.marker.label = j.state === 'pickup' ? (dropped ? 'Paquete perdido' : j.offer.pickupName) : j.offer.dest.label;
       }
       v.entry.timeLeft = j.timeLeft;
       v.entry.integrity = j.state === 'carry' ? j.integrity : null;

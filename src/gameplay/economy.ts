@@ -2,10 +2,11 @@
 import type { Game, System } from '../core/game';
 
 // Puntos de fama para cada nivel (nivel 1 = 0). Hechos a medida del ritmo de juego:
-// una entrega da 3-15 puntos (perfecta 15) y cada misión del tablón 100-400. Así, jugando bien,
-// el nivel 2 (primera misión) llega a los ~12 minutos y el 6 (jefe final) hacia la hora y media.
+// una entrega da 3-15 puntos (perfecta 15) y cada misión del tablón 100-400. Jugando bien
+// (~35 entregas por hora, más de la mitad perfectas, algún capricho) el nivel 2 (primera misión)
+// llega hacia el minuto 13 y el 6 (jefe final) hacia la hora y media; con calma, en unas 2 h 20.
 // Del 7 al 10 son metas largas (lujos, ático, empresa): cada nivel sube un 12 % lo que pagan los encargos.
-export const FAME_LEVELS = [0, 80, 250, 500, 850, 1300, 2000, 3000, 4500, 6500];
+export const FAME_LEVELS = [0, 80, 250, 500, 800, 1200, 2000, 3000, 4500, 6500];
 
 /** Puntos que hacen falta para llegar a un nivel (más allá del último, la barra se queda llena). */
 export function fameThreshold(level: number): number {

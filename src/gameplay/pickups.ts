@@ -139,7 +139,9 @@ export class Pickups implements System {
         break;
       case 'ammo': {
         const c = g.mod.combat;
-        if (c && c.current !== 'fists') c.ammo[c.current].reserve += p.amount;
+        // con los puños en la mano, la munición va a la pistola (antes se perdía)
+        const w = c ? (c.current !== 'fists' ? c.current : c.owned?.has('pistol') ? 'pistol' : null) : null;
+        if (c && w && c.ammo[w]) c.ammo[w].reserve += p.amount;
         g.mod.audio?.play('reload');
         break;
       }
