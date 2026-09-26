@@ -91,13 +91,19 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     if (slope > 1.6) return tmp.copy(C.rock);
     const v = occ.get(x, z);
     const d = districtRaw(x, z);
+    // casco urbano: dentro del anillo de calles (y lejos de la costa) el suelo libre va pavimentado
+    const urbanCore = Math.abs(x) < 250 && z > -100 && z < 172;
     let c: THREE.Color;
+    let natural = false;
     if (v === OCC.YARD) c = C.garden;
     else if (x > -160 && x < 192 && z > 172.8 && z < 262.4) c = C.concrete;
-    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) c = d === 'colina' ? C.grassColina : d === 'poligono' ? C.poligono : C.grass;
-    else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
+    else if (urbanCore && (d === 'centro' || d === 'viejo' || d === 'puerto')) c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : C.concrete;
+    else if (v === OCC.WATER || v === OCC.FREE || v === OCC.PROP) {
+      c = d === 'colina' ? C.grassColina : d === 'poligono' && urbanCore ? C.poligono : C.grass;
+      natural = true;
+    } else c = d === 'centro' ? C.centro : d === 'viejo' ? C.viejo : d === 'poligono' ? C.poligono : d === 'puerto' ? C.concrete : C.grassColina;
     tmp.copy(c);
-    if (slope > 0.8) tmp.lerp(C.dirt, smoothstep(0.8, 1.6, slope) * 0.8);
+    if (natural && slope > 0.8) tmp.lerp(C.dirt, smoothstep(0.8, 1.6, slope) * 0.8);
     if (shape.coastDist(x, z) < 26) tmp.lerp(C.sand, smoothstep(2.4, 1.25, h));
     return tmp;
   }, (x, z) => occ.get(x, z) === OCC.BUILDING);
