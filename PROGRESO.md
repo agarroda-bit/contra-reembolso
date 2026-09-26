@@ -4,9 +4,9 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 8 — Pulido
+## Fase actual: 9 — Mejoras sin fin
 
-## Fase 8 — Pulido (en curso)
+## Fase 8 — Pulido ✅ (26/09, 23:40, publicada)
 Nota: el Mac se durmió de 08:12 a 14:20 y el trabajo se paró esas horas; ahora queda despierto con `caffeinate` mientras dura la sesión.
 
 Cinco agentes pulieron una parte cada uno y un sexto jugó la partida entera como un jugador, apuntando fallos:
@@ -15,7 +15,9 @@ Cinco agentes pulieron una parte cada uno y un sexto jugó la partida entera com
 - **Economía:** tiempos de los encargos calculados por el camino real (normal 90-100 s), 16 clientes nuevos (32 en total), fama por niveles nuevos (primera misión hacia el minuto 15-20, final de la historia en 1,5-2,5 h), tutorial que no se atasca y arreglos en las cinco misiones.
 - **Interfaz:** avisos que no se pisan, cartel del barrio arriba y breve, minimapa dentro de los edificios, números de dinero más vistosos, pantalla de controles con mando, **mando en los menús** (Start, cruceta, A/B), menús que caben en 720 px.
 - **Rendimiento:** medidor de tiempos con `?debug=1` (botón «⏱ tiempos»), CPU por fotograma de 3,6 a 2,5 ms en media, sin el parón de medio segundo del primer tiro (una sola luz de destello), shaders compilados al empezar, la mitad de objetos en la escena y peatones reciclados (de 48 a 5 creados por minuto conduciendo).
-- **Probador:** encontró 18 fallos (5 graves: la partida se machacaba desde el menú, bucle de muertes en la oficina, premio de la misión final perdido, puñetazos que contaban como disparos, error en el club). En arreglo ahora, con verificación de otro agente por cada área.
+- **Probador:** encontró 18 fallos (5 graves: la partida se machacaba desde el menú, bucle de muertes en la oficina, premio de la misión final perdido, puñetazos que contaban como disparos, error en el club). **Arreglados los 18**, más una veintena de detalles que dejaron apuntados los agentes. Cada área la revisó después otro agente que intentó reproducir los fallos y romper los arreglos; lo que encontró se corrigió en una segunda pasada.
+- Arreglos destacados: el menú ya no toca la partida guardada; al reaparecer tienes 3 s de escudo y la banda cercana se retira (y deja de perseguirte si no te ve en 25 s); los premios de las misiones van al banco y al acabarlas se calman la policía y la banda; los puñetazos no cuentan como disparos y el primer clic solo captura el ratón; tiroteos con la banda sin testigos, como mucho 1 sirena; lanzapaquetes enemigo más flojo; la ropa elegida al crear el personaje se ve en el juego; los paquetes perdidos no se duplican al continuar; el tutorial se reanuda donde lo dejaste; el club ya no da errores; interiores sin pantalla negra la primera vez; toldos y balcones con colisión para la cámara; rampas con recta de entrada; coches que dan marcha atrás si se quedan contra una pared y que no van por callejones; carrera callejera con rival que corre de verdad; barrita de turbo; Enter en el móvil acepta el chat que estás viendo.
+- Pruebas: las 11 de Playwright pasan (`capturas/fase-8/`).
 
 ## Fase 7 — La historia del tablón ✅ (26/09, 06:53, publicada)
 - Tablón de encargos grandes en la oficina (dentro, en la pared), con cinco misiones que se desbloquean por fama y en orden:
@@ -90,6 +92,8 @@ Cinco agentes pulieron una parte cada uno y un sexto jugó la partida entera com
 
 ## Medidas de fps
 - Núcleo con mundo provisional, GPU real (Apple M4): 60 fps.
+- Fase 8, isla completa, Centro de día y de noche, GPU real (Apple M4, `?debug=1`): **60 fps en baja, media y alta**. CPU por fotograma 2,2 / 2,7 / 3,6 ms y GPU 2,2 / 3,8 / 3,9 ms (baja / media / alta); 102 / 173 / 181 draw calls. Un MacBook Air M1 va más o menos a la mitad: unos 8 ms por fotograma, holgado para 60 fps.
+- Con SwiftShader (sin GPU, lo que usan las pruebas) va a 1-2 fps: por eso las pruebas usan `?calidad=baja` y esperan a que pasen las cosas.
 
 ## Problemas
 - El token de GitHub de este Mac no tiene permiso `workflow`: publico por la rama `gh-pages` (ver DECISIONES).
