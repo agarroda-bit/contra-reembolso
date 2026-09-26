@@ -23,6 +23,8 @@ export class Notifications {
   private districtTimer = 0;
   private districtUntil = 0;
   private districtShown = new Map<string, number>();
+  /** Saltos de dinero vivos en cada hueco (junto al efectivo y más a la izquierda). */
+  private moneySlots = [0, 0];
   /** Límite inferior (px) para la pila de notificaciones: lo fija el HUD (encima del arma/vehículo). */
   bottomLimit: () => number = () => window.innerHeight - 20;
   appName = 'Paquetín';
@@ -178,9 +180,19 @@ export class Notifications {
     if (!delta) return;
     const el = div('hud-salto ' + (delta > 0 ? 'hud-salto--mas' : 'hud-salto--menos'));
     el.innerHTML = `<span class="hud-salto__cifra">${formatMoney(delta, true)}</span>${reason ? `<span class="hud-salto__motivo">${esc(reason)}</span>` : ''}`;
+    // cobro y propina llegan a la vez: cada uno en su hueco (el segundo, más a la izquierda)
+    const slot = this.moneySlots[0] <= this.moneySlots[1] ? 0 : 1;
+    this.moneySlots[slot]++;
+    if (slot) {
+      el.style.right = '124px';
+      el.style.top = '10px';
+    }
     this.moneyBox.appendChild(el);
     while (this.moneyBox.childElementCount > 4) this.moneyBox.firstElementChild!.remove();
-    this.later(() => el.remove(), 1900);
+    this.later(() => {
+      el.remove();
+      this.moneySlots[slot] = Math.max(0, this.moneySlots[slot] - 1);
+    }, 1900);
   }
 }
 

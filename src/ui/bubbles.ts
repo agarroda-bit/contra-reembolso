@@ -11,9 +11,10 @@ interface Bubble {
   offsetY: number;
   /** Número que salta (sube en pantalla y se desvanece) en vez de bocadillo. */
   float: boolean;
-  /** Desplazamiento en px (para que dos números seguidos no se pisen). */
+  /** Desplazamiento en px (para que dos números seguidos no se pisen) y su hueco (-1: ninguno). */
   dx: number;
   dy: number;
+  slot: number;
 }
 
 const tmpV = new THREE.Vector3();
@@ -28,7 +29,8 @@ export class Bubbles implements System {
   name = 'bubbles';
   private list: Bubble[] = [];
   private layer: HTMLDivElement;
-  private floats = 0;
+  /** Números vivos en cada hueco (FLOAT_DX/FLOAT_DY). */
+  private slots = [0, 0, 0];
   private lastT = performance.now();
 
   constructor(private game: Game) {
@@ -74,7 +76,7 @@ export class Bubbles implements System {
     el.className = 'cr-bocadillo ' + cls;
     el.textContent = text;
     this.layer.appendChild(el);
-    this.list.push({ el, target, t: 0, life: seconds, offsetY: 2.25, float: false, dx: 0, dy: 0 });
+    this.list.push({ el, target, t: 0, life: seconds, offsetY: 2.25, float: false, dx: 0, dy: 0, slot: -1 });
   }
 
   /**
@@ -88,12 +90,12 @@ export class Bubbles implements System {
     if (color) el.style.color = color;
     el.style.opacity = '0';
     this.layer.appendChild(el);
-    // si ya hay números en el aire, este sale un poco más abajo y a un lado
-    const dx = FLOAT_DX[this.floats % FLOAT_DX.length];
-    const dy = FLOAT_DY[this.floats % FLOAT_DY.length];
-    this.floats++;
+    // si ya hay números en el aire, este va al hueco más libre (un poco más abajo y a un lado)
+    let slot = 0;
+    for (let i = 1; i < this.slots.length; i++) if (this.slots[i] < this.slots[slot]) slot = i;
+    this.slots[slot]++;
     const target = pos instanceof THREE.Vector3 ? pos.clone() : pos;
-    this.list.push({ el, target, t: 0, life: FLOAT_LIFE, offsetY, float: true, dx, dy });
+    this.list.push({ el, target, t: 0, life: FLOAT_LIFE, offsetY, float: true, dx: FLOAT_DX[slot], dy: FLOAT_DY[slot], slot });
   }
 
   clearFor(target: unknown) {
@@ -121,7 +123,7 @@ export class Bubbles implements System {
       if (b.t >= b.life) {
         b.el.remove();
         this.list.splice(i, 1);
-        if (b.float) this.floats = Math.max(0, this.floats - 1);
+        if (b.slot >= 0) this.slots[b.slot] = Math.max(0, this.slots[b.slot] - 1);
         continue;
       }
       const base = b.target instanceof THREE.Vector3 ? b.target : b.target.position;
