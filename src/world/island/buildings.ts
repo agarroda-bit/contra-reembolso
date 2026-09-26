@@ -329,10 +329,11 @@ function balcony(b: GeoBuilder, x: number, yb: number, w: number, d: number, rng
 
 /**
  * Colisor de un toldo bajo (mismos datos que stripedAwning, en el marco actual de `b`): una caja que
- * va desde 2,2 m (se pasa andando por debajo) hasta lo alto del toldo. Así la cámara no se mete en
- * la lona: a pie se queda por debajo; en coche por la acera, el punto que sigue la cámara (a unos
- * 2,3-3 m) queda dentro de la caja y la cámara sale limpia por arriba, sin quedarse pegada. Los
- * vehículos la atraviesan.
+ * va desde 2,2 m (se pasa andando por debajo) hasta lo alto del toldo. A pie, la cámara no se mete en
+ * la lona: se queda por debajo. Los vehículos la atraviesan y, mientras vas en uno, se apaga (ver
+ * `overhangs` en Ctx): el punto que sigue la cámara del vehículo (2,1-3 m) caería dentro de la caja y
+ * la cámara se quedaría pegada al conductor; en vehículo, lo que evita que la lona tape es el
+ * material de los toldos, que se abre alrededor del vehículo.
  */
 export function awningCollider(ctx: Ctx, b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number) {
   const yb = 2.2;
@@ -340,9 +341,13 @@ export function awningCollider(ctx: Ctx, b: GeoBuilder, x: number, y0: number, z
   overhangCollider(ctx, b, x, (yb + y0) / 2, z0 + depth / 2, w / 2, (y0 - yb) / 2, depth / 2);
 }
 
-/** Colisor de un voladizo recto (balcón, marquesina) en el marco actual de `b`: centro y medias medidas locales. */
-export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, z: number, hx: number, hy: number, hz: number) {
-  ctx.box(b.wx(x, z), b.wy(y), b.wz(x, z), hx, hy, hz, b.frameRot, G.STATIC, OVERHANG_FILTER);
+/**
+ * Colisor de un voladizo recto (balcón, marquesina) en el marco actual de `b`: centro y medias medidas
+ * locales. Con `low` (por defecto) es un voladizo bajo que se apaga mientras vas en un vehículo.
+ */
+export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, z: number, hx: number, hy: number, hz: number, low = true) {
+  const c = ctx.box(b.wx(x, z), b.wy(y), b.wz(x, z), hx, hy, hz, b.frameRot, G.STATIC, OVERHANG_FILTER);
+  if (low) ctx.overhangs.push(c);
 }
 
 /**
@@ -352,11 +357,17 @@ export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, 
  */
 export function roofCollider(ctx: Ctx, b: GeoBuilder, hw: number, hd: number, H: number, h: number, eave = 0.35) {
   const y0 = H - 0.16, y1 = H + h * 0.5;
-  overhangCollider(ctx, b, 0, (y0 + y1) / 2, 0, hw + eave, (y1 - y0) / 2, hd + eave);
+  // (siempre encendido: queda por encima del punto que sigue la cámara en vehículo)
+  overhangCollider(ctx, b, 0, (y0 + y1) / 2, 0, hw + eave, (y1 - y0) / 2, hd + eave, false);
 }
 
-/** Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. */
-export function stripedAwning(b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
+/**
+ * Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. Va a la capa de
+ * toldos del trozo (b.sub()): en vehículo, la lona se abre alrededor de la línea entre la cámara y el
+ * vehículo (ver makeLitMaterial 'awning'), así un carrito por la acera no queda tapado por el toldo.
+ */
+export function stripedAwning(b0: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
+  const b = b0.sub();
   const y1 = y0 - drop, z1 = z0 + depth;
   for (let i = 0; i < stripes; i++) {
     const xa = x - w / 2 + (w * i) / stripes, xb = x - w / 2 + (w * (i + 1)) / stripes;

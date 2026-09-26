@@ -24,7 +24,7 @@ import { RoadNet } from './network';
 import { DISTRICTS, defineRoads, districtRaw } from './plan';
 import { Terrain, Pad } from './terrain';
 import { ChunkSet, lin } from './geo';
-import { createUniforms, makeLitMaterial, makeGroundMaterial } from './materials';
+import { createUniforms, makeLitMaterial, makeGroundMaterial, AWNING_CUT } from './materials';
 import { RoadMeshes } from './roadmesh';
 import { buildSea } from './sea';
 import { smoothstep } from './noise';
@@ -33,7 +33,7 @@ import { Layout } from './layout';
 import { maskWater, fillGeneric } from './city';
 import { Signs } from './signs';
 import { Props } from './props';
-import { Ctx, makeColliderHelpers } from './ctx';
+import { Ctx, makeColliderHelpers, setOverhangs } from './ctx';
 import { urban, house, chalet, nave, companySign, NAVE_COMPANIES, CHALET_NAMES } from './buildings';
 import { PlanCtx, Special, Out } from './special';
 import { planPort } from './port';
@@ -117,6 +117,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     breakables: [],
     specials: [],
     climbs: [],
+    overhangs: [],
     ...makeColliderHelpers(game),
   };
   const out: Out = { pois: [], parking: [], delivery: [], extra: {}, animated: [], nightMeshes: [] };
@@ -219,6 +220,9 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   for (const m of pave.meshes()) game.scene.add(m);
   for (const m of ctx.solid.toMeshes(solidMat, 'edificios', true, true)) game.scene.add(m);
   for (const m of ctx.win.toMeshes(winMat, 'ventanas', false, false)) game.scene.add(m);
+  // toldos: capa aparte con un material que se abre en vehículo (ver stripedAwning)
+  const awningMat = makeLitMaterial(u, 'awning');
+  for (const m of ctx.solid.toMeshes(awningMat, 'toldos', true, true, true)) game.scene.add(m);
   game.scene.add(signs.build(u, game.renderer.capabilities.getMaxAnisotropy()));
   props.build(game, solidMat);
   const sea = buildSea(game, u, heightAt, solidMat);
@@ -295,6 +299,31 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
 
   const spawn = out.spawn ?? { pos: new THREE.Vector3(0, heightAt(0, 180), 180), heading: Math.PI };
   let night = -1;
+
+  // ── voladizos bajos y toldos según vayas a pie o en vehículo ──
+  // A pie, toldos, balcones y marquesinas tienen colisor (la cámara no se mete en ellos). En vehículo
+  // (y al subir o bajar de uno) se apagan: el punto que sigue la cámara del vehículo cae dentro de la
+  // caja de un toldo o pegado a ella y la cámara se quedaría clavada encima del conductor. En su lugar,
+  // la lona de los toldos se abre alrededor de la línea cámara → vehículo (material 'awning').
+  let overhangsOn = true;
+  const syncOverhangs = () => {
+    const rig = game.mod.cameraRig as { mode: string; target: THREE.Vector3 } | undefined;
+    const st = (game.mod.player as { state?: string } | undefined)?.state;
+    const riding = rig?.mode === 'vehicle' || st === 'vehicle' || st === 'busy';
+    if (overhangsOn === riding) {
+      overhangsOn = !riding;
+      setOverhangs(ctx.overhangs, overhangsOn);
+    }
+    const cut = rig?.mode === 'vehicle';
+    u.uCut.value = cut ? 1 : 0;
+    if (cut && rig) {
+      u.uFocus.value.copy(rig.target);
+      u.uFocus.value.y += AWNING_CUT.lift;
+    }
+  };
+  // también al principio de cada frame (antes que la cámara): así un cambio hecho entre frames (subir
+  // de golpe a un vehículo) ya cuenta en el primer frame
+  game.addSystem({ name: 'voladizos', update: syncOverhangs });
   const world: WorldData & { terrainCollider: unknown; extra: Record<string, unknown> } = {
     size: SIZE,
     seaLevel: 0,
@@ -334,6 +363,7 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
     },
     update(dt: number, elapsed: number) {
       u.uTime.value = elapsed;
+      syncOverhangs();
       sea.update(elapsed);
       for (const f of out.animated) f(dt, elapsed);
     },

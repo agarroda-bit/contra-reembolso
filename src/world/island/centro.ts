@@ -504,7 +504,7 @@ function buildBank(ctx: Ctx, out: Out, lot: Lot) {
   }
   b.box(0, 7.2, 1.0, half * 2 - 2, 0.8, 2.0, trim);
   b.roof(0, 7.6, 1.0, half * 2 - 2, 2.0, 1.8, '#d8c9a8', '#d8c9a8', true);
-  overhangCollider(ctx, b, 0, 8.1, 1.0, half - 1, 1.3, 1.0); // frontón del pórtico
+  overhangCollider(ctx, b, 0, 8.1, 1.0, half - 1, 1.3, 1.0, false); // frontón del pórtico (alto: siempre encendido)
   b.panelZ(0, 1.9, 0.05, 2.8, 3.4, '#5a3a22');
   glass(w, 0, 1.9, 0.07, 2.2, 3.0, [1, 0.85, 0.55, 0.05]);
   for (const x of [-5.2, 5.2]) glass(w, x, 3.6, 0.05, 1.6, 3.2, [1, 0.85, 0.55, 0.1]);

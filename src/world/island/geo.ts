@@ -86,6 +86,16 @@ export class GeoBuilder {
     return this.rot;
   }
 
+  /**
+   * Capa aparte del mismo trozo, con el marco actual (los toldos van ahí: se dibujan con un material
+   * que se abre alrededor del vehículo para que la lona no lo tape).
+   */
+  layer: GeoBuilder | null = null;
+  sub(): GeoBuilder {
+    if (!this.layer) this.layer = new GeoBuilder();
+    return this.layer.frame(this.ox, this.oy, this.oz, this.rot);
+  }
+
   /** Matriz del marco actual. */
   frameMatrix(out = new THREE.Matrix4()): THREE.Matrix4 {
     _q.setFromAxisAngle(_v.set(0, 1, 0), this.rot);
@@ -421,10 +431,11 @@ export class ChunkSet {
     if (!b) this.map.set(k, (b = new GeoBuilder()));
     return b;
   }
-  toMeshes(material: THREE.Material, name: string, cast: boolean, receive: boolean): THREE.Mesh[] {
+  toMeshes(material: THREE.Material, name: string, cast: boolean, receive: boolean, layer = false): THREE.Mesh[] {
     const out: THREE.Mesh[] = [];
-    for (const [k, b] of this.map) {
-      if (!b.pos.length) continue;
+    for (const [k, b0] of this.map) {
+      const b = layer ? b0.layer : b0;
+      if (!b || !b.pos.length) continue;
       const m = new THREE.Mesh(b.toGeometry(), material);
       m.name = `${name}-${k}`;
       m.castShadow = cast;
