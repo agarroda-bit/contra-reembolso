@@ -223,5 +223,19 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
   },
 };
 
+/**
+ * Dónde va el muñeco del conductor (raíz = pies) dentro del vehículo, en ejes locales, y a qué escala.
+ * Sentado (drive): pies en el suelo del habitáculo, algo más pequeño para que no asome por el techo.
+ * Montado (ride): de pie o en el sillín de la moto.
+ */
+export function seatTransform(s: VehicleSpec): { x: number; y: number; z: number; scale: number } {
+  if (s.pose === 'ride') {
+    const lift = s.kind === 'escooter' ? 0.12 : s.kind === 'cart' ? 0.18 : 0.2;
+    return { x: s.seat.x, y: -s.half.y + lift, z: s.seat.z, scale: 1 };
+  }
+  const tall = s.kind === 'garbage' || s.kind === 'crane' || s.kind === 'armored' || s.kind === 'truck' || s.kind === 'policevan';
+  return { x: s.seat.x, y: -s.half.y + 0.03 + (tall ? 0.35 : 0), z: s.seat.z, scale: 0.9 };
+}
+
 /** Coches que aparecen como tráfico normal. */
 export const TRAFFIC_KINDS: VehicleKind[] = ['compact', 'compact', 'compact', 'taxi', 'sports', 'suv', 'truck', 'scooter'];

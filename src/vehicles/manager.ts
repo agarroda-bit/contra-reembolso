@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import { Vehicle } from './vehicle';
 import { setHeadlightsNight } from './meshes';
+import { seatTransform } from './types';
 import type { VehicleKind } from './types';
 import type { Player } from '../actors/player';
 import type { CameraRig } from '../actors/cameraRig';
@@ -281,7 +282,9 @@ export class VehicleManager implements System {
     // el muñeco va sentado dentro
     p.root.visible = true;
     v.mesh.group.add(p.root);
-    p.root.position.set(v.spec.seat.x, v.spec.seat.y - v.spec.half.y * 0.2, v.spec.seat.z);
+    const st = seatTransform(v.spec);
+    p.root.position.set(st.x, st.y, st.z);
+    p.root.scale.setScalar(st.scale);
     p.root.rotation.set(0, 0, 0);
     p.seated = true;
     this.cam.snapBehind(v.heading);
@@ -338,6 +341,7 @@ export class VehicleManager implements System {
     this.current = null;
     p.seated = false;
     this.game.scene.add(p.root);
+    p.root.scale.setScalar(1);
     p.setActive(true);
     p.state = 'foot';
     p.pose = 'normal';

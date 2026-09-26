@@ -307,7 +307,8 @@ export class Vehicle {
     const s = this.spec;
     const dmgK = s.tough ? 0.25 : 1;
     const armor = 1 - this.upgrades.armor * 0.15;
-    const dmg = (dv - 5.5) ** 1.5 * 9 * dmgK * armor * (s.mass / 1500 + 0.4);
+    // un choque frontal a 90 km/h se lleva ~25 % de la vida; los roces, casi nada
+    const dmg = (dv - 5.5) ** 1.3 * 5 * dmgK * armor * (s.mass / 1500 + 0.4);
     this.damage(dmg);
     this.onImpact?.(dv, this);
     this.game.events.emit('vehicle:impact' as any, { vehicle: this, dv } as any);

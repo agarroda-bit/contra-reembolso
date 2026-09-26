@@ -8,6 +8,7 @@ import { VehicleManager } from '../vehicles/manager';
 import { VEHICLES, type VehicleKind } from '../vehicles/types';
 import { Player } from '../actors/player';
 import { CameraRig } from '../actors/cameraRig';
+import { makeCharacter, defaultPlayerLook } from '../actors/character';
 import { Particles } from '../fx/particles';
 import { VehicleDamageFx } from '../vehicles/damageFx';
 
@@ -23,7 +24,7 @@ async function main() {
   sun.position.set(30, 50, 20);
   game.scene.add(sun);
   const cam = new CameraRig(game);
-  const player = new Player(game);
+  const player = new Player(game, makeCharacter, defaultPlayerLook());
   const vm = new VehicleManager(game);
   game.addSystem(player);
   game.addSystem(vm);

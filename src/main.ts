@@ -1,5 +1,7 @@
 // Arranque del juego. Los sistemas se activan por fases (FASE) para publicar cada fase probada.
+import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
+import { SOLID } from './core/physics';
 import { Game } from './core/game';
 import { installDebug } from './core/debug';
 import { LoadingScreen } from './ui/loading';
@@ -28,6 +30,9 @@ async function boot() {
   await loading.step(0.2, 'Levantando Puerto Paquete…');
   game.world = await buildWorld(game);
   installDebug(game);
+
+  // que no empiece con una farola pegada a la cámara: si hay algo sólido detrás, se aparta
+  nudgeSpawn(game);
 
   await loading.step(0.55, 'Contratando repartidores…');
   let profile: Profile = defaultProfile();
@@ -92,6 +97,39 @@ async function boot() {
     if (game.mod.economy && prueba) game.mod.economy.cash = 500;
   }
   (window as any).__ready = true;
+}
+
+/** Mueve el punto de inicio si la cámara (detrás del jugador) quedaría tapada por algo cercano. */
+function nudgeSpawn(game: Game) {
+  const sp = game.world.playerSpawn;
+  const h = sp.heading;
+  const back = new THREE.Vector3(-Math.sin(h), 0, -Math.cos(h));
+  const right = new THREE.Vector3(Math.cos(h), 0, -Math.sin(h));
+  const clear = (p: THREE.Vector3) => {
+    const eye = p.clone().setY(p.y + 1.7);
+    for (const off of [-1.6, -1, -0.5, 0, 0.5, 1, 1.6]) {
+      const o = eye.clone().addScaledVector(right, off);
+      if (game.physics.raycast(o, back, 5.5, SOLID)) return false;
+    }
+    // farolas sin colisor: se miran en la lista de bombillas
+    for (const l of game.world.lampPositions) {
+      const dx = l.x - p.x, dz = l.z - p.z;
+      const along = -(dx * back.x + dz * back.z);
+      const side = Math.abs(dx * right.x + dz * right.z);
+      if (along < 0 && along > -5.5 && side < 1.8) return false;
+    }
+    return true;
+  };
+  if (clear(sp.pos)) return;
+  const fwd = back.clone().negate();
+  for (const [s, f] of [[0, 2], [0, 3], [1.5, 0], [-1.5, 0], [1.5, 2], [-1.5, 2], [3, 0], [-3, 0], [0, 4]]) {
+    const p = sp.pos.clone().addScaledVector(right, s).addScaledVector(fwd, f);
+    p.y = game.world.heightAt(p.x, p.z);
+    if (clear(p)) {
+      sp.pos.copy(p);
+      return;
+    }
+  }
 }
 
 /** La isla (si existe el módulo) o el mundo provisional. */

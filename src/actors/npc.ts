@@ -6,6 +6,7 @@ import type { Game } from '../core/game';
 import { RAPIER, G, groups, SOLID } from '../core/physics';
 import type { CharacterLook, CharacterPose, CharacterRig, CharacterAnimParams } from '../core/contracts';
 import type { Vehicle } from '../vehicles/vehicle';
+import { seatTransform } from '../vehicles/types';
 import type { NpcDriver } from '../vehicles/manager';
 import { fx as rnd } from '../core/rng';
 
@@ -175,7 +176,9 @@ export class Npc implements NpcDriver {
     this.setState('driving');
     this.collider.setEnabled(false);
     v.mesh.group.add(this.rig.root);
-    this.rig.root.position.set(v.spec.seat.x, v.spec.seat.y - v.spec.half.y * 0.2, v.spec.seat.z);
+    const st = seatTransform(v.spec);
+    this.rig.root.position.set(st.x, st.y, st.z);
+    this.rig.root.scale.setScalar(st.scale);
     this.rig.root.rotation.set(0, 0, 0);
   }
 
@@ -187,7 +190,9 @@ export class Npc implements NpcDriver {
     this.rig.root.visible = false;
     this.passenger = true;
     v.mesh.group.add(this.rig.root);
-    this.rig.root.position.set(-v.spec.seat.x, v.spec.seat.y - v.spec.half.y * 0.2, v.spec.seat.z);
+    const st = seatTransform(v.spec);
+    this.rig.root.position.set(-st.x, st.y, st.z);
+    this.rig.root.scale.setScalar(st.scale);
   }
   passenger = false;
 
@@ -198,6 +203,7 @@ export class Npc implements NpcDriver {
     this.vehicle = null;
     this.passenger = false;
     this.rig.root.visible = true;
+    this.rig.root.scale.setScalar(1);
     this.game.scene.add(this.rig.root);
     const p = exitPos ?? this.game.mod.vehicles?.doorPoint(v, new THREE.Vector3()) ?? v.getPosition(new THREE.Vector3());
     this.position.copy(p);
