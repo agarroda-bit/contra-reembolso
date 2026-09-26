@@ -60,15 +60,50 @@ function shortName(name: string): string {
 
 /** Frases genéricas del chat (para que no se repita siempre la misma). */
 const LINES = {
-  accept: ['¡Voy para allá! 📦', 'Hecho. Contra reembolso, ¿eh?', 'Marchando 🚐', 'Dame un momento, que estoy aparcando fatal.', 'Voy volando. Bueno, en furgoneta.'],
-  decline: ['Lo siento, hoy no puedo 🙏', 'Uf, me pilla fatal. ¡Otra vez será!', 'Paso, que voy hasta arriba de cajas 📦'],
-  expire: ['Da igual, ya se lo pido a otro. 🙄', 'Me has dejado en visto. Qué feo. 🙄', 'Nada, se lo pido a la competencia. Van de morado, ¿sabes? 🙄'],
-  cancel: ['He cancelado el pedido. Una estrella. 😤', 'Pedido cancelado. Voy a comprarlo en persona, como en los noventa. 😤', 'Cancelado. Y lo pienso contar en el grupo de vecinos. 😤'],
-  perfect: ['⭐⭐⭐⭐⭐ ¡Repetiré!', '⭐⭐⭐⭐⭐ Rápido y entero. Un milagro.', '⭐⭐⭐⭐⭐ Te recomendaré a mi cuñado. Y eso que no le quiero.'],
-  ok: ['⭐⭐⭐ Bien, sin más.', '⭐⭐⭐ Correcto. Como un bocadillo de pan solo.', '⭐⭐⭐⭐ Casi perfecto. Casi.'],
-  late: ['⭐⭐ Llegó. Tarde, pero llegó. ⌛', '⭐⭐ He tenido tiempo de hacerme un cocido esperando. ⌛'],
-  broken: ['⭐ Me ha llegado un puzle. 😒', '⭐ La caja ha sufrido más que yo un lunes. 😒', '⭐ Una estrella por traerlo. Las otras cuatro se han roto por el camino. 😒'],
+  accept: ['¡Voy para allá! 📦', 'Hecho. Contra reembolso, ¿eh?', 'Marchando 🚐', 'Dame un momento, que estoy aparcando fatal.', 'Voy volando. Bueno, en furgoneta.', 'Apuntado. Ve preparando el dinero, que llego enseguida 💶', 'Hecho. Si me pierdo, sigue el olor a embrague 🚐'],
+  decline: ['Lo siento, hoy no puedo 🙏', 'Uf, me pilla fatal. ¡Otra vez será!', 'Paso, que voy hasta arriba de cajas 📦', 'Hoy no, que la furgoneta está sensible 🚐', 'Imposible, tengo la agenda llena. De paquetes.'],
+  expire: ['Da igual, ya se lo pido a otro. 🙄', 'Me has dejado en visto. Qué feo. 🙄', 'Nada, se lo pido a la competencia. Van de morado, ¿sabes? 🙄', 'Vale, pues nada. Iré andando. Descalzo. Bajo la lluvia. 🙄'],
+  cancel: ['He cancelado el pedido. Una estrella. 😤', 'Pedido cancelado. Voy a comprarlo en persona, como en los noventa. 😤', 'Cancelado. Y lo pienso contar en el grupo de vecinos. 😤', 'Cancelado. Mi abuela lo habría traído antes. En autobús. 😤'],
+  perfect: ['⭐⭐⭐⭐⭐ ¡Repetiré!', '⭐⭐⭐⭐⭐ Rápido y entero. Un milagro.', '⭐⭐⭐⭐⭐ Te recomendaré a mi cuñado. Y eso que no le quiero.', '⭐⭐⭐⭐⭐ Si pudiera, le pondría seis estrellas. Pero la aplicación no me deja.', '⭐⭐⭐⭐⭐ Ha llegado antes de pedirlo. O casi.'],
+  ok: ['⭐⭐⭐ Bien, sin más.', '⭐⭐⭐ Correcto. Como un bocadillo de pan solo.', '⭐⭐⭐⭐ Casi perfecto. Casi.', '⭐⭐⭐ Aprobado raspado. Como yo en el carné.'],
+  late: ['⭐⭐ Llegó. Tarde, pero llegó. ⌛', '⭐⭐ He tenido tiempo de hacerme un cocido esperando. ⌛', '⭐⭐ Me han salido canas esperando. Dos. ⌛'],
+  broken: ['⭐ Me ha llegado un puzle. 😒', '⭐ La caja ha sufrido más que yo un lunes. 😒', '⭐ Una estrella por traerlo. Las otras cuatro se han roto por el camino. 😒', '⭐ La caja parece un acordeón. Y sin música. 😒'],
 };
+
+/** Adivinanzas de Don Enigmo (populares): respuesta buena y una tontería. */
+const RIDDLES = [
+  { q: 'Tengo agujas y no sé coser, tengo números y no sé leer. ¿Qué soy?', a: 'Un reloj', b: 'Un erizo contable' },
+  { q: 'Blanca por dentro, verde por fuera. Si quieres que te lo diga, espera.', a: 'La pera', b: 'Un pepino con abrigo' },
+  { q: 'Oro parece, plata no es. ¿Qué es?', a: 'El plátano', b: 'Un lingote blandito' },
+  { q: '¿Qué pesa más, un kilo de paquetes o un kilo de plumas?', a: 'Pesan lo mismo', b: 'Los paquetes, que los llevo yo' },
+  { q: 'Vuelo sin alas, silbo sin boca y nadie me ve. ¿Qué soy?', a: 'El viento', b: 'Mi furgoneta' },
+  { q: 'Tiene dientes y no come, tiene barba y no es hombre.', a: 'El ajo', b: 'Un peine con barba' },
+];
+
+/** Chistes de Chiqui (malísimos, a propósito). */
+const JOKES = [
+  { q: 'Van dos paquetes por la calle y se cae el del medio…', a: '…Espera, que me he liado. Eran tres. ¡Ba-dum-tss!' },
+  { q: 'Doctor, doctor, ¡me siento como un paquete!', a: '—Pues firme aquí, aquí y aquí. ¡Ba-dum-tss!' },
+  { q: '¿Cuál es el colmo de un repartidor?', a: '¡Que le devuelvan hasta los saludos! ¡Ba-dum-tss!' },
+  { q: '¿Por qué el repartidor sube con una escalera?', a: '¡Porque le dijeron que era una entrega de otro nivel! ¡Ba-dum-tss!' },
+  { q: 'Me he comprado un GPS para la furgoneta…', a: '…y ahora me pierdo con mucha más precisión. ¡Ba-dum-tss!' },
+  { q: '¿Sabes por qué Los Devueltos van de morado?', a: '¡Porque de verde ya iban los envidiosos! ¡Ba-dum-tss!' },
+];
+
+/** Melones de la Tía Fuensanta: cada uno cura un poco al pasar por encima. */
+const MELON_HEAL = 25;
+let melonGeoCache: THREE.BufferGeometry | null = null;
+function melonGeo(): THREE.BufferGeometry {
+  if (melonGeoCache) return melonGeoCache;
+  const b = new GeoBuilder();
+  b.cyl(0.2, 0.2, 0.34, 8, '#7cb342', 0, 0.2, 0, 0, 0, Math.PI / 2);
+  b.cyl(0.12, 0.2, 0.06, 8, '#7cb342', 0.2, 0.2, 0, 0, 0, -Math.PI / 2);
+  b.cyl(0.12, 0.2, 0.06, 8, '#7cb342', -0.2, 0.2, 0, 0, 0, Math.PI / 2);
+  b.cyl(0.205, 0.205, 0.05, 8, '#33691e', 0.08, 0.2, 0, 0, 0, Math.PI / 2);
+  b.cyl(0.205, 0.205, 0.05, 8, '#33691e', -0.08, 0.2, 0, 0, 0, Math.PI / 2);
+  b.box(0.03, 0.06, 0.03, '#5d4037', 0.26, 0.2, 0);
+  return (melonGeoCache = b.build());
+}
 function pick(list: string[]): string {
   return list[Math.floor(rnd.next() * list.length)];
 }
@@ -78,6 +113,9 @@ const REDIRECTS = [
   'Cambio de planes: nos hemos movido 🎉',
   'Perdona, me había equivocado de calle. Bueno, de barrio 🙈',
   'Es que me he ido a por churros 🍩',
+  'Me he acordado de que tenía dentista. Ya que vienes… 🦷',
+  'Mi perro ha decidido ir al parque y yo voy detrás 🐕',
+  'He visto una oferta de sandías y no he podido resistirme 🍉',
 ];
 
 const JOB_COLORS = ['#ffd23f', '#2ec4b6', '#ff4f81', '#ff7b54', '#06d6a0', '#9b5de5'];
@@ -115,6 +153,8 @@ export class Jobs implements System {
   private scene: Scene | null = null;
   private boxMesh: THREE.Mesh | null = null;
   private dog: { mesh: THREE.Group; t: number; pos: THREE.Vector3 } | null = null;
+  /** Melones de la huerta en el suelo (curan al cogerlos). */
+  private melons: { mesh: THREE.Mesh; t: number }[] = [];
   /** Encargos automáticos activados (el tutorial los enciende). */
   autoOffers = true;
   completed = 0;
@@ -650,6 +690,7 @@ export class Jobs implements System {
     this.updateScene(dt);
     this.updateFlying(dt);
     this.updateDog(dt);
+    if (this.melons.length) this.updateMelons(dt);
     this.updateCarryVisual();
     this.updateHud();
   }
@@ -683,7 +724,14 @@ export class Jobs implements System {
   /** Corta la escena de entrega sin cobrar (muerte, arresto, te has ido). */
   private abortScene() {
     if (!this.scene) return;
+    const s = this.scene;
     this.scene = null;
+    // el gemelo de los Tomás no se queda plantado en la acera para siempre
+    if (s.data.twin) this.twinLeaves(s.data.twin, s.job);
+    if (s.job.offer.client.quirk === 'baile') {
+      const p = this.game.mod.player;
+      if (p.pose === 'dance') p.poseTimer = Math.min(p.poseTimer, 0.05);
+    }
     this.setHint(null);
   }
 
@@ -699,7 +747,12 @@ export class Jobs implements System {
     const target = s.npc ?? s.job.offer.dest.door;
     this.game.mod.bubbles?.say(target, text, seconds);
     this.game.mod.audio?.say(s.npc?.position ?? s.job.offer.dest.door, 4 + Math.floor(rnd.next() * 4), s.job.offer.client.voice, 0.6);
+    this.lastSayAt = this.game.time.real;
+    this.lastSayFor = seconds;
   }
+  /** Última frase de la escena (para que la despedida del cliente no la tape al momento). */
+  private lastSayAt = -99;
+  private lastSayFor = 0;
 
   private startDelivery(j: ActiveJob) {
     const npc = this.clientNpcs.get(j) ?? null;
@@ -899,6 +952,280 @@ export class Jobs implements System {
         }
         break;
       }
+      case 'acertijo': {
+        if (s.step === 0) {
+          const r = RIDDLES[Math.floor(rnd.next() * RIDDLES.length)];
+          // la buena sale con E o con Q al azar
+          s.data.r = r;
+          s.data.good = rnd.next() < 0.5 ? 0 : 1;
+          s.data.idle = 0;
+          const opts = s.data.good === 0 ? [r.a, r.b] : [r.b, r.a];
+          this.say(`Antes de pagar, un acertijo: ${r.q}`, 6);
+          this.setHint(`E — ${opts[0]}   ·   Q — ${opts[1]}`);
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          const pick = takeE(g) ? 0 : input.pressed('radioPrev') ? 1 : -1;
+          if (pick === s.data.good) {
+            this.say('¡Correcto! Eres más listo de lo que pareces. Que tampoco era difícil. Toma, con premio.', 3.5);
+            g.mod.audio?.play('success', { volume: 0.5 });
+            this.finish(1.2, 'acertijo');
+          } else if (pick >= 0) {
+            this.say(`¡Error! Era «${s.data.r.a}». Pero pago igual, que soy un caballero.`, 3.5);
+            this.finish(1, 'acertijo-mal');
+          } else if (s.data.idle > 20) {
+            this.say(`¿Te rindes? Era «${s.data.r.a}». Toma, anda.`, 3);
+            this.finish(1, '');
+          }
+        }
+        break;
+      }
+      case 'gemelos': {
+        if (s.step === 0) {
+          // sale el hermano, igualito, al lado
+          const npc = s.npc;
+          const d = j.offer.dest;
+          const rx = Math.cos(d.facing), rz = -Math.sin(d.facing);
+          const base = npc ? npc.position : d.door;
+          const twin = g.mod.npcs?.spawn('cliente', { ...(npc?.rig.look ?? randomLookFor(this.rng, 'civil')) }, base.clone().add(tmpV.set(rx * 1.8, 0, rz * 1.8)), d.facing);
+          if (twin) {
+            twin.transient = false;
+            twin.voice = j.offer.client.voice;
+            twin.customPose = 'normal';
+            twin.setState('custom');
+            twin.face(p.position);
+          }
+          s.data.twin = twin;
+          s.data.idle = 0;
+          // ¿cuál está a la izquierda del jugador? (mirando hacia ellos)
+          const h = p.heading;
+          const rightX = -Math.cos(h), rightZ = Math.sin(h);
+          const side = (n: Npc | null) => (n ? (n.position.x - p.position.x) * rightX + (n.position.z - p.position.z) * rightZ : 0);
+          s.data.left = twin && npc && side(twin) < side(npc) ? twin : npc;
+          s.data.right = s.data.left === twin ? npc : twin;
+          // el que lo ha pedido, al azar
+          s.data.good = rnd.next() < 0.5 ? 0 : 1;
+          this.say('¿Quién de los dos lo ha pedido? 😏', 3);
+          if (twin) g.mod.bubbles?.say(twin, 'Eso, ¿quién?', 3);
+          this.setHint('E — El de la izquierda   ·   Q — El de la derecha');
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          const pick = takeE(g) ? 0 : input.pressed('radioPrev') ? 1 : -1;
+          const chosen: Npc | null = pick === 0 ? s.data.left : s.data.right;
+          if (pick >= 0) {
+            const ok = pick === s.data.good;
+            if (chosen) {
+              g.mod.bubbles?.say(chosen, ok ? '¡Yo! ¡Bien visto! Toma, con propina. Mi hermano no da propinas.' : '¡Que era mi hermano! Bueno, da igual: paga él. Menos, eso sí.', 3.5);
+              // (la despedida del cliente espera a que se lea esto)
+              this.lastSayAt = g.time.real;
+              this.lastSayFor = 3.5;
+            }
+            this.finish(ok ? 1.15 : 0.9, ok ? 'gemelos' : 'gemelos-mal');
+          } else if (s.data.idle > 20) {
+            this.say('Da igual, pagamos a medias. Como siempre.', 3);
+            this.finish(1, '');
+          }
+          if (!this.scene) this.twinLeaves(s.data.twin, j);
+        }
+        break;
+      }
+      case 'timido': {
+        if (s.step === 0) {
+          this.say('Ay… ¿te puedes alejar un poco? Es que me da vergüenza… 🫣', 3.5);
+          this.setHint('Aléjate unos pasos de la puerta (sin irte del todo)');
+          s.data.wait = 0;
+          s.data.away = 0;
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.wait += dt;
+          const d = p.position.distanceTo(j.offer.dest.door);
+          s.data.away = d > 3.8 ? s.data.away + dt : 0;
+          if (s.data.away > 1.2) {
+            this.say('G-gracias… lo cojo yo… no mires… Toma, y perdona.', 3.5);
+            this.finish(1.1, 'timido');
+          } else if (s.data.wait > 16) {
+            this.say('Vale… lo cojo… pero no me mires… (se tapa la cara)', 3);
+            this.finish(1, '');
+          }
+        }
+        break;
+      }
+      case 'en_especie': {
+        if (s.step === 0) {
+          this.say('No tengo suelto, sobrino. ¿Te pago una parte en melones? Curan todo. 🍈', 4);
+          this.setHint('E — Vale, melones (menos dinero, curan)   ·   Q — Mejor en euros');
+          s.data.idle = 0;
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          if (takeE(g)) {
+            this.say('¡Así me gusta! Toma: tres melones y un poquito de dinero.', 3.5);
+            this.spawnMelons(j.offer.dest, 3);
+            this.finish(0.65, 'melones');
+          } else if (input.pressed('radioPrev') || s.data.idle > 15) {
+            this.say('Vale, vale… en euros. Qué poco te gusta la fruta.', 3);
+            this.finish(1, '');
+          }
+        }
+        break;
+      }
+      case 'desconfiado': {
+        if (s.step === 0) {
+          this.say('Déjame ver… (agita la caja) … ¿Tú has agitado esto?', 3.5);
+          g.mod.audio?.play('drop', { pos: j.offer.dest.door, volume: 0.5 });
+          this.setHint('E — «No, qué va»   ·   Q — «Un poquito…»');
+          s.data.idle = 0;
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          const intact = j.integrity >= 95;
+          if (takeE(g)) {
+            if (intact) {
+              this.say('Mmm… suena entero. Te creo. Por esta vez.', 3);
+              this.finish(1.1, 'confianza');
+            } else {
+              this.say('¡Suena a trocitos! ¡Mentiroso! Te pago menos, por trolero.', 3.5);
+              this.finish(0.8, 'mentira');
+            }
+          } else if (input.pressed('radioPrev')) {
+            this.say('Aprecio la sinceridad. Eso no abunda. Toma, y un extra.', 3);
+            this.eco?.addFame(5, 'sinceridad');
+            this.finish(intact ? 1.15 : 1, 'sinceridad');
+          } else if (s.data.idle > 18) {
+            this.say('El que calla, otorga. Hmm. Toma.', 3);
+            this.finish(0.95, '');
+          }
+        }
+        break;
+      }
+      case 'baile': {
+        // minijuego: tres pasos; hay que pulsar E justo cuando grita «¡AHORA!»
+        if (s.step === 0) {
+          this.say('¡En mi casa se cobra bailando! Pulsa E cuando te diga «¡AHORA!» 💃', 3.5);
+          s.npc?.setState('dance');
+          p.pose = 'dance';
+          p.poseTimer = 14;
+          s.data.beat = 0;
+          s.data.hits = 0;
+          s.data.next = 3;
+          s.data.win = -1;
+          this.setHint('E — ¡Paso de baile! (cuando diga «¡AHORA!»)');
+          s.step = 1;
+        } else if (s.step === 1) {
+          if (s.data.win > 0) {
+            s.data.win -= dt;
+            if (takeE(g)) {
+              s.data.hits++;
+              s.data.win = -1;
+              s.data.next = 1.1 + rnd.next() * 1.1;
+              this.say(['¡Eso es!', '¡Olé esas caderas!', '¡Qué arte, repartidor!'][s.data.hits - 1] ?? '¡Bien!', 0.9);
+              g.mod.audio?.play('coin', { volume: 0.6 });
+              g.mod.particles?.emit('stars', tmpV.copy(p.position).setY(p.position.y + 1.8), { count: 5 });
+            } else if (s.data.win <= 0) {
+              s.data.win = -1;
+              s.data.next = 1.1 + rnd.next() * 1.1;
+              this.say('¡Tarde! ¡Más ritmo!', 0.9);
+            }
+          } else {
+            if (takeE(g)) this.say('¡Todavía no! ¡Espera!', 0.7);
+            s.data.next -= dt;
+            if (s.data.next <= 0) {
+              if (s.data.beat >= 3) {
+                p.poseTimer = Math.min(p.poseTimer, 0.05);
+                const hits = s.data.hits;
+                if (hits >= 3) {
+                  this.say('¡Tienes dos pies derechos! ¡Te apunto a la clase avanzada! Toma, con propina.', 3.5);
+                  this.eco?.addFame(10, 'baile');
+                  g.mod.audio?.play('cheer', { volume: 0.7 });
+                  this.finish(1.3, 'baile-perfecto');
+                } else if (hits > 0) {
+                  this.say('No está mal. Para ser repartidor. Toma.', 3);
+                  this.finish(1.1, 'baile');
+                } else {
+                  this.say('Tienes dos pies izquierdos… y ninguno baila. Toma, anda.', 3);
+                  this.finish(1, 'baile');
+                }
+                return;
+              }
+              s.data.beat++;
+              s.data.win = 0.8;
+              this.say('💃 ¡AHORA!', 0.8);
+              g.mod.audio?.play('bell', { volume: 0.5 });
+            }
+          }
+        }
+        break;
+      }
+      case 'moneda': {
+        if (s.step === 0) {
+          this.say('¿Doble o nada? Bueno, doble o mitad. ¿Cara o cruz? 🪙', 3.5);
+          this.setHint('E — Cara   ·   Q — Cruz   ·   (si no dices nada, cobro normal)');
+          s.data.idle = 0;
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.idle += dt;
+          const pick = takeE(g) ? 0 : input.pressed('radioPrev') ? 1 : -1;
+          if (pick >= 0) {
+            s.data.pick = pick;
+            s.data.res = rnd.next() < 0.5 ? 0 : 1;
+            s.data.t = 0;
+            s.step = 2;
+            this.setHint(null);
+            this.say('🪙 (tira la moneda) … … …', 1.8);
+            g.mod.audio?.play('coin');
+          } else if (s.data.idle > 10) {
+            this.say('¿No apuestas? Qué soso. Toma lo tuyo.', 2.5);
+            this.finish(1, '');
+          }
+        } else if (s.step === 2) {
+          s.data.t += dt;
+          if (s.data.t > 1.9) {
+            const side = s.data.res === 0 ? 'CARA' : 'CRUZ';
+            if (s.data.pick === s.data.res) {
+              this.say(`¡${side}! Has ganado. Toma el doble. Bueno, casi.`, 3);
+              g.mod.audio?.play('cheer', { volume: 0.6 });
+              this.finish(1.6, 'moneda-gana');
+            } else {
+              this.say(`¡${side}! Pierdes. La mitad y gracias. La casa siempre gana.`, 3);
+              g.mod.audio?.play('boo', { volume: 0.5 });
+              this.finish(0.6, 'moneda-pierde');
+            }
+          }
+        }
+        break;
+      }
+      case 'chistes': {
+        if (s.step === 0) {
+          const jk = JOKES[Math.floor(rnd.next() * JOKES.length)];
+          s.data.jk = jk;
+          s.data.t = 0;
+          this.say(jk.q, 3);
+          s.step = 1;
+        } else if (s.step === 1) {
+          s.data.t += dt;
+          if (s.data.t > 2.6) {
+            this.say(s.data.jk.a, 4);
+            this.setHint('E — Reírse 😂   ·   Q — «No lo pillo»');
+            s.data.idle = 0;
+            s.step = 2;
+          }
+        } else if (s.step === 2) {
+          s.data.idle += dt;
+          if (takeE(g)) {
+            g.mod.bubbles?.say(p, '¡JAJAJAJA!', 1.6);
+            this.say('¡Por fin alguien con gusto! Toma, con propina.', 3);
+            this.finish(1.15, 'risa');
+          } else if (input.pressed('radioPrev')) {
+            this.say('Pues es que… lo de… ya sabes… Bueno, da igual. Toma.', 3.5);
+            this.finish(1, 'sin-gracia');
+          } else if (s.data.idle > 10) {
+            this.say('(silencio incómodo) … Toma, anda.', 2.5);
+            this.finish(1, '');
+          }
+        }
+        break;
+      }
       default:
         if (s.step === 0) {
           s.step = 1;
@@ -929,7 +1256,12 @@ export class Jobs implements System {
     if (perfect) tip = Math.round(j.offer.pay * (0.1 + rnd.next() * 0.2));
     pay = Math.max(1, Math.round(pay));
     const line = broken ? c.broken : late ? c.late : c.happy;
-    this.game.mod.bubbles?.say(s.npc ?? j.offer.dest.door, line[Math.floor(rnd.next() * line.length)], 3.5);
+    const bye = line[Math.floor(rnd.next() * line.length)];
+    const who = s.npc ?? j.offer.dest.door;
+    // si la escena acaba de decir algo («¡Correcto!», «¡Cara!»...), la despedida sale después y no lo tapa
+    const wait = g.time.real - this.lastSayAt < 0.3 ? Math.min(3.5, this.lastSayFor) : 0;
+    if (wait > 0) setTimeout(() => this.game.mod.bubbles?.say(who, bye, 3), wait * 1000);
+    else this.game.mod.bubbles?.say(who, bye, 3.5);
     this.eco?.addCash(pay, 'cobro');
     if (tip) setTimeout(() => this.eco?.addCash(tip, 'propina'), 600);
     j.state = 'done';
@@ -983,6 +1315,59 @@ export class Jobs implements System {
     const why = REDIRECTS[Math.floor(rnd.next() * REDIRECTS.length)];
     this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, `${why} Ahora estoy en ${nd.label}. Te subo a ${j.offer.pay} € por las molestias.`);
     this.game.events.emit('toast', { text: `📍 ${shortName(c.name)} ha cambiado de sitio: +${extra} s`, color: j.color, time: 2.5 });
+  }
+
+  // ─────────── Melones y gemelos ───────────
+
+  /** Deja melones en el suelo delante de la puerta. */
+  private spawnMelons(d: DeliverySpot, n: number) {
+    const g = this.game;
+    const fx = Math.sin(d.facing), fz = Math.cos(d.facing);
+    // en fila a un lado de la puerta (no debajo del jugador, que está delante)
+    const sgn = rnd.next() < 0.5 ? 1 : -1;
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(melonGeo(), vertexColorMaterial);
+      m.castShadow = true;
+      const side = sgn * (1.7 + i * 1.15);
+      m.position.set(d.door.x + fx * 0.9 + fz * side, 0, d.door.z + fz * 0.9 - fx * side);
+      m.position.y = g.world.heightAt(m.position.x, m.position.z);
+      m.rotation.y = rnd.next() * Math.PI;
+      g.scene.add(m);
+      this.melons.push({ mesh: m, t: 0 });
+    }
+  }
+
+  private updateMelons(dt: number) {
+    const g = this.game;
+    const p = g.mod.player;
+    for (let i = this.melons.length - 1; i >= 0; i--) {
+      const m = this.melons[i];
+      m.t += dt;
+      const pos = m.mesh.position;
+      const take = m.t > 1.2 && p.state === 'foot' && Math.abs(p.position.x - pos.x) < 1 && Math.abs(p.position.z - pos.z) < 1;
+      if (take) {
+        p.health = Math.min(p.maxHealth, p.health + MELON_HEAL);
+        g.mod.audio?.play('pickup', { volume: 0.6 });
+        g.mod.particles?.emit('fruit', tmpV.copy(pos).setY(pos.y + 0.3), { count: 6 });
+        g.mod.bubbles?.number?.(pos, `🍈 +${MELON_HEAL}`, '#7cb342');
+      }
+      if (take || m.t > 90) {
+        g.scene.remove(m.mesh);
+        this.melons.splice(i, 1);
+      }
+    }
+  }
+
+  /** El gemelo se mete en casa detrás del otro. */
+  private twinLeaves(twin: Npc | null | undefined, j: ActiveJob) {
+    if (!twin || twin.removed) return;
+    const g = this.game;
+    setTimeout(() => {
+      if (twin.removed) return;
+      twin.setState('walk');
+      twin.goTo(j.offer.dest.door.clone().add(new THREE.Vector3(-Math.sin(j.offer.dest.facing) * 3, 0, -Math.cos(j.offer.dest.facing) * 3)));
+      setTimeout(() => !twin.removed && g.mod.npcs?.remove(twin), 2500);
+    }, 3000);
   }
 
   // ─────────── Perro ───────────

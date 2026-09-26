@@ -15,7 +15,15 @@ export type Quirk =
   | 'no_he_pedido' // dice que no ha pedido nada... y luego sí
   | 'influencer' // te graba mientras entregas
   | 'regatea' // regatea el reembolso
-  | 'firmas'; // te hace firmar un papel tras otro antes de pagar
+  | 'firmas' // te hace firmar un papel tras otro antes de pagar
+  | 'acertijo' // no paga sin que aciertes una adivinanza (propina si aciertas)
+  | 'gemelos' // salen dos iguales a la puerta: ¿cuál lo ha pedido?
+  | 'timido' // le da vergüenza: tienes que apartarte para que salga a por el paquete
+  | 'en_especie' // te ofrece pagar una parte en melones (que curan)
+  | 'desconfiado' // agita la caja y te pregunta si la has agitado tú
+  | 'baile' // se cobra bailando: pulsa E cuando diga «¡AHORA!»
+  | 'moneda' // doble o mitad a cara o cruz
+  | 'chistes'; // te cuenta un chiste y espera que te rías
 
 export interface ClientProfile {
   id: string;
