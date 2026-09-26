@@ -80,6 +80,7 @@ export class VehicleManager implements System {
       v.controls.steer = ax.x;
       v.controls.handbrake = input.enabled && input.down('jump');
       v.controls.boost = input.enabled && input.down('sprint');
+      this.game.mod.crazy?.modifyControls?.(v);
     }
     for (const veh of this.list) {
       if (veh !== this.current && (!veh.driver || veh.destroyed)) {
