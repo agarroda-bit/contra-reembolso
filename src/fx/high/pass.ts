@@ -77,7 +77,13 @@ void main() {
   // colores: giro de tono cíclico con bandas de arcoíris; cada luminosidad con su color
   float luma0 = dot(col, vec3(0.299, 0.587, 0.114));
   float hue = t * 0.9 + r * 3.2 + sin(vUv.x * 5.0 + t * 0.7) * 0.8 + luma0 * 3.5;
-  col = mix(col, clamp(hueRotate(col, hue), 0.0, 1.0), smoothstep(0.0, 0.7, L) * 0.85);
+  vec3 mixed = mix(col, clamp(hueRotate(col, hue), 0.0, 1.0), smoothstep(0.0, 0.7, L) * 0.85);
+  // mezclar un color con su versión girada lo apaga (verde + magenta = gris): se le devuelve
+  // el color que tenía (con tope, para que donde se anula del todo no salga una raya)
+  float g0 = (col.r + col.g + col.b) / 3.0;
+  float g1 = (mixed.r + mixed.g + mixed.b) / 3.0;
+  float keep = min(3.0, length(col - g0) / max(length(mixed - g1), 1e-4));
+  col = clamp(g1 + (mixed - g1) * keep, 0.0, 1.0);
 
   // saturación a tope y más contraste
   float luma = dot(col, vec3(0.299, 0.587, 0.114));
@@ -135,6 +141,24 @@ export class PsychePass {
       this.renderer.compileAsync(this.quad, this.cam).catch(() => {});
     } catch {
       /* no pasa nada: se compilará al usarlo */
+    }
+  }
+
+  /**
+   * Pintar la escena en la textura necesita otra versión de los shaders de todos los materiales
+   * (sin tone mapping y en lineal). Se compilan en segundo plano antes de engancharse, para que
+   * el primer colocón no dé un tirón. Devuelve cuándo están listos.
+   */
+  warm(scene: THREE.Object3D, camera: THREE.Camera): Promise<unknown> {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    try {
+      r.setRenderTarget(this.ensureTarget());
+      return r.compileAsync(scene, camera).catch(() => {});
+    } catch {
+      return Promise.resolve();
+    } finally {
+      r.setRenderTarget(prev);
     }
   }
 
