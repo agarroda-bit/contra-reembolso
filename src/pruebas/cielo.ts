@@ -1,5 +1,5 @@
 // Página de prueba del cielo y del ciclo de día y noche.
-// Parámetros: ?hora=19.5  ?mira=oeste|este|sur|norte|<grados>  ?inclina=<grados>  ?vista=suelo
+// Parámetros: ?hora=19.5  ?mira=oeste|este|sur|norte|<grados>  ?inclina=<grados>  ?vista=suelo|jugador
 //             ?calidad=baja|media|alta  ?velocidad=60 (el día pasa 60 veces más rápido)
 // En consola: __setHour(h), __look(yawGrados, inclinaGrados)
 import * as THREE from 'three';
@@ -55,6 +55,17 @@ async function boot() {
     // desde el este mirando al oeste: a mediodía las sombras caen hacia la derecha (norte)
     cam.position.set(64, 26, 16);
     cam.lookAt(4, 0, 0);
+  } else if (vista === 'jugador') {
+    // como en el juego: un "jugador" en la acera y la cámara detrás, en tercera persona
+    autoAim = false;
+    const player = buildFakePlayer(game);
+    player.position.set(-20, 0, 21.5);
+    game.mod.player = player; // las sombras lo siguen (game.mod.player.position)
+    const m = params.get('mira');
+    const yaw = THREE.MathUtils.degToRad(m ? NAMED[m] ?? Number(m) : 270);
+    const fwd = new THREE.Vector3(Math.sin(yaw), 0, -Math.cos(yaw));
+    cam.position.copy(player.position).addScaledVector(fwd, -6.5).setY(3.4);
+    cam.lookAt(player.position.clone().addScaledVector(fwd, 8).setY(0.9));
   } else if (params.has('mira')) {
     const m = params.get('mira')!;
     look(NAMED[m] ?? Number(m), Number(params.get('inclina') ?? 10));
@@ -204,6 +215,23 @@ function buildTestTown(game: Game, lampPositions: THREE.Vector3[]): THREE.MeshLa
     scene.add(im);
   }
   return bulbMat;
+}
+
+/** Muñeco de 1,75 m (cuerpo, cabeza y gorra) que hace de jugador en ?vista=jugador. */
+function buildFakePlayer(game: Game): THREE.Group {
+  const g = new THREE.Group();
+  const mk = (geo: THREE.BufferGeometry, color: string, y: number) => {
+    const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color, flatShading: true }));
+    m.position.y = y;
+    m.castShadow = m.receiveShadow = true;
+    g.add(m);
+  };
+  mk(new THREE.CylinderGeometry(0.16, 0.14, 0.85, 6), '#2b3a67', 0.43); // piernas
+  mk(new THREE.CylinderGeometry(0.26, 0.2, 0.62, 6), '#ffd23f', 1.16); // camiseta del reparto
+  mk(new THREE.IcosahedronGeometry(0.17, 0), '#f1c27d', 1.62); // cabeza
+  mk(new THREE.CylinderGeometry(0.18, 0.18, 0.08, 8), '#e63946', 1.76); // gorra
+  game.scene.add(g);
+  return g;
 }
 
 /** Ventanas que se encienden de noche en las cajas naranjas del mundo provisional. */
