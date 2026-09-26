@@ -206,6 +206,9 @@ export class Jobs implements System {
       id: this.nextId++, client, item, type, pickupId: pickup.id, pickupPos: pickup.door.clone(), pickupName: pickup.name,
       dest, pay, time, message, expires: this.game.time.elapsed + 110,
     };
+    // el encargo que manda el tutorial (Doña Puri, con cliente y pago fijados): paquete casi irrompible
+    const tuto = this.game.mod.tutorial;
+    if (opts.client?.id === 'puri' && opts.pay !== undefined && tuto && !tuto.done && tuto.step > 0) offer.tutorial = true;
     this.offers.push(offer);
     const extra = `\n📦 ${info.label} · 💶 ${pay} € · ⏱ ${Math.round(time)} s · Recoger en ${pickup.name}`;
     this.msgs?.receive('cliente-' + client.id, client.name, client.avatar, message + extra, [
@@ -327,6 +330,12 @@ export class Jobs implements System {
   private damage(j: ActiveJob, loss: number) {
     if (loss <= 0.5) return;
     const before = j.integrity;
+    // primera entrega del tutorial: los golpes se notan un poco (para que se entienda el aviso),
+    // pero la caja no baja del 90 % y se cobra entera
+    if (j.offer.tutorial) {
+      j.integrity = Math.max(Math.min(before, 90), before - loss * 0.3);
+      return;
+    }
     j.integrity = Math.max(0, j.integrity - loss);
     if (before >= 60 && j.integrity < 60) this.game.events.emit('toast', { text: `¡El paquete de ${j.offer.client.name} está sufriendo!`, color: '#ff4f81', time: 1.8 });
     if (before > 0 && j.integrity <= 0) {

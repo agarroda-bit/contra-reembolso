@@ -54,6 +54,8 @@ export interface JobOffer {
   message: string;
   expires: number; // tiempo de juego en que caduca la oferta
   story?: boolean;
+  /** El encargo del tutorial (Doña Puri): el paquete no baja del 90 % (se cobra entero aunque haya golpes). */
+  tutorial?: boolean;
 }
 
 export type JobState = 'pickup' | 'carry' | 'done' | 'failed';
