@@ -54,7 +54,7 @@ export function drawMap(ctx: Ctx, districts: District[], props: { x: number; z: 
         const c = LAND[dname];
         const v = ctx.occ.get(x, z);
         const urbanCore = Math.abs(x) < 250 && z > -100 && z < 172 && (dname === 'centro' || dname === 'viejo');
-        const green = !urbanCore && (v === OCC.FREE || v === OCC.WATER || v === OCC.PROP || v === OCC.YARD);
+        const green = !urbanCore && (v === OCC.FREE || v === OCC.WATER || v === OCC.PROP || v === OCC.YARD || (dname === 'puerto' && v === OCC.RESERVED));
         const shade = 1 + Math.min(0.12, (h - 3) * 0.005);
         if (green && dname !== 'puerto') {
           r = 150 * shade;
@@ -97,7 +97,7 @@ export function drawMap(ctx: Ctx, districts: District[], props: { x: number; z: 
   };
   pass((w, alley) => [alley ? w + 1.5 : w + 7.5, 'rgba(80,68,60,0.55)']);
   pass((w, alley) => (alley ? null : [w + 5.6, '#efe6d4']));
-  pass((w, alley, main) => [w, alley ? '#f3e6c6' : main ? '#fff4c9' : '#fdfbf5']);
+  pass((w, alley, main) => [w, alley ? '#fffaf0' : main ? '#fff4c9' : '#fdfbf5']);
   // línea central discontinua en las avenidas
   g.setLineDash([3 / MAP_PX, 3 / MAP_PX]);
   pass((w, alley) => (alley ? null : [0.35, 'rgba(200,170,90,0.9)']));

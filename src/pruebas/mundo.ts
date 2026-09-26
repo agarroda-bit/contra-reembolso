@@ -156,6 +156,29 @@ async function boot() {
     return up > 0.8 && up < 1.8 ? 'OK' : `MAL(${up.toFixed(2)})`;
   });
   log(`rampas: ${rampRes.join(' ')}`);
+  // datos sin tapar: puertas (POIs y entregas) fuera de colisores, plazas de aparcamiento libres y carriles sin obstáculos
+  {
+    const hitAt = (x: number, y: number, z: number, r: number) => game.physics.overlapSphere(new THREE.Vector3(x, y, z), r, G.STATIC).length > 0;
+    const doors = [...world.pois.map((p) => [p.id, p.door] as const), ...world.deliverySpots.map((d) => [d.id, d.door] as const)];
+    const badDoors = doors.filter(([, d]) => hitAt(d.x, d.y + 1, d.z, 0.35)).map(([id]) => id);
+    const badPark = world.parkingSpots.filter((s) => hitAt(s.pos.x, s.pos.y + 1, s.pos.z, 1.0)).length;
+    const badPoiPark = world.pois.filter((p) => p.parking && hitAt(p.parking.x, p.parking.y + 1, p.parking.z, 1.0)).map((p) => p.id);
+    let laneHits = 0;
+    const R = world.roads;
+    for (const e of R.edges) {
+      if (e.alley) continue;
+      const A = R.nodes[e.a].pos, B = R.nodes[e.b].pos;
+      const L = Math.hypot(B.x - A.x, B.z - A.z), dx = (B.x - A.x) / L, dz = (B.z - A.z) / L;
+      for (const side of [1, -1]) {
+        for (let s = 1; s < L - 1; s += 2) {
+          const x = A.x + dx * s - dz * side * e.width / 4, z = A.z + dz * s + dx * side * e.width / 4;
+          if (hitAt(x, world.heightAt(x, z) + 1.2, z, 0.9)) laneHits++;
+        }
+      }
+    }
+    const ok = !badDoors.length && !badPark && !badPoiPark.length && !laneHits;
+    log(`sin tapar: puertas ${doors.length - badDoors.length}/${doors.length}${badDoors.length ? ' [' + badDoors.join(',') + ']' : ''}, plazas ocupadas ${badPark}, aparcamiento de POI tapado ${badPoiPark.length}, obstáculos en carriles ${laneHits} (${ok ? 'OK' : 'MAL'})`);
+  }
   log(`escena: ${meshes} mallas, ${(triTot / 1000).toFixed(0)}k triángulos`);
   log(Object.entries(triBy).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / 1000).toFixed(1)}k`).join(' · '));
 
