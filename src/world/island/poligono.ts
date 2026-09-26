@@ -147,8 +147,13 @@ function buildHideout(ctx: Ctx, out: Out, lot: Lot) {
   fence(gate1, fz, hw - 0.3, fz);
   fence(-hw + 0.3, fz, -hw + 0.3, wz1);
   fence(hw - 0.3, fz, hw - 0.3, wz1);
-  // portón abierto (hoja girada)
-  b.boxRot(gate0 + 0.2, fh / 2, fz + 2.3, 0.1, fh, 4.4, 0, 0.1, 0, '#6a6f76');
+  // portón abierto de par en par: la hoja plegada por dentro contra la valla (antes salía hacia la
+  // acera sin colisor, y al llegar a la puerta la cámara se quedaba detrás y tapaba toda la pantalla)
+  b.boxRot(gate0 - 2.3, fh / 2, fz - 0.2, 4.4, fh, 0.1, 0, 0.03, 0, '#6a6f76');
+  {
+    const lp = lotPoint(lot, gate0 - 2.3, fz - 0.2);
+    ctx.box(lp.x, lot.h + fh / 2, lp.z, 2.2, fh / 2, 0.08, lot.rot);
+  }
   // patio: cajas, palés y una torre de vigilancia
   const rng = ctx.rng;
   for (let i = 0; i < 14; i++) {
