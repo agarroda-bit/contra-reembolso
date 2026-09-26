@@ -103,7 +103,8 @@ export class Economy implements System {
     const after = this.fameLevel;
     if (after > before) {
       this.game.events.emit('toast', { text: `¡FAMA nivel ${after}!`, color: '#ffd23f', time: 3 });
-      this.game.events.emit('fame:level' as any, { level: after, reason } as any);
+      // un aviso por cada nivel cruzado (un premio grande puede saltar dos): así nadie se pierde lo que desbloquea
+      for (let l = before + 1; l <= after; l++) this.game.events.emit('fame:level' as any, { level: l, reason } as any);
       this.game.mod.audio?.play('success');
     }
   }

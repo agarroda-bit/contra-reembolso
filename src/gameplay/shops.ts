@@ -64,6 +64,14 @@ const CLOTHES: ClothItem[] = [
 
 let nextOwned = 1;
 
+/** Concesionario: vehículo y fama necesaria. */
+const DEALER: [VehicleKind, number][] = [['scooter', 1], ['compact', 1], ['taxi', 2], ['suv', 3], ['truck', 3], ['sports', 5]];
+/** Fama necesaria para un arma de la armería. */
+function weaponFame(w: string): number {
+  const d = (WEAPONS as any)[w];
+  return d?.crazy ? 2 : w === 'rifle' ? 3 : 1;
+}
+
 export class Shops implements System {
   name = 'shops';
   readonly owned: OwnedVehicle[] = [];
@@ -81,6 +89,23 @@ export class Shops implements System {
     it.addPoi('clothes', 'Entrar en Moda Paquetona', () => this.openClothes(), 3.5, 4);
     // app del garaje en el móvil
     game.mod.phone?.extraApps.push({ id: 'garaje', icon: '🚐', name: 'Garaje', color: '#ff7b54', open: (body: HTMLDivElement) => this.phoneGarage(body) });
+    // al subir de fama, qué se ha desbloqueado en las tiendas (sensación de progreso)
+    game.events.on('fame:level' as any, (e: any) => this.announceUnlocks(e.level as number));
+  }
+
+  private announceUnlocks(level: number) {
+    const g = this.game;
+    const later = (g.mod.fase ?? 9) < 6 ? ['fragile', 'stamp'] : [];
+    const cars = DEALER.filter(([, l]) => l === level).map(([k]) => VEHICLES[k].name.toLowerCase());
+    const guns = WEAPON_ORDER.filter((w) => w !== 'fists' && !later.includes(w) && weaponFame(w) === level && !g.mod.combat?.owned?.has(w)).map((w) => WEAPONS[w].name.toLowerCase());
+    const clothes = CLOTHES.filter((c) => c.fame === level && !this.clothesOwned.has(c.id)).map((c) => c.name.toLowerCase());
+    const parts: string[] = [];
+    if (cars.length) parts.push(`🔧 Talleres Manolo: ${cars.join(', ')}`);
+    if (guns.length) parts.push(`🔫 Armería: ${guns.join(', ')}`);
+    if (clothes.length) parts.push(`👕 Moda Paquetona: ${clothes.join(', ')}`);
+    const tail = level >= 2 ? '\nY los encargos pagan un 12 % más por cada nivel.' : '';
+    if (!parts.length && level < 2) return;
+    g.mod.messages?.receive('tiendas', 'Tiendas de Puerto Paquete', '🛍️', `¡Fama ${level}! ${parts.length ? 'Ya puedes comprar:\n' + parts.join('\n') : 'Los clientes ya te conocen.'}${tail}`);
   }
 
   private get eco(): Economy {
@@ -135,7 +160,7 @@ export class Shops implements System {
       icon: '🔧',
       sections: () => {
         const secs: ShopSection[] = [];
-        const shop: [VehicleKind, number][] = [['scooter', 1], ['compact', 1], ['taxi', 2], ['suv', 3], ['truck', 3], ['sports', 5]];
+        const shop = DEALER;
         secs.push({
           title: 'Concesionario',
           items: shop.map(([k, lvl]) => {
@@ -230,7 +255,7 @@ export class Shops implements System {
         const weapons = WEAPON_ORDER.filter((w) => w !== 'fists' && !later.includes(w)).map((w) => {
           const d = WEAPONS[w];
           const has = combat.owned.has(w);
-          const lock = d.crazy ? 2 : w === 'rifle' ? 3 : 1;
+          const lock = weaponFame(w);
           return {
             id: w, icon: d.icon, name: d.name, desc: d.desc, price: has ? d.ammoPrice : d.price,
             label: has ? `+${d.clip || 1} munición` : 'Comprar', owned: has,
