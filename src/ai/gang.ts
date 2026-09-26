@@ -330,9 +330,11 @@ export class Gang implements System {
         continue;
       }
       // han perdido el interés: se van andando y, cuando nadie los ve, se retiran
-      if (b.bored && !b.aggro && !b.home && m.alive && !m.busy && !m.vehicle) {
+      // (el jefe final no: se queda por allí hasta que vuelvas)
+      if (b.bored && !b.aggro && !b.home && m.alive && !m.busy && !m.vehicle && m.role !== 'jefe') {
         const dp = m.position.distanceTo(p.position);
-        if (dp > 35 && offscreen(g, m.position)) {
+        // (lo de si se le ve, cada 10 frames: es un rayo)
+        if (dp > 35 && (g.time.frame + m.id) % 10 === 0 && offscreen(g, m.position)) {
           this.npcs.remove(m);
           this.members.splice(i, 1);
           continue;

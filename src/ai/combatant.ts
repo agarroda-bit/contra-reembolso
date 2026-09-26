@@ -50,6 +50,8 @@ export interface CombatBrain {
   bored: boolean;
   /** Vector propio para `goal` al apartarse a quemarropa. */
   goalBuf?: THREE.Vector3;
+  /** Banda: dónde te vio por última vez (si te pierde de vista, va ahí y no a donde estás de verdad). */
+  seenAt?: THREE.Vector3;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
@@ -137,6 +139,8 @@ export function updateCombatant(game: Game, npc: Npc, dt: number) {
     const len = dir.length();
     const hit = len < 70 ? game.physics.raycast(eye, dir, len - 0.5, SOLID, npc.collider) : null;
     b.los = len < 70 && !hit;
+    // la banda se acuerda de dónde te vio: si te escondes, te busca ahí (no sabe dónde estás de verdad)
+    if (b.los && b.side === 'gang') b.hunt = (b.seenAt ??= new THREE.Vector3()).copy(target);
     // (en tregua, p. ej. recién reaparecido, no se enfadan solo por verte)
     if (b.los && dist < 45 && game.time.elapsed >= b.calmUntil) {
       b.aggro = true;
