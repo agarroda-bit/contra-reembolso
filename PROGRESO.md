@@ -6,6 +6,9 @@ Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y si
 
 ## Fase actual: 9 — Mejoras sin fin
 
+## Fase 9 — Mejoras sin fin (en curso)
+- **27/09, 00:00 · Activada y publicada:** eventos aleatorios por la isla (ladrón de bolsos, camión que va perdiendo paquetes, carrera callejera), modo foto (K: poses, hora del día, guardar foto), 20 logros con aviso, reto del día en el móvil, mando en los menús. Prueba nueva de la fase 9 (reto, ladrón, modo foto y logro): pasan las 12 pruebas (`capturas/fase-9/`).
+
 ## Fase 8 — Pulido ✅ (26/09, 23:40, publicada)
 Nota: el Mac se durmió de 08:12 a 14:20 y el trabajo se paró esas horas; ahora queda despierto con `caffeinate` mientras dura la sesión.
 

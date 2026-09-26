@@ -222,3 +222,27 @@ test('fps con ?debug=1', async ({ page }) => {
   expect(fps).toBeGreaterThan(1);
   expect(errors).toEqual([]);
 });
+
+test('fase 9: reto del día, ladrón de bolsos, modo foto y logros', async ({ page }) => {
+  test.skip(FASE < 9, 'llega en la fase 9');
+  test.setTimeout(240_000);
+  const errors = await arrancar(page);
+  // reto del día puesto
+  expect(await g(page, `!!__cr.mod.daily.current`)).toBe(true);
+  // evento aleatorio: el ladrón de bolsos
+  await g(page, `__cr.mod.randomEvents.start('thief')`);
+  await page.waitForFunction(() => (window as any).__cr.mod.randomEvents.ev?.kind === 'thief', null, { timeout: 20_000 });
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: `${DIR}/18-ladron.png` });
+  // modo foto con la K
+  await page.keyboard.press('KeyK');
+  await page.waitForFunction(() => (window as any).__cr.mod.photo.active === true, null, { timeout: 20_000 });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: `${DIR}/19-modo-foto.png` });
+  await page.keyboard.press('KeyK');
+  await page.waitForFunction(() => (window as any).__cr.mod.photo.active === false, null, { timeout: 20_000 });
+  // logro: robar un coche
+  await g(page, `__cr.events.emit('vehicle:steal', {})`);
+  await page.waitForFunction(() => (window as any).__cr.mod.achievements.unlocked.has('robo'), null, { timeout: 20_000 });
+  expect(errors).toEqual([]);
+});
