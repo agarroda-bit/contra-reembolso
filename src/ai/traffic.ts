@@ -27,6 +27,8 @@ export interface CarBrain {
   bypass?: number;
   /** Segundos seguidos sin avanzar (atasco): si no se ve, se retira. */
   jam?: number;
+  /** Intentos de desatascarse ante el mismo obstáculo (alterna marcha atrás y adelantar). */
+  tries?: number;
 }
 
 const tmpV = new THREE.Vector3();
@@ -316,12 +318,14 @@ export class Traffic implements System {
     let blockedByPlayer = false;
     let staticHit = false;
     let stillHit = false;
+    let otherCar: Vehicle | null = null;
     if (hit) {
       const dist = hit.time_of_impact;
       const owner: any = phys.ownerOf(hit.collider);
       blockedByPlayer = owner === this.game.mod.player || owner === this.vm.current;
       staticHit = !owner;
-      stillHit = staticHit || (owner?.spec ? Math.abs(owner.speed) < 0.5 : false) || owner === this.game.mod.player;
+      otherCar = owner?.spec ? (owner as Vehicle) : null;
+      stillHit = staticHit || (otherCar ? Math.abs(otherCar.speed) < 0.5 : false) || owner === this.game.mod.player;
       // en persecución, al jugador se le embiste
       if (!(brain.mode === 'chase' && blockedByPlayer)) {
         const safe = Math.max(0, dist - 1.6);
@@ -361,11 +365,25 @@ export class Traffic implements System {
         brain.blocked = 0;
         brain.reverse = 1.4;
       } else if (brain.mode === 'lane' && !staticHit && brain.blocked > (blockedByPlayer ? 7 : stillHit ? 4 : 9)) {
-        // un coche parado (o el jugador plantado, o alguien tirado en la calzada): adelantar por el otro carril
         brain.blocked = 0;
-        brain.bypass = 4.5;
+        const tries = (brain.tries = (brain.tries ?? 0) + 1);
+        // ¿de frente o cruzado? (en un cruce, dos que giran a la vez se quedan morro con morro)
+        let dh = otherCar ? otherCar.heading - v.heading : 0;
+        dh = Math.abs(Math.atan2(Math.sin(dh), Math.cos(dh)));
+        if (otherCar && dh > 1.2 && (otherCar as any).brain && otherCar.id < v.id) {
+          // cede el paso el de número más alto: marcha atrás; el otro espera y pasa
+          brain.reverse = 1.3;
+        } else if (otherCar && dh > 1.2 && (otherCar as any).brain && tries < 3) {
+          // tiene preferencia: espera a que el otro se aparte (si no se aparta, acabará adelantando)
+        } else if (tries % 2 === 0 && dh > 1.2) {
+          brain.reverse = 1.3;
+        } else {
+          // un coche parado (o el jugador plantado, o alguien en la calzada): adelantar por el otro carril
+          brain.bypass = 4.5;
+        }
       }
     } else brain.blocked = 0;
+    if (absSpeed > 3) brain.tries = 0;
 
     const diff = wantSpeed - speed;
     v.controls.throttle = diff > 0.5 ? THREE.MathUtils.clamp(diff * 0.35, 0.15, 1) : diff < -0.8 ? -1 : 0;

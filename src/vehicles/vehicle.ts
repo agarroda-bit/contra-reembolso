@@ -23,8 +23,10 @@ const tmpGroupM = new THREE.Matrix4();
 const TWO_PI = Math.PI * 2;
 const UP = new THREE.Vector3(0, 1, 0);
 let nextId = 1;
-/** Escala de los frenos de Rapier (medida en pruebas/vehiculos.html?medir). */
-const BRAKE_K = 1.2;
+/** Escala de los frenos de Rapier (medida en pruebas/vehiculos.html?medir): de 90 km/h a 0 en ~30 m. */
+const BRAKE_K = 1.6;
+/** Freno de mano (ruedas traseras), aparte del freno normal. */
+const HANDBRAKE_K = 0.6;
 /** Escala global del motor. */
 const ENGINE_K = 1.55;
 /** En el aire la gravedad pesa menos: saltos más largos y vistosos (la del mundo es muy fuerte, −22). */
@@ -235,8 +237,8 @@ export class Vehicle {
     // Freno de mano: bloquea detrás y quita agarre (derrape)
     const grip = s.friction * (1 + up.tires * 0.12);
     if (ctl.handbrake) {
-      c.setWheelBrake(2, s.brake * 0.5 * BRAKE_K);
-      c.setWheelBrake(3, s.brake * 0.5 * BRAKE_K);
+      c.setWheelBrake(2, s.brake * HANDBRAKE_K);
+      c.setWheelBrake(3, s.brake * HANDBRAKE_K);
       c.setWheelFrictionSlip(2, grip * 0.35);
       c.setWheelFrictionSlip(3, grip * 0.35);
       c.setWheelSideFrictionStiffness(2, 0.35);
@@ -258,6 +260,21 @@ export class Vehicle {
       this.wheelContact[i] = c.wheelIsInContact(i);
       if (this.wheelContact[i]) contacts++;
     }
+    // Derrape arcade: con el freno de mano el coche rota con decisión hacia donde giras; al soltarlo
+    // (o al contravolantear) se frena el trompo, para que derrapar sea fácil de controlar.
+    if (contacts >= 2 && !s.twoWheels) {
+      const w = this.body.angvel();
+      if (ctl.handbrake && absSpeed > 5 && Math.abs(ctl.steer) > 0.1) {
+        // volante a la derecha (steer > 0) = giro negativo alrededor de Y
+        const target = -(this.speed < 0 ? -1 : 1) * ctl.steer * 3 * THREE.MathUtils.clamp(1500 / s.mass, 0.35, 1);
+        if (Math.sign(w.y) !== Math.sign(target) || Math.abs(w.y) < Math.abs(target)) {
+          this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, true);
+        }
+      } else if (!ctl.handbrake && this.slip > 2.5 && ctl.steer * w.y >= 0) {
+        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * 2.5)), z: w.z }, true);
+      }
+    }
+
     const r = this.body.rotation();
     tmpQ.set(r.x, r.y, r.z, r.w);
     const bodyUp = tmpV2.set(0, 1, 0).applyQuaternion(tmpQ);

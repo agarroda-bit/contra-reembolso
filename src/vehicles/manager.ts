@@ -38,6 +38,9 @@ export class VehicleManager implements System {
     game.events.on('vehicle:impact' as any, (e: any) => {
       if (e.vehicle !== this.current || e.dv < 7) return;
       game.events.emit('camera:shake', { amount: Math.min(1.1, (e.dv - 6) * 0.055) });
+      // en moto o patinete, un choque fuerte te hace salir volando
+      const v = e.vehicle as Vehicle;
+      if (v.spec.twoWheels && e.dv > 12 && !this.transition && this.player.state === 'vehicle') this.eject(v, e.dv);
     });
     game.events.on('vehicle:landed' as any, (e: any) => {
       if (e.vehicle !== this.current) return;
@@ -348,6 +351,26 @@ export class VehicleManager implements System {
     } else {
       p.pose = 'normal';
     }
+    this.transition = { kind: 'exit', t: 0, dur: 0.3, vehicle: v, from: out.clone(), to: out.clone() };
+    this.game.events.emit('vehicle:exit', { vehicle: v });
+  }
+
+  /** Sale despedido por encima del manillar (choque fuerte en moto). */
+  private eject(v: Vehicle, dv: number) {
+    const p = this.player;
+    const out = v.getPosition(new THREE.Vector3());
+    out.y += v.spec.half.y + 0.9;
+    this.detachPlayer(v);
+    p.teleport(out);
+    p.heading = v.heading;
+    const h = v.heading;
+    const k = Math.min(12, dv * 0.7);
+    p.push.set(Math.sin(h) * k, 5 + Math.min(4, dv * 0.2), Math.cos(h) * k);
+    p.pose = 'knocked';
+    p.poseTimer = 1.5;
+    p.hurt(Math.min(30, dv * 1.2), { cause: 'salir volando de la moto' });
+    this.game.events.emit('camera:shake', { amount: 0.8 });
+    this.game.events.emit('toast', { text: '¡Has salido volando por encima del manillar!', color: '#ff7b54', time: 2 });
     this.transition = { kind: 'exit', t: 0, dur: 0.3, vehicle: v, from: out.clone(), to: out.clone() };
     this.game.events.emit('vehicle:exit', { vehicle: v });
   }
