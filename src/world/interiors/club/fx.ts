@@ -25,6 +25,15 @@ export interface FxState {
 }
 
 const PALETTE = ['#ff2e88', '#19e6d2', '#b44dff', '#ffd23f', '#3a86ff', '#7cff4f'].map((c) => new THREE.Color(c));
+/**
+ * Color de la paleta por índice, dando la vuelta en los dos sentidos: el contador de pulsos crece sin
+ * parar y algunos patrones lo restan, así que el índice puede salir negativo (PALETTE[-3] no existe).
+ */
+function pal(k: number): THREE.Color {
+  const n = PALETTE.length;
+  if (!Number.isFinite(k)) return PALETTE[0];
+  return PALETTE[((Math.floor(k) % n) + n) % n];
+}
 const WHITE = new THREE.Color('#ffffff');
 const tmpC = new THREE.Color();
 const tmpC2 = new THREE.Color();
@@ -434,7 +443,8 @@ export class ClubFx {
       this.jets.push({ mesh, mat, t: 0 });
     }
 
-    // ── Luces reales (solo se añaden a la escena mientras estás dentro) ──
+    // ── Luces reales: siempre en el grupo del club, que fuera está oculto (no cuentan ni gastan).
+    // Así la precarga de interiores las ve y compila los shaders con ellas (calidad baja).
     const L0 = new THREE.PointLight('#ff2e88', 0, 17, 1.3);
     L0.position.set(-3.8, 4.6, -2.8);
     const L1 = new THREE.PointLight('#19e6d2', 0, 17, 1.3);
@@ -442,6 +452,7 @@ export class ClubFx {
     const L2 = new THREE.PointLight('#ffb35c', 0, 15, 1.3);
     L2.position.set(11.2, 3.6, -1.2);
     this.lights.push(L0, L1, L2);
+    root.add(L0, L1, L2);
   }
 
   private beamMaterial(color: THREE.Color): THREE.ShaderMaterial {
@@ -461,14 +472,9 @@ export class ClubFx {
     });
   }
 
-  /** Enciende o apaga las luces reales (se quitan de la escena al salir para no gastar fuera). */
+  /** Dentro o fuera (las luces están siempre en el grupo del club, que fuera se oculta entero). */
   setActive(on: boolean) {
-    if (on === this.active) return;
     this.active = on;
-    for (const l of this.lights) {
-      if (on) this.root.add(l);
-      else l.removeFromParent();
-    }
   }
 
   setLedText(text: string) {
@@ -613,8 +619,7 @@ export class ClubFx {
       b.mesh.quaternion.setFromUnitVectors(DOWN, d);
       b.mesh.scale.set(r, L, r);
       // color
-      const ci = (i + palShift) % PALETTE.length;
-      b.color.copy(PALETTE[ci]);
+      b.color.copy(pal(i + palShift));
       if (party > 0.5 && (Math.floor(s.beat * 4) + i) % 3 === 0) b.color.lerp(WHITE, 0.35);
       const inten = (s.breakdown ? 0.12 + (i % 3 === 0 ? 0.18 : 0) : 0.26 + 0.16 * pulse) + party * 0.2 + this.flash * 0.3;
       b.mat.uniforms.uColor.value.copy(b.color);
@@ -642,7 +647,7 @@ export class ClubFx {
     this.updateDots(s);
 
     // ── humo ──
-    tmpC.copy(PALETTE[palShift % PALETTE.length]).lerp(tmpC2.set('#b8a8ff'), 0.6);
+    tmpC.copy(pal(palShift)).lerp(tmpC2.set('#b8a8ff'), 0.6);
     for (const m of this.smoke) {
       m.uniforms.uTime.value = s.time;
       (m.uniforms.uColor.value as THREE.Color).lerp(tmpC, Math.min(1, dt * 0.8));
@@ -652,17 +657,18 @@ export class ClubFx {
     this.ledScroll = (this.ledScroll + (dt * (120 + party * 60)) / LED_CANVAS_W) % this.ledUsed;
     const u = this.led.uniforms;
     u.uTime.value = s.time;
-    u.uBeat.value = s.beat;
+    // en la GPU los números grandes pierden precisión: basta con la vuelta de 64 pulsos (16 compases)
+    u.uBeat.value = s.beat % 64;
     u.uKick.value = pulse;
     u.uParty.value = party;
     u.uScroll.value = this.ledScroll;
-    (u.uColA.value as THREE.Color).copy(PALETTE[(palShift + 2) % PALETTE.length]).multiplyScalar(0.8);
-    (u.uColB.value as THREE.Color).copy(PALETTE[(palShift + 4) % PALETTE.length]);
+    (u.uColA.value as THREE.Color).copy(pal(palShift + 2)).multiplyScalar(0.8);
+    (u.uColB.value as THREE.Color).copy(pal(palShift + 4));
 
     // ── luces reales ──
     const [L0, L1, L2] = this.lights;
-    L0.color.copy(PALETTE[palShift % PALETTE.length]);
-    L1.color.copy(PALETTE[(palShift + 1) % PALETTE.length]);
+    L0.color.copy(pal(palShift));
+    L1.color.copy(pal(palShift + 1));
     const li = 26 + 22 * pulse + party * 26 + this.flash * 40;
     L0.intensity = li;
     L1.intensity = li;
@@ -696,12 +702,12 @@ export class ClubFx {
     const b = s.beat * (party > 0.3 ? 2 : 1);
     const bi = Math.floor(b);
     const pat = s.breakdown ? -1 : (Math.floor(s.bar / 4) + (party > 0.3 ? Math.floor(s.beat / 2) : 0)) % 5;
-    const pal = Math.floor(s.bar / 4);
+    const palI = Math.floor(s.bar / 4);
     const pl = s.player;
     for (let k = 0; k < this.tileCenters.length; k++) {
       const { x, z, i, j } = this.tileCenters[k];
       let v = 0;
-      let col = PALETTE[(pal + (i + j) % 2) % PALETTE.length];
+      let col = pal(palI + ((i + j) & 1));
       switch (pat) {
         case 0:
           v = (i + j + bi) & 1 ? 1 : 0.06;
@@ -710,18 +716,18 @@ export class ClubFx {
           const d = Math.hypot(i - 4.5, j - 3.5);
           const w = frac(d * 0.3 - b * 0.5);
           v = w < 0.3 ? 1 : 0.05;
-          col = PALETTE[(pal + Math.floor(d * 0.3 - b * 0.5) + 60) % PALETTE.length];
+          col = pal(palI + Math.floor(d * 0.3 - b * 0.5));
           break;
         }
         case 2: {
           const pos = frac(b / 8) * 14 - 2;
           v = Math.max(0.05, 1 - Math.abs(i - pos) * 0.45);
-          col = PALETTE[(pal + 1) % PALETTE.length];
+          col = pal(palI + 1);
           break;
         }
         case 3:
           v = hash(i, j, Math.floor(b * 2)) > 0.6 ? 1 : 0.05;
-          col = PALETTE[Math.floor(hash(j, i, Math.floor(b * 2)) * PALETTE.length)];
+          col = pal(hash(j, i, Math.floor(b * 2)) * PALETTE.length);
           break;
         case 4: {
           const h = 1 + Math.floor(hash(i, 3, bi) * (FLOOR.rows - 1) * (0.5 + 0.5 * pulse));
@@ -829,7 +835,7 @@ export class ClubFx {
       this.dummy.scale.setScalar(c.size * shrink);
       this.dummy.updateMatrix();
       m.setMatrixAt(count, this.dummy.matrix);
-      m.setColorAt(count, PALETTE[(ci * 7) % PALETTE.length]);
+      m.setColorAt(count, pal(ci * 7));
       count++;
     }
     m.count = count;

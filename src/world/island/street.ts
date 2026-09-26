@@ -8,7 +8,7 @@ import { OCC } from './occ';
 import { SIDEWALK, pathAt, pathLength } from './network';
 import { PropType } from './props';
 import { SKIP, lin } from './geo';
-import { clothesline, glass } from './buildings';
+import { clothesline, glass, overhangCollider } from './buildings';
 import { adSign, mupiSign } from './ads';
 import { fitText, roundRect, FONT_IMPACT, FONT } from './signs';
 import { districtRaw } from './plan';
@@ -414,6 +414,10 @@ function chiringuito(ctx: Ctx, x: number, z: number, rot: number) {
   });
   ctx.signs.place(b, 'chiringuito', 0, 2.3, 2.02, 3.2, 0.9, 0.5);
   ctx.box(x, y + 0.7, z, 2.6, 0.7, 2.1, rot);
+  // pared del fondo y tejado de paja: sin colisor, la cámara se quedaba detrás de la pared o dentro del tejado
+  b.frame(x, y, z, rot);
+  ctx.box(b.wx(0, -1.6), b.wy(1.2), b.wz(0, -1.6), 2.2, 1.1, 0.15, rot);
+  overhangCollider(ctx, b, 0, 3.2, 0, 2.9, 0.4, 2.4);
   ctx.foot.push({ x, z, hw: 2.9, hd: 2.4, rot, color: straw, height: 3, open: true });
   const pp = { x: x + Math.cos(rot) * 3.6, z: z - Math.sin(rot) * 3.6 };
   ctx.props.add('palm', pp.x, ctx.heightAt(pp.x, pp.z) - 0.1, pp.z, rot, 1.05);

@@ -48,6 +48,11 @@ interface Built {
   inst: InteriorInstance;
   root: THREE.Group;
   origin: THREE.Vector3;
+  /** Shaders de dentro ya compilados ('pending' = en marcha). */
+  warm: 'no' | 'pending' | 'yes';
+  warming?: Promise<void>;
+  /** Luces apagadas de relleno (ver swapLights). */
+  pads: THREE.PointLight[];
 }
 
 const SPACING = 400;
@@ -68,6 +73,10 @@ export class Interiors implements System {
     game.ui.appendChild(this.fade);
     // pistas: puertas de fuera y cosas de dentro
     game.mod.interaction?.add(() => this.hint(), 8);
+    // al cambiar la calidad (sombras, farolas) cambian los shaders: hay que volver a precompilarlos
+    game.events.on('settings', () => {
+      for (const b of this.built.values()) if (b.warm === 'yes') b.warm = 'no';
+    });
   }
 
   register(def: InteriorDef) {
@@ -96,7 +105,7 @@ export class Interiors implements System {
       toWorld: (l) => l.clone().add(origin),
     };
     const inst = def.build(ctx);
-    b = { def, inst, root, origin };
+    b = { def, inst, root, origin, warm: 'no', pads: [] };
     this.built.set(def.id, b);
     return b;
   }
@@ -132,14 +141,145 @@ export class Interiors implements System {
     this.returnPoi = g.world.pois.find(def.poi) ?? null;
     this.transition(() => {
       const b = this.ensureBuilt(def);
-      b.root.visible = true;
+      b.root.visible = false;
+      // si entras antes de la precarga, sus shaders se piden ahora (en paralelo)
+      if (b.warm === 'no') this.precompile(b);
       this.current = b;
       const p = g.mod.player;
       p.teleport(b.origin.clone().add(b.inst.spawn), b.inst.heading);
       b.inst.onEnter?.();
+      // (onEnter enseña su grupo: sigue oculto hasta cambiar las luces de fuera por las de dentro)
+      b.root.visible = false;
       g.events.emit('interior:enter' as any, { id } as any);
       g.mod.audio?.play('door');
+      // si sus shaders aún se están compilando, se espera (con la pantalla fundida) sin dibujar el
+      // interior, para que ningún frame se quede atascado esperando a uno
+      if (b.warm === 'pending' && b.warming) return b.warming.then(() => this.show(b));
+      this.show(b);
     });
+  }
+
+  /** Enseña el interior (y cambia las luces de fuera por las de dentro en el mismo frame). */
+  private show(b: Built) {
+    if (this.current !== b || b.root.visible) return;
+    this.swapLights(b, true);
+    b.root.visible = true;
+  }
+
+  // ───── Luces: mismo número dentro que fuera ─────
+  //
+  // three compila un shader distinto para cada número de luces puntuales en la escena. Si al entrar
+  // se sumaran las del interior a las de fuera, habría que recompilar los shaders de todo lo que se
+  // ve dentro (interior, personaje, gente, partículas...) en el primer frame: pantalla negra de 1 a
+  // 10 s. Por eso, dentro, las luces puntuales de fuera (farolas cercanas, destello de explosiones;
+  // están a kilómetros) se apagan y el interior usa exactamente las mismas: rellena con luces
+  // apagadas si tiene menos. Así los shaders de dentro son los de fuera y los propios del interior se
+  // precompilan en segundo plano (precompile).
+  // Si el interior tiene más luces que huecos (calidad baja: fuera no hay ninguna), no se apaga
+  // ninguna (el club, la oficina y el ático se quedarían a oscuras): dentro hay otro número de luces y
+  // precompile compila con ese número los shaders del interior y los del personaje.
+  private hiddenOutside: THREE.Light[] = [];
+
+  /** Luces puntuales propias del interior que se verían dentro (sin el relleno). */
+  private ownLights(b: Built): THREE.PointLight[] {
+    const own: THREE.PointLight[] = [];
+    const vis = b.root.visible;
+    b.root.visible = true;
+    b.root.traverseVisible((o) => {
+      if ((o as THREE.PointLight).isPointLight && !b.pads.includes(o as THREE.PointLight)) own.push(o as THREE.PointLight);
+    });
+    b.root.visible = vis;
+    return own;
+  }
+
+  /** Apaga las luces puntuales de fuera que se ven ahora (y las deja en `out` para volver a encenderlas). */
+  private hideOutsideLights(out: THREE.Light[]) {
+    out.length = 0;
+    this.game.scene.traverseVisible((o) => {
+      if ((o as THREE.PointLight).isPointLight) out.push(o as THREE.Light);
+    });
+    for (const l of out) l.visible = false;
+  }
+
+  private swapLights(b: Built, inside: boolean) {
+    if (!inside) {
+      for (const l of this.hiddenOutside) l.visible = true;
+      this.hiddenOutside.length = 0;
+      for (const l of b.pads) l.visible = false;
+      return;
+    }
+    // luces puntuales de fuera que se ven ahora (el interior aún está oculto)
+    this.hideOutsideLights(this.hiddenOutside);
+    const want = this.hiddenOutside.length;
+    // las del interior (sin contar el relleno); si son más que los huecos, se usan todas (ver arriba)
+    const own = this.ownLights(b);
+    const pad = Math.max(0, want - own.length);
+    while (b.pads.length < pad) {
+      const l = new THREE.PointLight('#000000', 0, 0.01, 2);
+      l.name = 'relleno-luces';
+      l.position.set(0, -20, 0);
+      b.root.add(l);
+      b.pads.push(l);
+    }
+    b.pads.forEach((l, i) => (l.visible = i < pad));
+  }
+
+  /**
+   * Compila en segundo plano (en paralelo) los shaders del interior con las luces que habrá dentro
+   * (ver swapLights). Medido: fuera no da tirones, porque ningún frame usa esos shaders hasta que
+   * entras.
+   * - Si las luces del interior caben en los huecos de fuera: con las luces de fuera (mismo número).
+   * - Si no caben (calidad baja): con las de fuera apagadas y las del interior encendidas, y también
+   *   los del personaje, que dentro se ve con ese otro número de luces.
+   */
+  private precompile(b: Built): Promise<void> {
+    const g = this.game;
+    const r = g.renderer;
+    const done = () => {
+      if (b.warm === 'pending') b.warm = 'yes';
+    };
+    if (typeof r.compileAsync !== 'function') {
+      b.warm = 'yes';
+      return Promise.resolve();
+    }
+    b.warm = 'pending';
+    const vis = b.root.visible;
+    const parent = b.root.parent;
+    const jobs: Promise<unknown>[] = [];
+    const outside: THREE.Light[] = [];
+    try {
+      b.root.visible = false;
+      this.hideOutsideLights(outside);
+      for (const l of b.pads) l.visible = false;
+      if (this.ownLights(b).length <= outside.length) {
+        // oculto: sus luces no cuentan y las de fuera sí, como quedarán dentro
+        for (const l of outside) l.visible = true;
+        outside.length = 0;
+        jobs.push(r.compileAsync(b.root, g.camera, g.scene));
+      } else {
+        // luces de dentro. Con el interior visible en la escena: el personaje y lo de fuera que se
+        // dibuja siempre, también desde dentro (cielo, nubes, mar, ruedas: sin recorte por cámara).
+        // Luego el interior, fuera de la escena (si no, three contaría sus luces dos veces).
+        const always: THREE.Object3D[] = [];
+        g.scene.traverseVisible((o) => {
+          if (!o.frustumCulled && (o as THREE.Mesh).material) always.push(o);
+        });
+        b.root.visible = true;
+        const pr = g.mod.player?.root as THREE.Object3D | undefined;
+        if (pr) jobs.push(r.compileAsync(pr, g.camera, g.scene));
+        for (const o of always) jobs.push(r.compileAsync(o, g.camera, g.scene));
+        b.root.removeFromParent();
+        jobs.push(r.compileAsync(b.root, g.camera, g.scene));
+      }
+    } catch (e) {
+      console.warn('[interiores] No se pudieron precompilar los shaders de', b.def.id, e);
+    } finally {
+      if (parent && !b.root.parent) parent.add(b.root);
+      b.root.visible = vis;
+      for (const l of outside) l.visible = true;
+    }
+    const timeout = new Promise((res) => setTimeout(res, 8000));
+    return (b.warming = Promise.race([Promise.all(jobs), timeout]).then(done, done));
   }
 
   exit() {
@@ -149,6 +289,7 @@ export class Interiors implements System {
     this.transition(() => {
       cur.inst.onExit?.();
       cur.root.visible = false;
+      this.swapLights(cur, false);
       this.current = null;
       const poi = this.returnPoi;
       const p = g.mod.player;
@@ -161,32 +302,57 @@ export class Interiors implements System {
     });
   }
 
-  private transition(mid: () => void) {
+  /** Fundido a oscuro, `mid` a mitad (si devuelve una promesa, se espera a ella) y vuelta. */
+  private transition(mid: () => void | Promise<void>) {
     this.busy = true;
     this.fade.style.opacity = '1';
     setTimeout(() => {
-      try {
-        mid();
-      } finally {
+      let wait: void | Promise<void> = undefined;
+      const done = () =>
         setTimeout(() => {
           this.fade.style.opacity = '0';
           this.busy = false;
         }, 120);
+      try {
+        wait = mid();
+      } finally {
+        if (wait) wait.then(done, done);
+        else done();
       }
     }, 380);
   }
 
   private prebuildTimer = 10;
+  /** Interiores cuyo fallo en update ya se avisó (para no llenar la consola cada frame). */
+  private warned = new Set<string>();
   update(dt: number) {
-    for (const b of this.built.values()) b.inst.update?.(dt, b === this.current);
-    // precarga: a los 10 s de juego se construye un interior cada 2 s (oculto), para que la
-    // primera vez que entres no haya pantalla negra
+    for (const b of this.built.values()) {
+      // un fallo en los efectos de un interior no puede parar el juego entero (se congelaría la
+      // pantalla y las teclas se quedarían pulsadas): se avisa una vez y se sigue
+      try {
+        b.inst.update?.(dt, b === this.current);
+      } catch (e) {
+        if (!this.warned.has(b.def.id)) {
+          this.warned.add(b.def.id);
+          console.warn(`[interiores] Fallo al actualizar ${b.def.id} (se sigue jugando):`, e);
+        }
+      }
+    }
+    // precarga: a los 10 s de juego se construye un interior cada 2 s (oculto) y, en el turno
+    // siguiente, se compilan sus shaders en segundo plano, para que la primera vez que entres no
+    // haya pantalla negra
     if (this.current) return;
     this.prebuildTimer -= dt;
     if (this.prebuildTimer <= 0) {
       this.prebuildTimer = 2;
+      let busy = false;
+      for (const b of this.built.values()) if (b.warm === 'pending') busy = true;
+      let cold: Built | undefined;
+      for (const b of this.built.values()) if (!cold && b.warm === 'no') cold = b;
       const next = this.defs.find((d) => !this.built.has(d.id));
-      if (next) {
+      if (busy) this.prebuildTimer = 0.5;
+      else if (cold) this.precompile(cold);
+      else if (next) {
         try {
           const b = this.ensureBuilt(next);
           b.root.visible = false;

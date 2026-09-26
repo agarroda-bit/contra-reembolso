@@ -5,7 +5,7 @@ import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
 import { PlanCtx, Special, Out, collectible, makePoi, poiAt, ground, doorPoint, curbParking, curbGap, plazaPad } from './special';
-import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, flatRoof, PAL } from './buildings';
+import { glass, rollerDoor, facadeFrame, baseDepth, stripedAwning, awningCollider, overhangCollider, flatRoof, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, shopSign, FONT_IMPACT, FONT, FONT_SCRIPT, FONT_SERIF, FONT_FUN } from './signs';
 import { makeBeamMaterial } from './materials';
@@ -394,6 +394,7 @@ function buildClothes(ctx: Ctx, out: Out, lot: Lot) {
     b.panelZ(0, 1.5, 0.05, 3.4, 3.0, '#1b1b1b');
     glass(w, 0, 1.45, 0.07, 2.8, 2.8, [1, 0.9, 0.95, 0.02]);
     stripedAwning(b, 0, 3.9, 0.05, half * 2 - 1, 1.5, 0.5, '#1b1b1b', '#fbf7f2', 14);
+    awningCollider(ctx, b, 0, 3.9, 0.05, half * 2 - 1, 1.5);
     ctx.signs.define('moda', 12, 2.2, (g, W, Hh) => {
       g.fillStyle = '#1b1b1b';
       roundRect(g, 0, 0, W, Hh, Hh * 0.2);
@@ -448,6 +449,7 @@ function buildHealth(ctx: Ctx, out: Out, lot: Lot) {
     b.panelZ(-5, 1.55, 0.04, 5, 3.1, '#5a6a64');
     glass(w, -5, 1.5, 0.06, 4.6, 2.9, [0.85, 1, 0.95, 0.02]);
     b.box(-5, 3.35, 1.6, 7, 0.25, 3.2, green);
+    overhangCollider(ctx, b, -5, 3.35, 1.6, 3.5, 0.125, 1.6); // marquesina: que la cámara no se meta
     for (let x = 1; x < half - 1; x += 3) glass(w, x, 2.0, 0.05, 2.4, 2.2, [0.85, 1, 0.95, 0.1]);
     ctx.signs.define('salud', 12, 1.8, (g, W, Hh) => {
       g.fillStyle = '#ffffff';
@@ -495,9 +497,14 @@ function buildBank(ctx: Ctx, out: Out, lot: Lot) {
   const { half } = facadeFrame(b, lot, 0);
   facadeFrame(w, lot, 0);
   b.box(0, 0.35, 0.8, half * 2, 0.7, 1.6, trim);
-  for (const x of [-7, -3.5, 3.5, 7]) b.cyl(x, 0.7, 1.1, 0.45, 0.4, 6.3, 10, '#f3ead6', false);
+  for (const x of [-7, -3.5, 3.5, 7]) {
+    b.cyl(x, 0.7, 1.1, 0.45, 0.4, 6.3, 10, '#f3ead6', false);
+    // columnas macizas con colisor de caja (uno de cilindro fino lo ignoraría la cámara y se quedaba detrás)
+    ctx.box(b.wx(x, 1.1), b.wy(3.85), b.wz(x, 1.1), 0.42, 3.15, 0.42, b.frameRot);
+  }
   b.box(0, 7.2, 1.0, half * 2 - 2, 0.8, 2.0, trim);
   b.roof(0, 7.6, 1.0, half * 2 - 2, 2.0, 1.8, '#d8c9a8', '#d8c9a8', true);
+  overhangCollider(ctx, b, 0, 8.1, 1.0, half - 1, 1.3, 1.0, false); // frontón del pórtico (alto: siempre encendido)
   b.panelZ(0, 1.9, 0.05, 2.8, 3.4, '#5a3a22');
   glass(w, 0, 1.9, 0.07, 2.2, 3.0, [1, 0.85, 0.55, 0.05]);
   for (const x of [-5.2, 5.2]) glass(w, x, 3.6, 0.05, 1.6, 3.2, [1, 0.85, 0.55, 0.1]);

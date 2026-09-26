@@ -4,25 +4,39 @@ import * as THREE from 'three';
 export interface WorldUniforms {
   uNight: { value: number };
   uTime: { value: number };
+  /** Toldos: punto que no deben tapar (el vehículo) y si se abren (1 = en vehículo). */
+  uFocus: { value: THREE.Vector3 };
+  uCut: { value: number };
 }
 
 export function createUniforms(): WorldUniforms {
-  return { uNight: { value: 0 }, uTime: { value: 0 } };
+  return { uNight: { value: 0 }, uTime: { value: 0 }, uFocus: { value: new THREE.Vector3() }, uCut: { value: 0 } };
 }
+
+/**
+ * Hueco de los toldos (misma cuenta en el shader y en las pruebas): radio del hueco alrededor de la
+ * línea cámara → vehículo, estrecho junto a la cámara y ancho junto al vehículo.
+ */
+export const AWNING_CUT = { rCam: 0.9, rFocus: 2.0, soft: 0.45, lift: 0.5 };
 
 /**
  * Lambert con colores por vértice y un atributo aEmit (rgb + nivel) que brilla de noche.
  * - 'solid': aEmit.w = brillo de día (0..1). De noche sube a 1. Si w >= 2 son bombillas que parpadean.
  * - 'windows': aEmit.w = umbral aleatorio: la ventana se enciende cuando uNight lo supera (poco a poco al anochecer).
  */
-export function makeLitMaterial(u: WorldUniforms, mode: 'solid' | 'windows'): THREE.MeshLambertMaterial {
+export function makeLitMaterial(u: WorldUniforms, mode: 'solid' | 'windows' | 'awning'): THREE.MeshLambertMaterial {
   const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const cut = mode === 'awning';
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uNight = u.uNight;
     sh.uniforms.uTime = u.uTime;
+    if (cut) {
+      sh.uniforms.uFocus = u.uFocus;
+      sh.uniforms.uCut = u.uCut;
+    }
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aEmit;\nvarying vec4 vEmit;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmit = aEmit;');
+      .replace('#include <common>', '#include <common>\nattribute vec4 aEmit;\nvarying vec4 vEmit;' + (cut ? '\nvarying vec3 vCutPos;' : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEmit = aEmit;' + (cut ? '\nvCutPos = (modelMatrix * vec4(transformed, 1.0)).xyz;' : ''));
     const code =
       mode === 'windows'
         ? `
@@ -38,6 +52,23 @@ export function makeLitMaterial(u: WorldUniforms, mode: 'solid' | 'windows'): TH
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform float uNight;\nuniform float uTime;\nvarying vec4 vEmit;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + code);
+    if (cut) {
+      // en vehículo, la lona se abre (con borde punteado) alrededor de la línea cámara → vehículo
+      const C = AWNING_CUT;
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 uFocus;\nuniform float uCut;\nvarying vec3 vCutPos;')
+        .replace(
+          '#include <clipping_planes_fragment>',
+          `#include <clipping_planes_fragment>
+          if (uCut > 0.5) {
+            vec3 ab = uFocus - cameraPosition;
+            float t = clamp(dot(vCutPos - cameraPosition, ab) / max(dot(ab, ab), 1e-3), 0.0, 1.0);
+            float dCut = length(vCutPos - cameraPosition - ab * t);
+            float nCut = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+            if (dCut < mix(${C.rCam.toFixed(2)}, ${C.rFocus.toFixed(2)}, t) - ${C.soft.toFixed(2)} * nCut) discard;
+          }`,
+        );
+    }
   };
   m.customProgramCacheKey = () => 'cr-lit-' + mode;
   return m;

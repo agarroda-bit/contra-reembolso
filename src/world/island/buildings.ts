@@ -2,7 +2,8 @@
 // Todo va a las mallas fusionadas por trozos (sólido + ventanas). Un colisor de caja por edificio.
 import * as THREE from 'three';
 import { GeoBuilder, SKIP, lin, Col } from './geo';
-import type { Ctx } from './ctx';
+import { type Ctx, OVERHANG_FILTER } from './ctx';
+import { G } from '../../core/physics';
 import { Lot, lotPoint } from './layout';
 import { OCC } from './occ';
 import { Rng } from '../../core/rng';
@@ -210,7 +211,7 @@ export function urban(ctx: Ctx, lot: Lot, o: UrbanOpts) {
   b.frame(lot.x, lot.h, lot.z, lot.rot);
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   const tiled = o.tiled ?? false;
-  if (tiled) tiledRoof(b, hw, hd, H, rng, col);
+  if (tiled) roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col));
   else flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), trim, rng, o.roofAd === undefined);
   if (o.roofAd !== undefined && !tiled) {
     // valla publicitaria en la azotea, mirando a la calle
@@ -326,8 +327,47 @@ function balcony(b: GeoBuilder, x: number, yb: number, w: number, d: number, rng
   }
 }
 
-/** Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. */
-export function stripedAwning(b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
+/**
+ * Colisor de un toldo bajo (mismos datos que stripedAwning, en el marco actual de `b`): una caja que
+ * va desde 2,2 m (se pasa andando por debajo) hasta lo alto del toldo. A pie, la cámara no se mete en
+ * la lona: se queda por debajo. Los vehículos la atraviesan y, mientras vas en uno, se apaga (ver
+ * `overhangs` en Ctx): el punto que sigue la cámara del vehículo (2,1-3 m) caería dentro de la caja y
+ * la cámara se quedaría pegada al conductor; en vehículo, lo que evita que la lona tape es el
+ * material de los toldos, que se abre alrededor del vehículo.
+ */
+export function awningCollider(ctx: Ctx, b: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number) {
+  const yb = 2.2;
+  if (y0 <= yb + 0.1) return;
+  overhangCollider(ctx, b, x, (yb + y0) / 2, z0 + depth / 2, w / 2, (y0 - yb) / 2, depth / 2);
+}
+
+/**
+ * Colisor de un voladizo recto (balcón, marquesina) en el marco actual de `b`: centro y medias medidas
+ * locales. Con `low` (por defecto) es un voladizo bajo que se apaga mientras vas en un vehículo.
+ */
+export function overhangCollider(ctx: Ctx, b: GeoBuilder, x: number, y: number, z: number, hx: number, hy: number, hz: number, low = true) {
+  const c = ctx.box(b.wx(x, z), b.wy(y), b.wz(x, z), hx, hy, hz, b.frameRot, G.STATIC, OVERHANG_FILTER);
+  if (low) ctx.overhangs.push(c);
+}
+
+/**
+ * Colisor de un tejado inclinado (hasta media altura, con el alero), en el marco actual de `b` y
+ * centrado en él. Sin él, el colisor de la casa acababa en lo alto de las paredes y, al mirar hacia
+ * abajo pegado a una casa, la cámara se metía dentro del tejado (pantalla entera de teja).
+ */
+export function roofCollider(ctx: Ctx, b: GeoBuilder, hw: number, hd: number, H: number, h: number, eave = 0.35) {
+  const y0 = H - 0.16, y1 = H + h * 0.5;
+  // (siempre encendido: queda por encima del punto que sigue la cámara en vehículo)
+  overhangCollider(ctx, b, 0, (y0 + y1) / 2, 0, hw + eave, (y1 - y0) / 2, hd + eave, false);
+}
+
+/**
+ * Toldo a rayas: sale de la fachada (z = z0) en y = y0 hasta z0+depth bajando drop. Va a la capa de
+ * toldos del trozo (b.sub()): en vehículo, la lona se abre alrededor de la línea entre la cámara y el
+ * vehículo (ver makeLitMaterial 'awning'), así un carrito por la acera no queda tapado por el toldo.
+ */
+export function stripedAwning(b0: GeoBuilder, x: number, y0: number, z0: number, w: number, depth: number, drop: number, c1: Col, c2: Col, stripes = 6) {
+  const b = b0.sub();
   const y1 = y0 - drop, z1 = z0 + depth;
   for (let i = 0; i < stripes; i++) {
     const xa = x - w / 2 + (w * i) / stripes, xb = x - w / 2 + (w * (i + 1)) / stripes;
@@ -365,6 +405,7 @@ function shopfront(ctx: Ctx, b: GeoBuilder, w: GeoBuilder, half: number, gf: num
   const [c1, c2] = shop.awning ?? rng.pick(PAL.awning);
   if (rng.chance(0.75)) {
     stripedAwning(b, 0, 3.1, 0.05, W - 0.4, 1.6, 0.55, c1, c2, Math.max(4, Math.round(W / 1.2)));
+    awningCollider(ctx, b, 0, 3.1, 0.05, W - 0.4, 1.6);
     ctx.signs.place(b, key, 0, 3.72, 0.08, sw, sw * (0.9 / 4.4), 0.35);
   } else {
     ctx.signs.place(b, key, 0, 3.55, 0.08, sw, sw * (0.9 / 4.4), 0.35);
@@ -388,7 +429,7 @@ export function house(ctx: Ctx, lot: Lot, o: { floors: number; flatRoof?: boolea
   b.box(0, (y0 + H) / 2, 0, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   const flat = o.flatRoof ?? rng.chance(0.55);
   if (flat) flatRoof(b, ctx, hw, hd, H, rng.pick(PAL.roofFlat), col, rng, true, 0.8);
-  else tiledRoof(b, hw, hd, H, rng, col);
+  else roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col));
   lot.meta.flat = flat;
   const wood = rng.pick(PAL.doorWood);
   const shutter = rng.pick(PAL.shutter);
@@ -430,8 +471,9 @@ export function house(ctx: Ctx, lot: Lot, o: { floors: number; flatRoof?: boolea
         b.panelZ(x, wy, 0.035, 1.25, 1.55, '#ece6da');
         if (f === 0) grille(b, x, wy, 0.1, 0.95, 1.25);
         else if (rng.chance(0.4)) {
-          // balconcillo con macetas
+          // balconcillo con macetas (el del primer piso, a 3 m, con colisor: si no, tapa la cámara)
           balcony(b, x, yb, 1.6, 0.55, rng, false);
+          if (yb < 3.5) overhangCollider(ctx, b, x, yb + 0.53, 0.3, 0.8, 0.53, 0.3);
         } else {
           b.panelZ(x - 0.72, wy, 0.06, 0.48, 1.25, shutter);
           b.panelZ(x + 0.72, wy, 0.06, 0.48, 1.25, shutter);
@@ -477,7 +519,7 @@ export function chalet(ctx: Ctx, lot: Lot, name: string) {
   // casa
   b.box(0, (y0 + H) / 2, zc, hw * 2, H - y0, hd * 2, col, SKIP.NY | SKIP.PY);
   b.frame(hp.x, lot.h, hp.z, lot.rot);
-  tiledRoof(b, hw, hd, H, rng, col, undefined, 0.5);
+  roofCollider(ctx, b, hw, hd, H, tiledRoof(b, hw, hd, H, rng, col, undefined, 0.5));
   const trim = rng.pick(['#8c5a3c', '#f4efe6', '#3f6f8f', '#6e8f4f']);
   for (let k = 0; k < 4; k++) {
     const { half } = facadeFrame(b, houseLot, k);
@@ -506,6 +548,9 @@ export function chalet(ctx: Ctx, lot: Lot, name: string) {
   b.box(-hw * 0.6 + 0.15, 1.35, hd + 2.6, 0.2, 2.5, 0.2, '#f4efe6');
   b.box(hw * 0.6 - 0.15, 1.35, hd + 2.6, 0.2, 2.5, 0.2, '#f4efe6');
   b.box(0, 2.65, hd + 1.4, hw * 1.2 + 0.2, 0.18, 2.9, trim);
+  // techo de la pérgola con colisor: si no, al mirar hacia abajo pegado a la fachada la cámara
+  // subía a través de él y la pantalla se quedaba entera del color de la pérgola
+  overhangCollider(ctx, b, 0, 2.65, hd + 1.4, (hw * 1.2 + 0.2) / 2, 0.09, 1.45);
   ctx.box(hp.x, lot.h + (y0 + H) / 2, hp.z, hw, (H - y0) / 2, hd, lot.rot);
   ctx.foot.push({ x: hp.x, z: hp.z, hw, hd, rot: lot.rot, color: col, height: H });
 
