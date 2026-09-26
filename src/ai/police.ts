@@ -37,12 +37,21 @@ const tmpE = new THREE.Vector3();
 const tmpT = new THREE.Vector3();
 const tmpF = new THREE.Vector3();
 const tmpS = new THREE.Vector3();
+/** Solo para remount() (offscreen() usa tmpF y tmpT). */
+const tmpRP = new THREE.Vector3();
+const tmpRD = new THREE.Vector3();
 
 interface Unit extends ChaseNav {
   car: Vehicle;
   crew: Npc[];
   onFoot: boolean;
   roadblock: boolean;
+  /** Los agentes vuelven andando a su coche (te has ido en coche): ver remount(). */
+  returning?: boolean;
+  /** Segundos que llevan volviendo al coche. */
+  returnT?: number;
+  /** Segundos hasta poder volver al coche (tras bajarse por un atasco, no se suben enseguida al mismo). */
+  remountCool?: number;
 }
 
 /** Estado del «vigilante de atascos» de un coche perseguidor. */
@@ -55,19 +64,21 @@ export interface UnstickState {
  * Coches de persecución (policía y banda) que se quedan clavados contra una pared o en un giro
  * imposible: marcha atrás un momento (maniobra en tres tiempos). Devuelve true si, tras varios intentos,
  * sigue atascado (entonces conviene retirarlo si nadie lo ve).
+ * El tiempo parado cuenta también durante las marchas atrás: antes no contaba, y un coche que reculaba
+ * sin moverse (cuesta arriba o contra un bordillo) volvía a recular sin fin y no se daba nunca por atascado.
  */
 export function unstickCar(car: Vehicle, brain: CarBrain, s: UnstickState, dt: number): boolean {
-  if (brain.reverse > 0) return false;
   const sp = Math.abs(car.speed);
   if (sp < 1.2) s.t += dt;
   else if (sp > 4) {
     s.t = 0;
     s.tries = 0;
   }
-  if (s.t > 2.2) {
+  if (s.t > 2.2 && brain.reverse <= 0) {
     s.t = 0;
     s.tries++;
     brain.reverse = 1.1 + rnd.next() * 0.7;
+    brain.revT = 0;
   }
   return s.tries >= 3;
 }
@@ -79,6 +90,12 @@ export interface ChaseNav {
   /** Va directo al objetivo (lo ve o está muy cerca) en vez de por la ruta de calles. */
   direct?: boolean;
   unstick: UnstickState;
+  /**
+   * Segundos hasta poder hacer otra vez la maniobra de «media vuelta» (marcha atrás con el objetivo
+   * detrás). Entre una y otra avanza girando: así sale una maniobra en tres tiempos de verdad y no
+   * una marcha atrás eterna.
+   */
+  turnCool?: number;
 }
 
 const tmpN = new THREE.Vector3();
@@ -132,8 +149,25 @@ export function driveChaseCar(game: GameT, roads: Roads, car: Vehicle, brain: Ca
   }
   brain.mode = 'chase';
   game.mod.traffic?.drive(car, dt);
-  // el objetivo le queda detrás y tiene una pared delante (o va muy lento): marcha atrás girando
-  if (brain.reverse <= 0) {
+  // por la ruta de calles: frenar antes de cada cruce según lo cerrado que sea el giro. Si no, a toda
+  // pastilla se pasaba el cruce, la ruta nueva salía del siguiente y acababa dando vueltas por media isla
+  if (!nav.direct && nav.route.length > 1 && brain.reverse <= 0) {
+    const a = nav.route[0], b = nav.route[1];
+    const ax = a.x - carPos.x, az = a.z - carPos.z, bx = b.x - a.x, bz = b.z - a.z;
+    const turn = Math.abs(Math.atan2(ax * bz - az * bx, ax * bx + az * bz));
+    const corner = 14 * THREE.MathUtils.clamp(1.05 - turn * 0.42, 0.3, 1);
+    const cap = Math.sqrt(corner * corner + 7 * Math.max(0, Math.hypot(ax, az) - 6));
+    if (car.speed > cap + 1.5) {
+      car.controls.throttle = -1;
+      car.controls.boost = false;
+    } else if (car.speed > cap) car.controls.throttle = Math.min(car.controls.throttle, 0);
+  }
+  // el objetivo le queda detrás y tiene una pared delante (o va muy lento): marcha atrás girando.
+  // Después, un rato hacia delante girando antes de volver a recular (maniobra en tres tiempos): antes
+  // volvía a recular en el mismo frame en que acababa, y en una cuesta o contra un bordillo se quedaba
+  // reculando a 0 km/h para siempre (patrullas paradas en La Colina).
+  nav.turnCool = Math.max(0, (nav.turnCool ?? 0) - dt);
+  if (brain.reverse <= 0 && nav.turnCool <= 0) {
     car.getQuaternion(tmpQ).invert();
     tmpL.copy(ct).sub(carPos).applyQuaternion(tmpQ);
     const ang = Math.abs(Math.atan2(tmpL.x, tmpL.z));
@@ -143,7 +177,11 @@ export function driveChaseCar(game: GameT, roads: Roads, car: Vehicle, brain: Ca
       const nose = tmpL.copy(carPos).addScaledVector(fwd, car.spec.half.z + 0.2);
       nose.y += 0.4;
       const wall = game.physics.raycast(nose, fwd, 4 + Math.max(0, car.speed) * 0.4, SOLID);
-      if (wall || (ang > 2.2 && Math.abs(car.speed) < 2.5)) brain.reverse = 0.9 + rnd.next() * 0.4;
+      if (wall || (ang > 2.2 && Math.abs(car.speed) < 2.5)) {
+        brain.reverse = 0.9 + rnd.next() * 0.4;
+        brain.revT = 0;
+        nav.turnCool = brain.reverse + 1.6;
+      }
     }
   }
   return unstickCar(car, brain, nav.unstick, dt);
@@ -291,6 +329,10 @@ export class Police implements System {
     this.heat = HEAT_LEVELS[Math.max(0, Math.min(5, level))];
     this.recalc();
     this.unseen = 0;
+    // (la comisaría sabe dónde estás: si no, los agentes buscaban donde te vieron la última vez, que
+    // podía ser la otra punta de la isla)
+    const p = this.game.mod.player;
+    if (p) this.lastSeen.copy(p.state === 'vehicle' && this.vm?.current ? this.vm.current.getPosition(tmpV) : p.position);
     this.game.events.emit('wanted', { level: this.wanted });
   }
 
@@ -429,8 +471,11 @@ export class Police implements System {
     return true;
   }
 
-  private dismount(u: Unit) {
+  /** Los agentes bajan del coche. `stuck`: porque el coche se ha atascado (tardan en volver a subir). */
+  private dismount(u: Unit, stuck = false) {
     u.onFoot = true;
+    u.returning = false;
+    if (stuck) u.remountCool = 12;
     const car = u.car;
     // control: los agentes se ponen detrás del coche (el lado que no da al jugador) y se quedan ahí
     let side0 = 1;
@@ -562,6 +607,7 @@ export class Police implements System {
         this.units.splice(i, 1);
         continue;
       }
+      if (u.onFoot && !u.roadblock) this.remount(u, dt);
       if (!u.onFoot && this.driveUnit(u, dt)) {
         // atascado sin remedio y nadie lo ve: se retira (luego aparece otra patrulla en un sitio mejor)
         this.despawnUnit(u);
@@ -604,6 +650,8 @@ export class Police implements System {
         // con 4-5 sirenas son los especiales: se acercan más y afinan más
         b.acc = POLICE_ACC[this.wanted];
         b.engageRange = this.wanted >= 4 ? (this.wanted >= 5 ? 22 : 28) : null;
+        // (los que vuelven andando a su coche no se paran a pelear: ver remount)
+        if (b.returning) continue;
       }
       updateCombatant(g, o, dt);
       // volver al coche si el jugador se va en vehículo y está lejos
@@ -631,14 +679,145 @@ export class Police implements System {
     const dist = carPos.distanceTo(target);
     // bajarse cerca si el jugador va a pie o está parado
     const playerSlow = p.state === 'foot' || (this.vm.current && Math.abs(this.vm.current.speed) < 3);
-    // (o si se ha atascado ya cerca: mejor a pie que empujando una esquina)
-    if ((dist < 14 && playerSlow) || (dist < 50 && u.unstick.tries > 0 && playerSlow)) {
-      this.dismount(u);
+    // (o si se ha atascado ya cerca: mejor a pie que empujando una esquina; antes era a 50 m y se
+    // quedaban a medio camino; o si le tapa un control de los suyos, que corta la calle entera)
+    const stuck = u.unstick.tries > 0;
+    if ((dist < 14 && playerSlow) || (stuck && dist < 30 && playerSlow) || (stuck && dist < 60 && this.policeCarNear(u))) {
+      this.dismount(u, true);
       return false;
     }
     // por calles si no te ve; directo (con algo de predicción) si te ve o está cerca
     const hopeless = driveChaseCar(g, this.roads, car, brain, u, target, this.unseen < 3 ? 0.5 : 0, dt);
-    return hopeless && dist > 45 && offscreen(g, carPos);
+    if (!hopeless) return false;
+    // atascado sin remedio: si nadie lo ve, se retira (y sale otra patrulla en un sitio mejor);
+    // si se ve y vas a pie, siguen andando (antes se quedaban mirando dentro del coche)
+    if (dist > 45 && offscreen(g, carPos)) return true;
+    if (playerSlow && dist < 100) this.dismount(u, true);
+    return false;
+  }
+
+  /**
+   * ¿Tiene al lado el coche de un control de carretera (que corta la calle entera) u otra patrulla
+   * (dos coches morro con morro en una calle estrecha no salen nunca)?
+   */
+  private policeCarNear(u: Unit): boolean {
+    const pos = u.car.getPosition(tmpE);
+    for (const o of this.units) {
+      if (o === u || o.car.disposed) continue;
+      const r = o.roadblock ? 14 : 8;
+      if (o.car.getPosition(tmpS).distanceToSquared(pos) < r * r) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Agentes a pie de una patrulla (no de un control) cuando te vas en coche o te alejas: vuelven a su
+   * coche y siguen la persecución. Antes se quedaban a pie para siempre, el coche parado y, como la
+   * unidad seguía contando, no salía ninguna patrulla nueva.
+   */
+  private remount(u: Unit, dt: number) {
+    const g = this.game;
+    const car = u.car;
+    const p = g.mod.player;
+    u.remountCool = Math.max(0, (u.remountCool ?? 0) - dt);
+    if (car.destroyed || car.disposed || car === this.vm.current || car.driver || car.sinking) {
+      this.releaseReturning(u);
+      return;
+    }
+    const cur = this.vm.current;
+    const ppos = cur ? cur.getPosition(tmpRP) : p.position;
+    let nearest = Infinity;
+    let anyAlive = false;
+    for (const n of u.crew) {
+      if (!n.alive) continue;
+      anyAlive = true;
+      nearest = Math.min(nearest, n.position.distanceTo(ppos));
+    }
+    if (!anyAlive) return;
+    // te vas en coche, o estás ya muy lejos (a pie no te alcanzan): a por el coche
+    // (si estás parado en un coche, mejor ir a por ti andando que volver al suyo)
+    const leaving = p.state === 'vehicle' && cur && Math.abs(cur.speed) > 6 && nearest > 15;
+    const gone = nearest > 90;
+    if (!u.returning) {
+      if (u.remountCool > 0 || !(leaving || gone)) return;
+      u.returning = true;
+      u.returnT = 0;
+    }
+    // vuelves hacia ellos (o te bajas cerca): se olvidan del coche y a por ti
+    if (nearest < 18 && !(leaving && nearest > 10)) {
+      this.releaseReturning(u);
+      u.remountCool = 6;
+      return;
+    }
+    u.returnT = (u.returnT ?? 0) + dt;
+    for (const n of u.crew) {
+      const b = n.brain as CombatBrain | undefined;
+      if (b) b.returning = true;
+    }
+    const door = this.vm.doorPoint(car, tmpRD);
+    let lead: Npc | null = null;
+    for (const n of u.crew) {
+      if (!n.alive || n.busy) continue;
+      n.aiming = false;
+      const d = n.position.distanceTo(door);
+      if (d < 2.8 || (u.returnT > 14 && offscreen(g, n.position) && offscreen(g, door))) {
+        lead = n;
+        break;
+      }
+      n.goTo(door, true);
+    }
+    if (!lead && u.returnT > 25) {
+      // no hay manera de llegar al coche: se quedan a pie
+      this.releaseReturning(u);
+      u.remountCool = 20;
+      return;
+    }
+    if (!lead) return;
+    // ¡arriba! el primero conduce y los que estén cerca van dentro; los que estén lejos siguen a pie
+    const crew: Npc[] = [];
+    lead.enterVehicle(car);
+    crew.push(lead);
+    for (const n of u.crew) {
+      if (n === lead || !n.alive || n.busy) continue;
+      if (n.position.distanceTo(door) > 25) continue;
+      n.rideAlong(car);
+      crew.push(n);
+    }
+    for (const n of u.crew) {
+      const b = n.brain as CombatBrain | undefined;
+      if (b) b.returning = false;
+    }
+    for (const n of crew) {
+      const i = this.officers.indexOf(n);
+      if (i >= 0) this.officers.splice(i, 1);
+      const b = n.brain as CombatBrain | undefined;
+      if (b) b.holdAt = null;
+    }
+    u.crew.length = 0;
+    u.crew.push(...crew);
+    u.onFoot = false;
+    u.returning = false;
+    u.route = [];
+    u.routeTimer = 0;
+    u.unstick.t = 0;
+    u.unstick.tries = 0;
+    u.turnCool = 0;
+    car.sirenOn = true;
+    car.controls.handbrake = false;
+    const ne = this.roads.nearestEdge(car.getPosition(tmpE), true);
+    const brain: CarBrain = { edge: ne?.edge ?? 0, dir: 1, t: 0.5, next: null, cruise: 20, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() };
+    (car as any).brain = brain;
+  }
+
+  /** Los que volvían al coche dejan de hacerlo (y vuelven a pelear). */
+  private releaseReturning(u: Unit) {
+    if (!u.returning) return;
+    u.returning = false;
+    for (const n of u.crew) {
+      const b = n.brain as CombatBrain | undefined;
+      if (b) b.returning = false;
+      if (n.alive && !n.busy) n.stop();
+    }
   }
 
   private checkArrest(dt: number) {

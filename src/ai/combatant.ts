@@ -57,6 +57,8 @@ export interface CombatBrain {
    * aunque te vea; solo se enfada si te acercas mucho (LURK_WAKE) o le atacas.
    */
   lurk?: boolean;
+  /** Policía que vuelve andando a su coche para seguir la persecución (la IA de combate no lo mueve). */
+  returning?: boolean;
 }
 
 const SHOUTS_POLICE = ['¡Alto, policía!', '¡Al suelo, repartidor!', '¡Manos donde pueda verlas!', '¡Documentación y paquetes!'];
