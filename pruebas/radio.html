@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CONTRA REEMBOLSO · Radio</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E%F0%9F%93%A6%3C/text%3E%3C/svg%3E" />
+    <meta name="description" content="Repartes paquetes contra reembolso en Puerto Paquete. Cobras, conduces, disparas y huyes." />
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #1b1030; }
+      #app { position: fixed; inset: 0; }
+      #app canvas { display: block; outline: none; }
+      #ui { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      #ui > * { pointer-events: auto; }
+      #carga { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        background: radial-gradient(circle at 50% 40%, #ff7b54 0%, #c2185b 45%, #1b1030 100%); color: #fff; font-family: system-ui, -apple-system, sans-serif; transition: opacity .6s; }
+      #carga h1 { font-size: clamp(40px, 8vw, 96px); margin: 0; font-weight: 900; letter-spacing: -2px; color: #ffd23f; text-shadow: 5px 5px 0 #1b1030; transform: rotate(-3deg); }
+      #carga .barra { width: min(420px, 70vw); height: 14px; border-radius: 8px; background: rgba(0,0,0,.35); margin-top: 36px; overflow: hidden; border: 3px solid #1b1030; }
+      #carga .barra i { display: block; height: 100%; width: 5%; background: #ffd23f; transition: width .3s; }
+      #carga .consejo { margin-top: 22px; font-size: 18px; max-width: 640px; text-align: center; padding: 0 16px; opacity: .92; min-height: 2.6em; }
+      #carga .estado { margin-top: 8px; font-size: 13px; opacity: .6; }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="ui"></div>
+    <div id="carga">
+      <h1>CONTRA REEMBOLSO</h1>
+      <div class="barra"><i></i></div>
+      <div class="consejo"></div>
+      <div class="estado">Cargando…</div>
+    </div>
+    <script type="module" src="/src/pruebas/radio.ts"></script>
+  </body>
+</html>
