@@ -23,6 +23,7 @@ uniform vec3 uSunCol;
 uniform vec3 uSunHalo;
 uniform float uSunSize;
 uniform float uSunVis;
+uniform float uSunLow;
 uniform vec3 uMoonDir;
 uniform vec3 uMoonCol;
 uniform float uMoonSize;
@@ -55,11 +56,13 @@ void main() {
 
   // halo y disco del sol
   float sdp = max(sd, 0.0);
-  col += uSunHalo * (pow(sdp, 220.0) * 0.5 + pow(sdp, 1600.0) * 0.5) * uSunVis;
+  col += uSunHalo * (pow(sdp, 220.0) * 0.45 + pow(sdp, 1600.0) * 0.35) * uSunVis;
   float cosR = cos(uSunSize);
   float aa = max(fwidth(sd) * 1.5, 1e-5);
   float disc = smoothstep(cosR - aa, cosR + aa, sd);
-  col = mix(col, uSunCol, disc * uSunVis);
+  // alto, el disco nunca más oscuro que su halo (si no, parece un agujero); bajo, naranja saturado
+  vec3 discCol = mix(max(uSunCol, min(col, vec3(1.0))), uSunCol, smoothstep(0.35, 0.8, uSunLow));
+  col = mix(col, discCol, disc * uSunVis);
 
   // halo de la luna (antes del disco para no tapar los cráteres)
   float md = dot(d, uMoonDir);
@@ -142,6 +145,7 @@ export class SkyDome {
     uSunHalo: { value: v3() },
     uSunSize: { value: 0.04 },
     uSunVis: { value: 1 },
+    uSunLow: { value: 0 }, // 0 = sol alto, 1 = pegado al horizonte
     uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
     uMoonCol: { value: new THREE.Vector3(0.9, 0.93, 1) },
     uMoonSize: { value: 0.042 },
@@ -173,10 +177,12 @@ export class SkyDome {
     this.mesh.matrixAutoUpdate = false;
     // sigue a la cámara justo antes de pintarse (después de cámara y temblores)
     this.mesh.onBeforeRender = (_r, _s, cam) => followCamera(this.mesh, cam);
+    this.mesh.raycast = noRaycast; // que ningún rayo "choque" con el cielo
     scene.add(this.mesh);
 
     this.stars = makeStars(this.starUniforms);
     this.stars.onBeforeRender = (_r, _s, cam) => followCamera(this.stars, cam);
+    this.stars.raycast = noRaycast;
     scene.add(this.stars);
   }
 
@@ -195,6 +201,9 @@ export class SkyDome {
     (this.stars.material as THREE.Material).dispose();
   }
 }
+
+/** Para que los Raycaster de three ignoren cielo, estrellas y nubes. */
+export function noRaycast(): void {}
 
 const _camPos = new THREE.Vector3();
 function followCamera(obj: THREE.Object3D, cam: THREE.Camera) {

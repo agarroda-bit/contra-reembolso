@@ -94,5 +94,15 @@ export const SPINE_Y = 0.08; // el hueso spine está 8 cm sobre el de la cadera
  * centrado en `wheel`, inclinado wheelTilt rad (la parte de arriba se aleja del conductor).
  */
 export const DRIVE_LAYOUT = { seatY: 0.43, seatZ: -0.08, wheel: { x: 0, y: 0.96, z: 0.3 }, wheelRadius: 0.16, wheelTilt: 0.45 };
-/** Postura en moto/patinete: altura del sillín y puños del manillar (en ±barHalfWidth). */
-export const RIDE_LAYOUT = { seatY: 0.63, seatZ: -0.06, bar: { x: 0, y: 0.97, z: 0.47 }, barHalfWidth: 0.29 };
+/**
+ * Postura en moto/patinete: altura del sillín, puños del manillar (en ±barHalfWidth) y
+ * dónde apoya las suelas (feet.y sobre el root, en ±feet.halfWidth, feet.z hacia delante).
+ */
+export const RIDE_LAYOUT = {
+  seatY: 0.63, seatZ: -0.06, bar: { x: 0, y: 0.97, z: 0.47 }, barHalfWidth: 0.29,
+  feet: { y: 0.1, z: 0.2, halfWidth: 0.2 },
+};
+/** Sentado en un banco/silla: altura de la superficie del asiento (pies en el suelo, y = 0 del root). */
+export const SIT_LAYOUT = { seatY: 0.46, seatZ: -0.08 };
+/** Distancia del hueso de la cadera a la superficie del asiento (espacio del cuerpo, altura 1). */
+export const SEAT_DROP = 0.12;

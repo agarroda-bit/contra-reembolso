@@ -62,6 +62,8 @@ export class Minimap {
   private lastWpDist = -2;
   private nightStep = -1;
   private nightFill = '';
+  private northHeading = 1e9; // fuerza el primer pintado
+  private northR = 0;
   private sprites = new Map<PoiKind, HTMLCanvasElement>();
   private spriteSize = 0;
   private spriteDpr = 0;
@@ -147,7 +149,7 @@ export class Minimap {
     this.blink += realDt;
 
     // zoom: se aleja con la velocidad
-    const speed = game.hud.vehicle?.speedKmh ?? 0;
+    const speed = Math.abs(game.hud.vehicle?.speedKmh ?? 0); // marcha atrás también cuenta
     const t = Math.min(1, Math.max(0, speed / 130));
     const target = MIN_RADIUS_M + (MAX_RADIUS_M - MIN_RADIUS_M) * t;
     this.radiusM += (target - this.radiusM) * (1 - Math.exp(-realDt * 1.8));
@@ -277,8 +279,13 @@ export class Minimap {
     g.stroke();
 
     // la N en el borde (norte = -Z)
-    const nx = -Math.sin(heading) * (R + 1), ny = -Math.cos(heading) * (R + 1);
-    this.north.style.transform = `translate(${(R + nx).toFixed(1)}px, ${(R + ny).toFixed(1)}px) translate(-50%, -50%)`;
+    // (solo se toca el DOM si el rumbo o el tamaño han cambiado)
+    if (Math.abs(heading - this.northHeading) > 0.002 || R !== this.northR) {
+      this.northHeading = heading;
+      this.northR = R;
+      const nx = -Math.sin(heading) * (R + 1), ny = -Math.cos(heading) * (R + 1);
+      this.north.style.transform = `translate(${(R + nx).toFixed(1)}px, ${(R + ny).toFixed(1)}px) translate(-50%, -50%)`;
+    }
 
     // cartel de distancia al destino (solo se reescribe si cambia)
     if (wpDist !== this.lastWpDist || wpLabel !== this.lastWpKey) {

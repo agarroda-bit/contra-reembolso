@@ -6,7 +6,7 @@ import { Character } from './rig';
 import { randomLook as randomLookImpl, type CharacterKind } from './looks';
 
 export { Character, characterMaterial } from './rig';
-export { DRIVE_LAYOUT, RIDE_LAYOUT, HEIGHT as CHARACTER_HEIGHT } from './skeleton';
+export { DRIVE_LAYOUT, RIDE_LAYOUT, SIT_LAYOUT, HEIGHT as CHARACTER_HEIGHT } from './skeleton';
 export { SKIN_TONES, HAIR_STYLES, UNIFORM_COLORS, HAIR_COLORS, defaultPlayerLook } from './looks';
 export type { CharacterKind, CharacterLookExtra } from './looks';
 

@@ -2,7 +2,7 @@
 // y mezcla suavemente al cambiar de estado. Sin reservar memoria por frame.
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three';
 import type { CharacterAnimParams, CharacterPose } from '../../core/contracts';
-import { B, BONE_COUNT, THIGH, SHIN, ANKLE, HIP_Y, HIPJ, HIP_X, ARM_UP, ARM_FORE, SHOULDER_X, SHOULDER_Y, SPINE_Y, DRIVE_LAYOUT, RIDE_LAYOUT } from './skeleton';
+import { B, BONE_COUNT, THIGH, SHIN, ANKLE, HIP_Y, HIPJ, HIP_X, ARM_UP, ARM_FORE, SHOULDER_X, SHOULDER_Y, SPINE_Y, DRIVE_LAYOUT, RIDE_LAYOUT, SIT_LAYOUT, SEAT_DROP } from './skeleton';
 import type { CharacterKind } from './looks';
 
 const PI = Math.PI;
@@ -150,6 +150,33 @@ function armIK(o: Float32Array, side: number, tx: number, ty: number, tz: number
   R(o, h, hx, hy * side, hz * side);
 }
 
+const _qp = new Quaternion();
+const _qp2 = new Quaternion();
+const _mp = new Matrix4();
+const _px = new Vector3();
+const _py = new Vector3();
+const _pz = new Vector3();
+/** Gira el hueso del móvil para que la pantalla (+X) mire a la cara y el lado largo (+Y) vaya hacia delante. */
+function phoneFacing(o: Float32Array) {
+  // orientación de la mano derecha en el espacio del pecho
+  _eu.set(o[B.armR * 3], o[B.armR * 3 + 1], o[B.armR * 3 + 2], 'XYZ');
+  _qp.setFromEuler(_eu);
+  _eu.set(o[B.foreR * 3], o[B.foreR * 3 + 1], o[B.foreR * 3 + 2], 'XYZ');
+  _qp.multiply(_qp2.setFromEuler(_eu));
+  _eu.set(o[B.handR * 3], o[B.handR * 3 + 1], o[B.handR * 3 + 2], 'XYZ');
+  _qp.multiply(_qp2.setFromEuler(_eu));
+  // orientación deseada en el espacio del pecho
+  _px.set(0.1, 0.85, -0.5).normalize();
+  _py.set(0, 0.45, 0.9);
+  _py.addScaledVector(_px, -_py.dot(_px)).normalize();
+  _pz.crossVectors(_px, _py);
+  _mp.makeBasis(_px, _py, _pz);
+  _qp2.setFromRotationMatrix(_mp);
+  _qp.invert().multiply(_qp2);
+  _eu.setFromQuaternion(_qp, 'XYZ');
+  R(o, B.phone, _eu.x, _eu.y, _eu.z);
+}
+
 /** Prepara el paso de espacio del cuerpo (root) a espacio del pecho con la cadera y el tronco de `o`. */
 function spineFrame(o: Float32Array) {
   _eu.set(o[B.hips * 3], o[B.hips * 3 + 1], o[B.hips * 3 + 2], 'XYZ');
@@ -250,53 +277,59 @@ function standPose(o: Float32Array) {
   arm(o, -1, 0, 0, 0.07, -0.12);
 }
 function lyingPose(o: Float32Array) {
+  // boca arriba: la espalda y los talones tocan el suelo, nada lo atraviesa
+  // (ojo: en muslos y brazos, x positivo = hacia atrás = hacia el suelo al estar tumbado)
   neutral(o);
   o[CH.hy] = 0.135;
   R(o, B.hips, -PI / 2, 0, 0);
-  R(o, B.neck, 0.05, 0, 0);
-  R(o, B.head, 0.12, 0, 0);
-  arm(o, 1, 0.3, 0, 0.4, -0.25);
-  arm(o, -1, 0.3, 0, 0.4, -0.25);
+  R(o, B.neck, 0.2, 0, 0);
+  R(o, B.head, 0.16, 0, 0);
+  arm(o, 1, 0.1, 0, 0.45, -0.3);
+  arm(o, -1, 0.1, 0, 0.45, -0.3);
   for (const side of [1, -1]) {
-    R(o, side > 0 ? B.thighL : B.thighR, 0.1, 0, side * 0.12);
-    R(o, side > 0 ? B.shinL : B.shinR, 0.06, 0, 0);
-    R(o, side > 0 ? B.footL : B.footR, 0.5, side * 0.5, 0);
+    R(o, side > 0 ? B.thighL : B.thighR, -0.1, 0, side * 0.12);
+    R(o, side > 0 ? B.shinL : B.shinR, 0.18, 0, 0);
+    R(o, side > 0 ? B.footL : B.footR, 0.35, side * 0.5, 0);
   }
 }
-function drivePose(o: Float32Array) {
+/** Altura de la cadera (espacio del cuerpo) para que el trasero toque un asiento a `seatY` m del root. */
+function seatHip(seatY: number, s: number) {
+  return seatY / s + SEAT_DROP;
+}
+/** Al volante. `s` = escala del cuerpo (look.height): el coche no cambia, el muñeco sí. */
+function drivePose(o: Float32Array, s: number) {
   neutral(o);
-  o[CH.hy] = 0.55;
+  o[CH.hy] = seatHip(DRIVE_LAYOUT.seatY, s);
   o[CH.hz] = -0.04;
   R(o, B.hips, -0.12, 0, 0);
-  for (const side of [1, -1]) {
-    R(o, side > 0 ? B.thighL : B.thighR, -1.38, 0, side * 0.1);
-    R(o, side > 0 ? B.shinL : B.shinR, 1.35, 0, 0);
-    R(o, side > 0 ? B.footL : B.footR, 0.0, 0, -side * 0.1);
-  }
+  // pies en el suelo del coche (y = 0 del root), hacia los pedales
+  legs(o, 0.03, 0.5 / s, 0, -0.03, 0.47 / s, 0);
   R(o, B.spine, -0.06, 0, 0);
   R(o, B.head, 0.16, 0, 0);
-  wheelHands(o, 0);
+  wheelHands(o, 0, s);
 }
 
 /** Manos al volante (girado `steer` rad, + = a la izquierda). Con la cadera y el tronco ya puestos. */
-function wheelHands(o: Float32Array, steer: number) {
+function wheelHands(o: Float32Array, steer: number, s: number) {
   spineFrame(o);
   const L = DRIVE_LAYOUT, r = L.wheelRadius, ct = Math.cos(L.wheelTilt), st = Math.sin(L.wheelTilt);
+  const k = 1 / s;
   for (let side = 1; side >= -1; side -= 2) {
     const ang = side * (PI / 3) + steer; // las diez y diez
     const u = Math.sin(ang) * r, v = Math.cos(ang) * r;
-    const gx = L.wheel.x + u, gy = L.wheel.y + v * ct, gz = L.wheel.z + v * st;
+    const gx = (L.wheel.x + u) * k, gy = (L.wheel.y + v * ct) * k, gz = (L.wheel.z + v * st) * k;
     armIKBody(o, side, gx + side * 0.012, gy - 0.025, gz - 0.058, side * 0.8, -1, -0.3);
   }
 }
 
 /** Manos en los puños del manillar (girado `yaw` rad). */
-function barHands(o: Float32Array, yaw: number) {
+function barHands(o: Float32Array, yaw: number, s: number) {
   spineFrame(o);
   const L = RIDE_LAYOUT, hw = L.barHalfWidth, c = Math.cos(yaw), sn = Math.sin(yaw);
+  const k = 1 / s;
   for (let side = 1; side >= -1; side -= 2) {
-    const gx = L.bar.x + side * hw * c, gz = L.bar.z - side * hw * sn;
-    armIKBody(o, side, gx - side * 0.006, L.bar.y + 0.02, gz - 0.062, side, -0.5, -0.5);
+    const gx = (L.bar.x + side * hw * c) * k, gz = (L.bar.z - side * hw * sn) * k;
+    armIKBody(o, side, gx - side * 0.006, L.bar.y * k + 0.02, gz - 0.062, side, -0.5, -0.5);
   }
 }
 
@@ -304,7 +337,6 @@ const KF_STAND = new Float32Array(NCH);
 const KF_LYING = new Float32Array(NCH);
 const KF_SITUP = new Float32Array(NCH);
 const KF_CROUCH = new Float32Array(NCH);
-const KF_DRIVE = new Float32Array(NCH);
 const KF_DUCK = new Float32Array(NCH);
 const KF_LEGIN = new Float32Array(NCH);
 const KF_REACH = new Float32Array(NCH);
@@ -313,7 +345,6 @@ const KF_PULL = new Float32Array(NCH);
 (function buildKeyframes() {
   standPose(KF_STAND);
   lyingPose(KF_LYING);
-  drivePose(KF_DRIVE);
 
   // incorporarse: sentado en el suelo
   const o = KF_SITUP;
@@ -389,6 +420,22 @@ const KF_PULL = new Float32Array(NCH);
   p[CH.mouthW] = 1.1;
 })();
 
+// secuencias (constantes: sin reservar memoria por frame)
+const SEQ_GETUP = [KF_LYING, KF_SITUP, KF_CROUCH, KF_STAND];
+const T_GETUP = [0, 0.35, 0.68, 1.0];
+const T_ENTER = [0, 0.3, 0.65, 1.0];
+const SEQ_PULL = [KF_REACH, KF_GRAB, KF_PULL, KF_PULL, KF_REACH];
+const T_PULL = [0, 0.3, 0.7, 1.05, 1.3];
+
+/** Aleatorio fijo por número (para el baile del robot). */
+function hash01(n: number, seed: number) {
+  return (((Math.sin(n * 12.9898 + seed) * 43758.5453) % 1) + 1) % 1;
+}
+/** Postura del robot: valor i interpolado entre el paso anterior y el actual. */
+function robotV(step: number, i: number, snap: number, seed: number, k: number) {
+  return lerp(hash01(step - 1 + i * 7, seed), hash01(step + i * 7, seed), snap) * k;
+}
+
 /** Interpolación por fotogramas clave (suavizada). */
 function keyframes(o: Float32Array, frames: Float32Array[], times: number[], t: number) {
   if (t <= times[0]) return void o.set(frames[0]);
@@ -422,6 +469,8 @@ export class Animator {
   private speedS = 0;
   private airW = 0;
   private airTime = 0;
+  private groundTime = 0;
+  private vy = 0;
   private landT = 1;
   private landAmt = 0;
   aimW = 0;
@@ -437,6 +486,11 @@ export class Animator {
   private swingR = 0;
 
   gait: Gait = GAITS.normal;
+  /** Escala del cuerpo (look.height): corrige asientos, volante y manillar, que no se escalan. */
+  bodyScale = 1;
+  /** Pose al volante para esta escala (y final de enter_car). */
+  private kfDrive = new Float32Array(NCH);
+  private seqEnter: Float32Array[] = [KF_STAND, KF_DUCK, KF_LEGIN, this.kfDrive];
   readonly seed: number;
   danceStyle: number;
   baseAngry = 0;
@@ -450,6 +504,13 @@ export class Animator {
     this.t = (seed % 997) * 0.37;
     this.blinkT = 1 + (seed % 7) * 0.4;
     standPose(this.cur);
+    this.setScale(1);
+  }
+
+  /** Escala del cuerpo (la llama el personaje al cambiar la altura). */
+  setScale(s: number) {
+    this.bodyScale = s > 0.2 ? s : 1;
+    drivePose(this.kfDrive, this.bodyScale);
   }
 
   /** Postura y cara por defecto según el tipo de personaje. */
@@ -461,12 +522,33 @@ export class Animator {
 
   update(dt: number, p: CharacterAnimParams) {
     dt *= p.timeScale ?? 1;
+    if (!(dt > 0)) dt = 0; // NaN o negativo: no avanza (un NaN aquí rompería el muñeco para siempre)
     if (dt > 0.1) dt = 0.1;
     this.t += dt;
     const pose = p.pose;
     const grounded = p.grounded;
+
+    // aire y aterrizaje
+    if (!grounded) {
+      this.airTime += dt;
+      this.groundTime = 0;
+    } else {
+      if (this.airTime > 0.18) {
+        this.landT = 0;
+        this.landAmt = clamp01(this.airTime / 0.7) * 0.8 + 0.2;
+      }
+      this.airTime = 0;
+      this.groundTime += dt;
+    }
+    this.landT = Math.min(1, this.landT + dt / 0.32);
+
     let sub: string = pose;
-    if (pose === 'knocked') sub = grounded ? 'k1' : 'k0';
+    if (pose === 'knocked') {
+      // con histéresis: los botes de la física no hacen parpadear entre "volando" y "tumbado"
+      const inKnock = this.pose === 'knocked';
+      if (inKnock && this.sub === 'k1') sub = grounded || this.airTime < 0.15 ? 'k1' : 'k0';
+      else sub = grounded && this.groundTime > 0.1 && inKnock && this.poseT > 0.1 ? 'k1' : 'k0';
+    }
     if (sub !== this.sub) {
       if (pose !== this.pose) this.poseT = 0;
       this.from.set(this.cur);
@@ -478,27 +560,20 @@ export class Animator {
 
     const speed = Math.max(0, p.speed || 0);
     this.speedS += (speed - this.speedS) * Math.min(1, dt * 9);
-    this.wobbleS += ((p.wobble ?? 0) - this.wobbleS) * Math.min(1, dt * 3);
+    const wob = p.wobble !== undefined && Number.isFinite(p.wobble) ? clamp01(p.wobble) : 0;
+    this.wobbleS += (wob - this.wobbleS) * Math.min(1, dt * 3);
     const canAim = pose === 'normal' || pose === 'drive' || pose === 'ride';
     const aimTarget = p.aiming && canAim ? 1 : 0;
     this.aimW += (aimTarget - this.aimW) * Math.min(1, dt * 14);
     if (this.aimW < 0.001) this.aimW = 0;
-    this.aimPitch += ((p.aimPitch ?? 0) - this.aimPitch) * Math.min(1, dt * 20);
+    const pitchIn = p.aimPitch;
+    this.aimPitch += ((pitchIn !== undefined && Number.isFinite(pitchIn) ? pitchIn : 0) - this.aimPitch) * Math.min(1, dt * 20);
     if (p.weapon) this.weapon = p.weapon;
     if (p.shot) this.recoil = 1;
     else this.recoil = Math.max(0, this.recoil - dt / (this.weapon === 'throw' ? 0.45 : 0.14));
 
-    // aire y aterrizaje
-    if (!grounded) this.airTime += dt;
-    else {
-      if (this.airTime > 0.18) {
-        this.landT = 0;
-        this.landAmt = clamp01(this.airTime / 0.7) * 0.8 + 0.2;
-      }
-      this.airTime = 0;
-    }
-    this.landT = Math.min(1, this.landT + dt / 0.32);
-    const vy = p.vy ?? 0;
+    const vy = p.vy !== undefined && Number.isFinite(p.vy) ? p.vy : 0;
+    this.vy = vy;
     const air = pose === 'normal' && !grounded && (this.airTime > 0.1 || vy > 1.5) ? 1 : 0;
     this.airW += (air - this.airW) * Math.min(1, dt * (air ? 10 : 18));
 
@@ -524,21 +599,21 @@ export class Animator {
         this.poseDance(o);
         break;
       case 'knocked':
-        this.poseKnocked(o, grounded);
+        this.poseKnocked(o, this.sub === 'k1');
         break;
       case 'dead':
         this.poseDead(o);
         break;
       case 'getup':
-        keyframes(o, [KF_LYING, KF_SITUP, KF_CROUCH, KF_STAND], [0, 0.35, 0.68, 1.0], this.poseT);
+        keyframes(o, SEQ_GETUP, T_GETUP, this.poseT);
         this.face(o);
         break;
       case 'enter_car':
-        keyframes(o, [KF_STAND, KF_DUCK, KF_LEGIN, KF_DRIVE], [0, 0.3, 0.65, 1.0], this.poseT);
+        keyframes(o, this.seqEnter, T_ENTER, this.poseT);
         break;
       case 'pull_out': {
         const tt = this.poseT % 1.3;
-        keyframes(o, [KF_REACH, KF_GRAB, KF_PULL, KF_PULL, KF_REACH], [0, 0.3, 0.7, 1.05, 1.3], tt);
+        keyframes(o, SEQ_PULL, T_PULL, tt);
         if (tt > 0.6 && tt < 1.1) {
           const sh = Math.sin(this.t * 40) * 0.04;
           AR(o, B.armL, sh, 0, 0);
@@ -591,15 +666,17 @@ export class Animator {
     this.loco(o, dt, stunned ? Math.min(speed, 1.2) : speed, Math.max(wob, stunned ? 0.6 : 0));
 
     if (this.airW > 0.001 && pose === 'normal') {
-      this.airPose(this.tmpA, p.vy ?? 0);
+      this.airPose(this.tmpA, this.vy);
       lerpInto(o, o, this.tmpA, this.airW);
     }
 
     if (pose === 'phone') {
-      arm(o, -1, -0.32, 0.25, 0.32, -1.85, 0.25, 0.9, 0);
-      R(o, B.head, 0.5, -0.1, 0);
-      AR(o, B.neck, 0.12, 0, 0);
       AR(o, B.spine, 0.04, 0, 0);
+      AR(o, B.neck, 0.14, 0, 0);
+      R(o, B.head, 0.48, 0.06, 0);
+      // móvil delante del pecho, con la pantalla hacia la cara
+      armIK(o, -1, -0.05, 0.19, 0.29, -1, -1, -0.15);
+      phoneFacing(o);
       o[CH.phone] = 1;
       o[CH.mouth] = 0.15;
       o[CH.eye] = 0.85;
@@ -667,7 +744,8 @@ export class Animator {
     else if (v <= 6) C = 1.25 + 1.25 * ((v - 2) / 4);
     else C = 2.5 * Math.pow(v / 6, 0.6);
     C *= g.stride;
-    this.phase = (this.phase + (v * dt) / C) % 1;
+    // el root avanza en metros del mundo y el cuerpo va escalado: el paso también
+    this.phase = (this.phase + (v * dt) / (C * this.bodyScale)) % 1;
     const ph = this.phase;
     const s = lerp(0.58, 0.36, run);
     const S = C * s;
@@ -816,8 +894,8 @@ export class Animator {
         aimPut(a, 1, -0.03, -0.33, 0.44, 0.6, -1, 0);
       } else {
         // pistola a dos manos
-        aimPut(a, -1, -0.05, -0.03, 0.42, -0.6, -1, -0.2);
-        aimPut(a, 1, -0.008, -0.068, 0.385, 0.8, -1, -0.2);
+        aimPut(a, -1, -0.04, -0.02, 0.475, -0.6, -1, -0.2);
+        aimPut(a, 1, 0.0, -0.058, 0.44, 0.8, -1, -0.2);
       }
     }
     lerpBones(o, a, seated ? RIGHT_ARM : UPPER, this.aimW);
@@ -851,54 +929,52 @@ export class Animator {
 
   // ─────────── vehículos y asientos ───────────
   private poseDrive(o: Float32Array) {
-    o.set(KF_DRIVE);
+    o.set(this.kfDrive);
     this.face(o);
     const t = this.t;
     const steer = wave(t * 0.6, this.seed) * 0.3;
     AR(o, B.spine, Math.sin(t * 1.7) * 0.012, 0, -steer * 0.06);
-    wheelHands(o, steer);
+    wheelHands(o, steer, this.bodyScale);
     AR(o, B.head, 0, wave(t * 0.3, this.seed + 3) * 0.25 + steer * 0.4, 0);
   }
 
   private poseRide(o: Float32Array) {
     neutral(o);
     this.face(o);
-    o[CH.hy] = 0.75;
+    o[CH.hy] = seatHip(RIDE_LAYOUT.seatY, this.bodyScale);
     o[CH.hz] = -0.02;
     R(o, B.hips, 0.2, 0, 0);
-    for (const side of [1, -1]) {
-      R(o, side > 0 ? B.thighL : B.thighR, -1.2, 0, side * 0.3);
-      R(o, side > 0 ? B.shinL : B.shinR, 1.25, 0, 0);
-      R(o, side > 0 ? B.footL : B.footR, -0.25, 0, -side * 0.3);
-    }
+    // pies en el suelo del vehículo (RIDE_LAYOUT.feet), rodillas abiertas
+    const F = RIDE_LAYOUT.feet, k = 1 / this.bodyScale;
+    legs(o, F.halfWidth * k - HIP_X, F.z * k, F.y * k, -(F.halfWidth * k - HIP_X), F.z * k, F.y * k);
+    AR(o, B.thighL, 0, 0, 0.12);
+    AR(o, B.thighR, 0, 0, -0.12);
     const t = this.t;
     const yaw = wave(t * 0.5, this.seed) * 0.08;
     R(o, B.spine, 0.18 + Math.sin(t * 2) * 0.01, 0, -yaw * 0.5);
     R(o, B.head, -0.35, wave(t * 0.3, this.seed) * 0.2, 0);
-    barHands(o, yaw);
+    barHands(o, yaw, this.bodyScale);
   }
 
   private poseSit(o: Float32Array) {
     neutral(o);
     this.face(o);
     const t = this.t;
-    o[CH.hy] = 0.52;
+    // trasero en SIT_LAYOUT.seatY (sea cual sea la altura) y pies apoyados en el suelo
+    o[CH.hy] = seatHip(SIT_LAYOUT.seatY, this.bodyScale);
     o[CH.hz] = -0.05;
     R(o, B.hips, -0.06, 0, 0);
     const crossed = (this.seed >> 3) % 2 === 0;
-    R(o, B.thighL, -1.46, 0, 0.07);
-    R(o, B.shinL, 1.48, 0, 0);
-    R(o, B.footL, 0.04, 0, -0.07);
+    const tap = Math.max(0, Math.sin(t * 5.5)) * 0.03 * ((this.seed >> 5) % 2);
+    legs(o, 0.03, 0.4, tap, -0.03, 0.38, 0);
     if (crossed) {
-      R(o, B.thighR, -1.72, 0, 0.3);
-      R(o, B.shinR, 1.15, 0, 0);
-      R(o, B.footR, 0.3, 0, -0.2);
+      // pierna derecha cruzada por encima
+      R(o, B.thighR, -1.62, 0, 0.3);
+      R(o, B.shinR, 1.2, 0, 0);
+      R(o, B.footR, 0.3 + Math.sin(t * 2.2) * 0.12, 0, -0.2);
       arm(o, 1, -0.5, 0, 0.12, -0.7);
       arm(o, -1, -0.55, 0, 0.0, -0.95);
     } else {
-      R(o, B.thighR, -1.46, 0, -0.07);
-      R(o, B.shinR, 1.48, 0, 0);
-      R(o, B.footR, 0.04, 0, 0.07);
       arm(o, 1, -0.42, 0, 0.12, -0.8);
       arm(o, -1, -0.42, 0, 0.12, -0.8);
     }
@@ -934,13 +1010,12 @@ export class Animator {
         const step = Math.floor(b * 2);
         const sf = (b * 2) % 1;
         const snap = Math.min(1, sf * 7);
-        const A = (n: number) => ((Math.sin(n * 12.9898 + this.seed) * 43758.5453) % 1 + 1) % 1;
-        const cur = (i: number, k: number) => lerp(A(step - 1 + i * 7) , A(step + i * 7), snap) * k;
+        const sd = this.seed;
         o[CH.hy] = 0.86 + HIPJ - 0.03 * (1 - snap);
-        arm(o, 1, -0.3 + cur(1, 0.6) - 0.3, 0, 1.35, -1.57 + cur(2, 1.2) * (step % 2 ? 1 : -1) * 0.6);
-        arm(o, -1, -0.3 + cur(3, 0.6) - 0.3, 0, 1.35, -1.57 + cur(4, 1.2) * (step % 2 ? -1 : 1) * 0.6);
-        R(o, B.spine, 0, (cur(5, 1) - 0.5) * 0.6, 0);
-        R(o, B.head, 0, (cur(6, 1) - 0.5) * 1.1, 0);
+        arm(o, 1, -0.3 + robotV(step, 1, snap, sd, 0.6) - 0.3, 0, 1.35, -1.57 + robotV(step, 2, snap, sd, 1.2) * (step % 2 ? 1 : -1) * 0.6);
+        arm(o, -1, -0.3 + robotV(step, 3, snap, sd, 0.6) - 0.3, 0, 1.35, -1.57 + robotV(step, 4, snap, sd, 1.2) * (step % 2 ? -1 : 1) * 0.6);
+        R(o, B.spine, 0, (robotV(step, 5, snap, sd, 1) - 0.5) * 0.6, 0);
+        R(o, B.head, 0, (robotV(step, 6, snap, sd, 1) - 0.5) * 1.1, 0);
         o[CH.mouth] = -0.3;
         o[CH.eye] = 1;
         break;
@@ -1051,10 +1126,11 @@ export class Animator {
     R(o, B.thighL, -1.05, 0, 0.12);
     R(o, B.shinL, 1.7, 0, 0);
     R(o, B.footL, -0.55, 0.3, 0);
-    R(o, B.thighR, 0.1, 0, -0.35);
-    R(o, B.shinR, 0.05, 0, 0);
-    R(o, B.footR, 0.4, -0.6, 0);
-    R(o, B.head, 0.1, 0.55, 0);
+    R(o, B.thighR, -0.1, 0, -0.35);
+    R(o, B.shinR, 0.2, 0, 0);
+    R(o, B.footR, 0.3, -0.6, 0);
+    R(o, B.neck, 0.3, 0, 0);
+    R(o, B.head, 0.12, 0.5, 0);
     // pataleo cómico al principio
     const pt = this.poseT;
     if (pt > 0.5 && pt < 1.6) {
@@ -1095,12 +1171,13 @@ export class Animator {
     arm(o, 1, 0.12, 0, 0.1, -0.1 + Math.sin(t * 9) * 0.15);
     arm(o, -1, 0.12, 0, 0.1, -0.1 + Math.sin(t * 8) * 0.15);
     R(o, B.spine, 0, 0, -w * 0.1);
-    R(o, B.neck, -0.1 - Math.max(0, Math.sin(t * 2.3)) * 0.4, 0, 0);
-    R(o, B.head, 0.1, Math.sin(t * 3) * 0.3, 0);
-    R(o, B.thighL, 0.1 + Math.sin(t * 7) * 0.12, 0, 0.03);
-    R(o, B.thighR, 0.1 + Math.sin(t * 7 + PI) * 0.12, 0, -0.03);
-    R(o, B.footL, 0.4 + Math.sin(t * 11) * 0.3, 0.2, 0);
-    R(o, B.footR, 0.4 + Math.sin(t * 11 + 1) * 0.3, -0.2, 0);
+    // levanta la cabeza para mirar la cinta (x positivo = hacia el pecho = arriba)
+    R(o, B.neck, 0.2 + Math.max(0, Math.sin(t * 2.3)) * 0.45, 0, 0);
+    R(o, B.head, 0.12, Math.sin(t * 3) * 0.3, 0);
+    R(o, B.thighL, -0.1 + Math.sin(t * 7) * 0.03, 0, 0.03);
+    R(o, B.thighR, -0.1 + Math.sin(t * 7 + PI) * 0.03, 0, -0.03);
+    R(o, B.footL, 0.25 + Math.sin(t * 11) * 0.15, 0.2, 0);
+    R(o, B.footR, 0.25 + Math.sin(t * 11 + 1) * 0.15, -0.2, 0);
     o[CH.tape] = 1;
     o[CH.mouth] = 0.25 + Math.max(0, Math.sin(t * 4)) * 0.4;
     o[CH.mouthW] = 0.6;

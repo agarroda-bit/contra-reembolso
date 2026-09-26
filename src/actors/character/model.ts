@@ -2,7 +2,7 @@
 // cada pieza pegada a su hueso y con su color por vértice.
 import * as THREE from 'three';
 import { MeshBuilder } from './builder';
-import { B } from './skeleton';
+import { B, BIND_WORLD } from './skeleton';
 import type { CharacterLookExtra } from './looks';
 
 const _a = new THREE.Color();
@@ -26,6 +26,8 @@ export interface BuiltModel {
   triangles: number;
   /** Profundidad del pecho (para colocar los enganches de pecho y espalda). */
   chestZ: number;
+  /** Altura de lo más alto de la cabeza (pelo, gorra) sobre el hueso de la cabeza. */
+  headTop: number;
 }
 
 export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
@@ -76,7 +78,7 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
       { y: 0.355, hx: 0.205 * bw, hz: 0.106 * bd, ch: 0.05 },
       { y: 0.41, hx: 0.15 * bw, hz: 0.075 * bd, ch: 0.04 },
     ],
-    8,
+    8, false, true, // la tapa de abajo queda dentro del cinturón
   );
   const fz = frontZ + 0.003;
   if (jacket) {
@@ -182,12 +184,13 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
       M.color('#ffffff').decal(s * 0.043, 0.005, 0.0045, 0.013, 0.013);
     }
   }
-  // cara de "muerto": ojos en X y lengua fuera
-  M.setBone(B.eyesX).color('#1e1b2e');
+  // cara de "muerto": ojos en X y lengua fuera (con gafas, la X va blanca encima del cristal)
+  const xz = look.glasses ? 0.0195 : 0.003;
+  M.setBone(B.eyesX).color(look.glasses ? '#f4f4f4' : '#1e1b2e');
   for (const s of [1, -1]) {
     const ex = s * 0.054;
-    M.rotated(0, 0, Math.PI / 4, ex, 0, 0.003, () => M.decal(ex, 0, 0.003, 0.07, 0.017));
-    M.rotated(0, 0, -Math.PI / 4, ex, 0, 0.003, () => M.decal(ex, 0, 0.003, 0.07, 0.017));
+    M.rotated(0, 0, Math.PI / 4, ex, 0, xz, () => M.decal(ex, 0, xz, 0.07, 0.017));
+    M.rotated(0, 0, -Math.PI / 4, ex, 0, xz, () => M.decal(ex, 0, xz, 0.07, 0.017));
   }
   M.color('#ff6f91').box(0.014, -0.1, 0.008, 0.036, 0.046, 0.012);
 
@@ -313,9 +316,12 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
       { y: -0.066, hx: 0.062, hz: 0.142, ch: 0.045, cz: 0.058 },
       { y: -0.018, hx: 0.06, hz: 0.136, ch: 0.045, cz: 0.052 },
       { y: 0.03, hx: 0.052, hz: 0.07, ch: 0.03, cz: -0.012 },
-    ]);
+    ], 8, false, true); // la tapa de abajo la tapa la suela
     const soleC = luminance(look.shoes) > 0.5 ? '#8f8a86' : '#f1f1f1';
-    M.color(soleC).box(0, -0.077, 0.058, 0.132, 0.026, 0.298);
+    M.color(soleC).loft([
+      { y: -0.09, hx: 0.066, hz: 0.149, cz: 0.058 },
+      { y: -0.064, hx: 0.066, hz: 0.149, cz: 0.058 },
+    ], 4, true, false);
   }
 
   // ───────────── accesorios que se muestran según la pose ─────────────
@@ -324,12 +330,12 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   const star: [number, number][] = [];
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * Math.PI * 2;
-    const r = k % 2 === 0 ? 0.055 : 0.02;
+    const r = k % 2 === 0 ? 0.075 : 0.026;
     star.push([Math.cos(a) * r, Math.sin(a) * r]);
   }
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * Math.PI * 2;
-    const x = Math.sin(a) * 0.2, z = Math.cos(a) * 0.2;
+    const x = Math.sin(a) * 0.22, z = Math.cos(a) * 0.22;
     M.rotated(0, a, 0, x, 0, z, () => {
       M.poly(star, z, 1, x, 0, true);
       M.poly(star, z, -1, x, 0, true);
@@ -344,7 +350,7 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   // alturas según la complexión (el cuerpo tumbado tiene la espalda a 0,135 m)
   const tapes: [number, number, number][] = [
     [-0.28, 0.135 + frontZ + 0.014, 0.25 * bw + 0.08],
-    [0.27, 0.135 + 0.08 * lw + 0.012, 0.2 * lw + 0.06],
+    [0.27, 0.135 + 0.08 * lw + 0.032, 0.2 * lw + 0.06],
     [0.68, 0.135 + 0.06 * lw + 0.02, 0.15 * lw + 0.05],
   ];
   for (const [z, h, w] of tapes) {
@@ -358,7 +364,13 @@ export function buildCharacterGeometry(look: CharacterLookExtra): BuiltModel {
   }
 
   const triangles = M.triangles;
-  return { geometry: M.build(), triangles, chestZ: frontZ };
+  const geometry = M.build();
+  // lo más alto de la cabeza (para el enganche 'head': sombreros, paquetes...)
+  const pos = geometry.getAttribute('position'), si = geometry.getAttribute('skinIndex');
+  let topY = 0;
+  for (let i = 0; i < pos.count; i++) if (si.getX(i) === B.head) topY = Math.max(topY, pos.getY(i));
+  const headTop = Math.max(0.29, topY - BIND_WORLD[B.head][1]);
+  return { geometry, triangles, chestZ: frontZ, headTop };
 }
 
 // ─────────────────────────────── pelo ───────────────────────────────
@@ -395,9 +407,10 @@ function buildHair(M: MeshBuilder, look: CharacterLookExtra) {
         ponytail(M);
         break;
       case 'afro':
-        M.roundBox(0.15, 0.16, -0.03, 0.09, 0.14, 0.24, 0.04);
-        M.roundBox(-0.15, 0.16, -0.03, 0.09, 0.14, 0.24, 0.04);
-        M.roundBox(0, 0.13, -0.12, 0.3, 0.18, 0.1, 0.04);
+        // cajas simples (con gorra casi no se ve): así el peor caso de ropa sigue por debajo de 1.500 triángulos
+        M.box(0.15, 0.16, -0.03, 0.08, 0.14, 0.23);
+        M.box(-0.15, 0.16, -0.03, 0.08, 0.14, 0.23);
+        M.box(0, 0.13, -0.12, 0.3, 0.18, 0.1);
         break;
       case 'moño':
         backBlock(M, 0.004);
@@ -510,7 +523,6 @@ function buildCap(M: MeshBuilder, look: CharacterLookExtra) {
     { y: 0.285, hx: 0.147, hz: 0.147, ch: 0.05 },
     { y: 0.338, hx: 0.116, hz: 0.116, ch: 0.045 },
   ]);
-  M.box(0, 0.345, 0, 0.03, 0.014, 0.03);
   M.color(shade(c, 0.7));
   M.rotated(0.14, 0, 0, 0, 0.222, 0.14, () => M.box(0, 0.222, 0.205, 0.235, 0.016, 0.135));
   if (look.emblem) drawEmblem(M, look.emblem, 0, 0.254, 0.1505, 0.056, 1, false);

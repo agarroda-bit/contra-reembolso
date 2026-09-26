@@ -78,7 +78,7 @@ export class Character implements CharacterRig {
     this.sockets = {
       handR: sock(B.handR, 0, -0.065, 0.005, 'enganche-manoD'),
       handL: sock(B.handL, 0, -0.065, 0.005, 'enganche-manoI'),
-      head: sock(B.head, 0, 0.3, 0, 'enganche-cabeza'),
+      head: sock(B.head, 0, built.headTop + 0.005, 0, 'enganche-cabeza'),
       back: sock(B.spine, 0, 0.2, -(built.chestZ + 0.01), 'enganche-espalda'),
       chest: sock(B.spine, 0, 0.2, built.chestZ + 0.01, 'enganche-pecho'),
     };
@@ -97,6 +97,7 @@ export class Character implements CharacterRig {
     const h = this.look.height ?? 1;
     this.body.scale.setScalar(h);
     this.heightMeters = HEIGHT * h;
+    this.anim.setScale(h);
   }
 
   setLook(look: CharacterLook) {
@@ -107,6 +108,7 @@ export class Character implements CharacterRig {
     this.triangles = built.triangles;
     this.sockets.back.position.z = -(built.chestZ + 0.01);
     this.sockets.chest.position.z = built.chestZ + 0.01;
+    this.sockets.head.position.y = built.headTop + 0.005;
     this.look = look;
     this.anim.configure((look as CharacterLookExtra).kind, look.emblem);
     this.applyScale();
@@ -174,8 +176,24 @@ export class Character implements CharacterRig {
     if (p && (Object.values(this.sockets) as THREE.Object3D[]).includes(p)) p.remove(obj);
   }
 
+  /**
+   * Posición mundial de la mano derecha. Si el objeto enganchado en 'handR' tiene
+   * `userData.muzzle` (metros hacia su +Z), devuelve la boca del cañón.
+   */
   handWorldPosition(target: THREE.Vector3): THREE.Vector3 {
-    return this.sockets.handR.getWorldPosition(target);
+    const s = this.sockets.handR;
+    s.updateWorldMatrix(true, false);
+    const kids = s.children;
+    for (let i = 0; i < kids.length; i++) {
+      const m = kids[i].userData.muzzle;
+      if (typeof m === 'number') {
+        const k = kids[i];
+        k.updateMatrix();
+        target.set(0, 0, m).applyMatrix4(k.matrix).applyMatrix4(s.matrixWorld);
+        return target;
+      }
+    }
+    return target.setFromMatrixPosition(s.matrixWorld);
   }
 
   dispose() {

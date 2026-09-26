@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { Rng } from '../../core/rng';
+import { noRaycast } from './skydome';
 
 const VERT = /* glsl */ `
 uniform float uD0;
@@ -114,6 +115,7 @@ export class Clouds {
       mesh.castShadow = false;
       mesh.receiveShadow = false;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.raycast = noRaycast;
       const list: Cloud[] = [];
       for (let i = 0; i < PER_VARIANT; i++) {
         const s = rng.range(1.15, 2.0);
