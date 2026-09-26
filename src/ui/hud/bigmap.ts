@@ -2,7 +2,7 @@
 import type { Game } from '../../core/game';
 import type { Poi, PoiKind, WorldData } from '../../core/contracts';
 import { POI_STYLE, LEGEND_ORDER, badgeSprite, pinSprite, drawPlayerArrow, NOCHE, UI_FONT } from './icons';
-import { sampleSeaColor, mapSource } from './minimap';
+import { sampleSeaColor, mapSource, invalidateMapSource } from './minimap';
 import { esc, formatDistance } from './format';
 
 const DEFAULT_MARKER = '#ff4f81';
@@ -47,6 +47,8 @@ export class BigMap {
   private legendFor: WorldData | null = null;
   private seaColor = '#2f8fd0';
   private seaFor: HTMLCanvasElement | null = null;
+  /** Copia del mapa del mundo sin los nombres de barrio pintados (este mapa pone los suyos). */
+  private cleaner: MapCleaner | null = null;
   private wavePattern: CanvasPattern | null = null;
   private waveMatrix: DOMMatrix | null = null;
   private t = 0;
@@ -165,6 +167,26 @@ export class BigMap {
   invalidate() {
     this.seaFor = null;
     this.legendFor = null;
+    if (this.cleaner) invalidateMapSource(this.cleaner.out);
+    this.cleaner = null;
+  }
+
+  /**
+   * Prepara en los ratos libres del navegador la copia del mapa sin nombres (unas decenas de ms en
+   * total, a trocitos): así abrir el mapa la primera vez no da un tirón. Lo que falte se hace al abrirlo.
+   */
+  prepareSoon(world: WorldData) {
+    const map = world.mapCanvas;
+    if (!map || this.cleaner?.map === map) return;
+    const ric = (window as any).requestIdleCallback as ((cb: (d: { timeRemaining(): number }) => void) => number) | undefined;
+    const c = (this.cleaner = new MapCleaner(map, world));
+    if (!ric) return;
+    const tick = (dl: { timeRemaining(): number }) => {
+      if (this.cleaner !== c || c.done) return;
+      if (c.step(Math.max(1, dl.timeRemaining() - 2))) mapSource(c.image);
+      else ric(tick);
+    };
+    ric(tick);
   }
 
   show(world: WorldData, px: number, pz: number, heading: number) {
@@ -446,6 +468,8 @@ export class BigMap {
       this.seaFor = map;
       this.wavePattern = null;
     }
+    if (this.cleaner?.map !== map) this.cleaner = new MapCleaner(map, world);
+    if (!this.cleaner.done) this.cleaner.step(Infinity);
 
     // hover (si no se arrastra)
     if (this.mouse.inside && !this.drag?.moved) this.setHover(this.pick(this.mouse.x, this.mouse.y));
@@ -464,7 +488,7 @@ export class BigMap {
     g.imageSmoothingQuality = 'high';
     // 1 px del mapa = mapPixelSize m (igual que el minimapa), empezando en la esquina (-size/2, -size/2)
     const mps = world.mapPixelSize;
-    g.drawImage(mapSource(map), 0, 0, map.width, map.height, o.x, o.y, map.width * mps * scale, map.height * mps * scale);
+    g.drawImage(mapSource(this.cleaner.image), 0, 0, map.width, map.height, o.x, o.y, map.width * mps * scale, map.height * mps * scale);
 
     this.drawGrid(g, world);
 
@@ -781,6 +805,202 @@ function hoverKey(h: Hover): string {
   if (h.type === 'poi') return 'p:' + h.poi.id;
   if (h.type === 'marker') return 'm:' + h.label + h.icon;
   return h.type;
+}
+
+/**
+ * Copia del mapa del mundo SIN los nombres de barrio que trae pintados (el mapa de la isla los
+ * pinta para el minimapa). El mapa grande pone los suyos, más legibles y apartados de los iconos;
+ * sin esto salían dos veces y de colores distintos.
+ *
+ * Cómo: el relleno de cada nombre es exactamente el color del barrio. Se buscan esos píxeles, se
+ * toma la caja del grupo más grande, se ensancha lo que ocupa el borde blanco del texto y se
+ * rellena con lo que hay alrededor (mezclando lo de arriba/abajo y lo de los lados, según lo cerca
+ * que esté). Se hace una vez por mapa y a trozos (step), para poder repartirlo en los ratos libres
+ * del navegador sin dar tirones.
+ */
+class MapCleaner {
+  readonly out: HTMLCanvasElement;
+  done = false;
+  private g: CanvasRenderingContext2D | null;
+  private phase = 0;
+  private row = 0;
+  private di = 0;
+  private readonly keys: number[];
+  /** Rojos de los colores de barrio (para descartar rápido casi todos los píxeles). */
+  private readonly redLut = new Uint8Array(256);
+  private readonly hitsX: number[][];
+  private readonly hitsY: number[][];
+
+  constructor(readonly map: HTMLCanvasElement, private world: WorldData) {
+    this.out = document.createElement('canvas');
+    this.out.width = map.width;
+    this.out.height = map.height;
+    this.g = this.out.getContext('2d', { willReadFrequently: true });
+    const probe = new Uint32Array(1);
+    const probe8 = new Uint8Array(probe.buffer);
+    this.keys = world.districts.map((dd) => {
+      const c = hexRgb(dd.color || DISTRICT_COLORS[dd.id] || '');
+      if (!c) return -1;
+      probe8[0] = c[0];
+      probe8[1] = c[1];
+      probe8[2] = c[2];
+      probe8[3] = 255;
+      this.redLut[c[0]] = 1;
+      return probe[0];
+    });
+    this.hitsX = this.keys.map(() => []);
+    this.hitsY = this.keys.map(() => []);
+    if (!this.g || !map.width || !map.height) this.done = true;
+  }
+
+  /** Lo que hay que pintar: la copia limpia o, si no se ha podido hacer, el mapa tal cual. */
+  get image(): HTMLCanvasElement {
+    return this.phase > 0 ? this.out : this.map;
+  }
+
+  /** Trabaja unos milisegundos como mucho (budget). Devuelve true cuando ha terminado. */
+  step(budget: number): boolean {
+    const t0 = performance.now();
+    const g = this.g;
+    const w = this.map.width, h = this.map.height;
+    try {
+      while (!this.done && g && performance.now() - t0 < budget) {
+        if (this.phase === 0) {
+          g.drawImage(this.map, 0, 0);
+          this.phase = 1;
+        } else if (this.phase === 1) {
+          // busca por franjas los píxeles del color exacto de algún barrio (el relleno de las letras es liso)
+          const rows = Math.min(48, h - this.row);
+          const img = g.getImageData(0, this.row, w, rows);
+          const px = new Uint32Array(img.data.buffer, img.data.byteOffset, w * rows);
+          const lut = this.redLut, keys = this.keys;
+          for (let n = 0; n < px.length; n++) {
+            const v = px[n];
+            if (!lut[v & 255]) continue;
+            for (let i = 0; i < keys.length; i++) {
+              if (v === keys[i]) {
+                this.hitsX[i].push(n % w);
+                this.hitsY[i].push(this.row + ((n / w) | 0));
+                break;
+              }
+            }
+          }
+          this.row += rows;
+          if (this.row >= h) this.phase = 2;
+        } else if (this.phase === 2) {
+          if (this.di < this.keys.length) this.erase(this.di++);
+          else this.done = true;
+        }
+      }
+    } catch {
+      // sin permiso para leer el lienzo: se queda como esté
+      this.done = true;
+    }
+    return this.done;
+  }
+
+  /** Borra el nombre de un barrio de la copia. */
+  private erase(i: number) {
+    const g = this.g!;
+    const w = this.map.width, h = this.map.height;
+    const xs = this.hitsX[i], ys = this.hitsY[i];
+    if (xs.length < 40) return;
+    const PAD = 8; // borde blanco (3,5 m = 7 px de trazo, la mitad por fuera) + suavizado, con holgura
+    // el grupo del nombre: alrededor de la mediana (por si hubiera algún píxel suelto del mismo color)
+    const mx = median(xs), my = median(ys);
+    const halfW = this.world.districts[i].name.length * 14 + 20;
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    const keep: number[] = [];
+    for (let n = 0; n < xs.length; n++) {
+      if (Math.abs(xs[n] - mx) > halfW || Math.abs(ys[n] - my) > 40) continue;
+      keep.push(n);
+      if (xs[n] < x0) x0 = xs[n];
+      if (xs[n] > x1) x1 = xs[n];
+      if (ys[n] < y0) y0 = ys[n];
+      if (ys[n] > y1) y1 = ys[n];
+    }
+    if (x1 < 0) return;
+    // caja con margen para el borde (y un píxel más alrededor, de donde se toman los colores)
+    const bx0 = Math.max(2, x0 - PAD - 2), bx1 = Math.min(w - 3, x1 + PAD + 2);
+    const by0 = Math.max(2, y0 - PAD - 2), by1 = Math.min(h - 3, y1 + PAD + 2);
+    const bw = bx1 - bx0 + 1, bh = by1 - by0 + 1;
+    const rw = bw + 2;
+    const img = g.getImageData(bx0 - 1, by0 - 1, rw, bh + 2);
+    const d = img.data;
+    const src = new Uint8ClampedArray(d);
+    // máscara: a menos de PAD píxeles de una letra (dilatación separable: filas y luego columnas)
+    const m0 = new Uint8Array(bw * bh);
+    for (const n of keep) m0[(ys[n] - by0) * bw + (xs[n] - bx0)] = 1;
+    const m1 = new Uint8Array(bw * bh);
+    for (let y = 0; y < bh; y++) {
+      let last = -1e9;
+      for (let x = 0; x < bw; x++) {
+        if (m0[y * bw + x]) last = x;
+        if (x - last <= PAD) m1[y * bw + x] = 1;
+      }
+      last = 1e9;
+      for (let x = bw - 1; x >= 0; x--) {
+        if (m0[y * bw + x]) last = x;
+        if (last - x <= PAD) m1[y * bw + x] = 1;
+      }
+    }
+    const mask = new Uint8Array(bw * bh);
+    for (let x = 0; x < bw; x++) {
+      let last = -1e9;
+      for (let y = 0; y < bh; y++) {
+        if (m1[y * bw + x]) last = y;
+        if (y - last <= PAD) mask[y * bw + x] = 1;
+      }
+      last = 1e9;
+      for (let y = bh - 1; y >= 0; y--) {
+        if (m1[y * bw + x]) last = y;
+        if (last - y <= PAD) mask[y * bw + x] = 1;
+      }
+    }
+    // relleno: se lee de la copia original (los bordes no se tocan) y se escribe encima
+    const at = (x: number, y: number) => ((y + 1) * rw + (x + 1)) * 4;
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0; x < bw; x++) {
+        if (!mask[y * bw + x]) continue;
+        let l = x, r = x, u = y, dn = y;
+        while (l >= 0 && mask[y * bw + l]) l--;
+        while (r < bw && mask[y * bw + r]) r++;
+        while (u >= 0 && mask[u * bw + x]) u--;
+        while (dn < bh && mask[dn * bw + x]) dn++;
+        // un píxel más afuera: el justo del borde aún puede tener un poco del trazo blanco
+        l = Math.max(-1, l - 1);
+        r = Math.min(bw, r + 1);
+        u = Math.max(-1, u - 1);
+        dn = Math.min(bh, dn + 1);
+        const kl = at(l, y), kr = at(r, y), ku = at(x, u), kd = at(x, dn);
+        // mezcla de lo de arriba/abajo y lo de los lados, pesando más lo que queda más cerca
+        // (en medio de un nombre largo manda lo de arriba y abajo: calles y edificios que lo cruzan)
+        const tv = (y - u) / (dn - u), th = (x - l) / (r - l);
+        const wv = 1 / Math.min(y - u, dn - y), wh = 1 / Math.min(x - l, r - x);
+        const kv = wv / (wv + wh), kh = 1 - kv;
+        const k = at(x, y);
+        for (let c = 0; c < 3; c++) {
+          const v = src[ku + c] + (src[kd + c] - src[ku + c]) * tv;
+          const hz = src[kl + c] + (src[kr + c] - src[kl + c]) * th;
+          d[k + c] = v * kv + hz * kh;
+        }
+        d[k + 3] = 255;
+      }
+    }
+    g.putImageData(img, bx0 - 1, by0 - 1);
+  }
+}
+
+function hexRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+function median(a: number[]): number {
+  const s = a.slice().sort((p, q) => p - q);
+  return s[s.length >> 1];
 }
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

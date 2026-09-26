@@ -308,6 +308,7 @@ export class HudImpl implements Hud {
       const t0 = performance.now();
       this.minimap.draw(game, world, this.view.x, this.view.z, this.view.heading, realDt);
       this.stats.minimapMs += (performance.now() - t0 - this.stats.minimapMs) * 0.05;
+      if (game.time.frame % 30 === 0) this.bigMap.prepareSoon(world);
     }
     this.updateTopRight(hud);
     this.updateBars(hud);
