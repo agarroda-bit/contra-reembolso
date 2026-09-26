@@ -176,8 +176,24 @@ export class Character implements CharacterRig {
     if (p && (Object.values(this.sockets) as THREE.Object3D[]).includes(p)) p.remove(obj);
   }
 
+  /**
+   * Posición mundial de la mano derecha. Si el objeto enganchado en 'handR' tiene
+   * `userData.muzzle` (metros hacia su +Z), devuelve la boca del cañón.
+   */
   handWorldPosition(target: THREE.Vector3): THREE.Vector3 {
-    return this.sockets.handR.getWorldPosition(target);
+    const s = this.sockets.handR;
+    s.updateWorldMatrix(true, false);
+    const kids = s.children;
+    for (let i = 0; i < kids.length; i++) {
+      const m = kids[i].userData.muzzle;
+      if (typeof m === 'number') {
+        const k = kids[i];
+        k.updateMatrix();
+        target.set(0, 0, m).applyMatrix4(k.matrix).applyMatrix4(s.matrixWorld);
+        return target;
+      }
+    }
+    return target.setFromMatrixPosition(s.matrixWorld);
   }
 
   dispose() {

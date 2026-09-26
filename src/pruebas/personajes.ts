@@ -90,6 +90,7 @@ function makePistol() {
   grip.position.set(0, 0, -0.005);
   grip.rotation.x = -0.25;
   g.add(slide, grip);
+  g.userData.muzzle = 0.16; // boca del cañón (para handWorldPosition)
   return g;
 }
 function makeRifle() {
@@ -105,6 +106,7 @@ function makeRifle() {
   const mag = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.1, 0.05), gunMat);
   mag.position.set(0, -0.03, 0.14);
   g.add(body, barrel, stock, grip, mag);
+  g.userData.muzzle = 0.65;
   return g;
 }
 
