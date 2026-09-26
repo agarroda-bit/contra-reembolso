@@ -31,6 +31,7 @@ import { Markers3D } from './ui/markers3d';
 import { CombatHud } from './ui/combatHud';
 import { RandomEvents } from './gameplay/randomEvents';
 import { PhotoMode } from './ui/photoMode';
+import { Achievements } from './gameplay/achievements';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -102,6 +103,7 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
   if (fase >= 9) {
     add(new RandomEvents(game));
     add(new PhotoMode(game));
+    add(new Achievements(game));
   }
 
   installDayNight(game);
