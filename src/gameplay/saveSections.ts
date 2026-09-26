@@ -86,7 +86,17 @@ export function registerSaveSections(game: Game, getProfile: () => Profile, setP
 
   if (m.story) save.register({ key: 'story', save: () => [...m.story.completed], load: (d) => (d ?? []).forEach((x: string) => m.story.completed.add(x)) });
   if (m.pickups) save.register({ key: 'collectibles', save: () => [...m.pickups.collected], load: (d) => m.pickups.placeCollectibles(d ?? []) });
-  if (m.tutorial) save.register({ key: 'tutorial', save: () => m.tutorial.done, load: (d) => d && m.tutorial.skip() });
+  // tutorial: hecho o por qué paso iba (las partidas antiguas solo guardaban true/false)
+  if (m.tutorial)
+    save.register({
+      key: 'tutorial',
+      save: () => ({ done: m.tutorial.done, step: m.tutorial.step }),
+      load: (d) => {
+        const obj = d && typeof d === 'object';
+        if (obj ? d.done : d) m.tutorial.skip();
+        else m.tutorial.resume(obj ? Number(d.step) || 0 : 0);
+      },
+    });
   if (m.attic?.getState) save.register({ key: 'attic', save: () => m.attic.getState(), load: (d) => d && m.attic.setState(d) });
   if (m.loot) save.register({ key: 'loot', save: () => ({ cash: m.loot.cash, packages: m.loot.packages, left: m.loot.deadline - game.time.elapsed }), load: (d) => {
     m.loot.cash = d.cash ?? 0;
