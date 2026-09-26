@@ -64,6 +64,7 @@ export class Markers3D implements System {
     if (hud.waypoint) list.push(hud.waypoint);
     for (const m of hud.markers) {
       if (list.length >= MAX) break;
+      if ((m as any).threat) continue;
       if (hud.waypoint && Math.abs(m.x - hud.waypoint.x) < 1 && Math.abs(m.z - hud.waypoint.z) < 1) continue;
       list.push(m);
     }

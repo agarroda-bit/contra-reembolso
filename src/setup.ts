@@ -28,6 +28,7 @@ import { Loot } from './gameplay/loot';
 import { Phone } from './ui/phone';
 import { Bubbles } from './ui/bubbles';
 import { Markers3D } from './ui/markers3d';
+import { CombatHud } from './ui/combatHud';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -102,6 +103,7 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
   installHud(game);
   if (fase >= 2) add(new Bubbles(game));
   if (fase >= 4) add(new Markers3D(game));
+  if (fase >= 3) add(new CombatHud(game));
   if (audio) add(audio);
   return { player, cam };
 }
