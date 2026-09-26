@@ -11,6 +11,7 @@ import type { Npc } from '../../actors/npc';
 import { randomLookFor } from '../../actors/looks';
 import { Rng, fx as rnd } from '../../core/rng';
 import { GeoBuilder, vertexColorMaterial } from '../../core/geo';
+import { SOLID } from '../../core/physics';
 
 // timeK: cuánto tiempo dan respecto a uno normal. URGENTE va justo (un buen conductor llega con
 // margen para propina; uno tranquilo, si no se entretiene); FRÁGIL obliga a ir despacio; SOSPECHOSO
@@ -75,6 +76,19 @@ const REDIRECTS = [
 
 const JOB_COLORS = ['#ffd23f', '#2ec4b6', '#ff4f81', '#ff7b54', '#06d6a0', '#9b5de5'];
 const tmpV = new THREE.Vector3();
+const tmpO = new THREE.Vector3();
+const tmpD = new THREE.Vector3();
+
+/** Caja de cartón que sale volando cuando se cae un paquete (la misma pinta que la del suelo). */
+let dropGeoCache: THREE.BufferGeometry | null = null;
+function dropGeo(): THREE.BufferGeometry {
+  if (dropGeoCache) return dropGeoCache;
+  const b = new GeoBuilder();
+  b.box(0.5, 0.4, 0.5, '#c8915a', 0, 0, 0);
+  b.box(0.51, 0.08, 0.51, '#8f6238', 0, 0.05, 0);
+  b.box(0.08, 0.41, 0.51, '#8f6238', 0, 0, 0);
+  return (dropGeoCache = b.build());
+}
 
 interface Scene {
   job: ActiveJob;
@@ -410,35 +424,99 @@ export class Jobs implements System {
     return n;
   }
 
-  /** Se caen paquetes de un vehículo (embestidas): quedan en el suelo para recogerlos. */
+  /**
+   * Se caen paquetes de un vehículo (embestidas, atracos): salen volando por detrás y caen a 4-6 m
+   * de la trasera, con un botecito; al tocar el suelo se pueden recoger (así no se recogen solos al
+   * instante por seguir el vehículo encima).
+   */
   dropFrom(v: Vehicle, count = 1) {
     const jobs = this.carriedIn(v).slice(0, count);
-    for (const j of jobs) {
+    if (!jobs.length) return;
+    const g = this.game;
+    const center = v.getPosition(new THREE.Vector3());
+    const h = v.heading;
+    const rear = v.spec.half.z;
+    // hacia atrás; si hay una pared detrás, en diagonal o hacia un lado (lo que esté libre)
+    const dirs: [number, number][] = [[0, -1], [0.7, -0.7], [-0.7, -0.7], [1, 0], [-1, 0]];
+    let bx = -Math.sin(h), bz = -Math.cos(h);
+    let room = rear + 6;
+    let best = -1;
+    for (const [sx, sz] of dirs) {
+      // (sx, sz) en ejes del coche: x = izquierda, z = delante
+      const dx = Math.cos(h) * sx + Math.sin(h) * sz;
+      const dz = -Math.sin(h) * sx + Math.cos(h) * sz;
+      const hit = g.physics.raycast(tmpO.set(center.x, center.y + 0.4, center.z), tmpD.set(dx, 0, dz), rear + 6.5, SOLID, v.body);
+      const free = hit ? hit.distance - 0.6 : rear + 6.5;
+      if (free > best) {
+        best = free;
+        bx = dx;
+        bz = dz;
+        room = free;
+      }
+      if (free >= rear + 4.5) break;
+    }
+    const rx = -bz, rz = bx; // perpendicular, para repartir si caen varios
+    const from = v.localToWorld(tmpO.set(0, 0.2, -rear), new THREE.Vector3());
+    jobs.forEach((j, i) => {
       j.state = 'pickup';
       j.where = 'none';
       j.vehicleId = null;
-      const pos = v.getPosition(new THREE.Vector3());
-      pos.x += (rnd.next() - 0.5) * 4;
-      pos.z += (rnd.next() - 0.5) * 4;
-      pos.y = this.game.world.heightAt(pos.x, pos.z);
+      const back = Math.max(1, Math.min(room, rear + 4 + rnd.next() * 2));
+      const side = (i - (jobs.length - 1) / 2) * 1.6 + (rnd.next() - 0.5) * 1.2;
+      const to = new THREE.Vector3(center.x + bx * back + rx * side, 0, center.z + bz * back + rz * side);
+      to.y = g.world.heightAt(to.x, to.z);
       this.damage(j, 15);
-      this.game.mod.pickups?.spawn('package', pos, 1, 45, () => {
+      const mesh = new THREE.Mesh(dropGeo(), vertexColorMaterial);
+      mesh.castShadow = true;
+      mesh.position.copy(from);
+      g.scene.add(mesh);
+      this.flying.push({ mesh, from: from.clone(), to, t: 0, dur: 0.75 + rnd.next() * 0.15, j });
+      (j as any).droppedAt = g.time.elapsed;
+      (j as any).dropPos = to;
+      (j as any).dropExpires = g.time.elapsed + 45;
+    });
+    g.mod.particles?.emit('cardboard', from, { count: 4 });
+    const many = jobs.length > 1;
+    this.game.events.emit('toast', { text: many ? `¡Se te han caído ${jobs.length} paquetes! Recógelos rápido` : '¡Se te ha caído un paquete! Recógelo rápido', color: '#ff4f81' });
+    this.updateVehiclePackages();
+  }
+
+  /** Paquetes caídos que aún van por el aire. */
+  private readonly flying: { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; j: ActiveJob }[] = [];
+
+  /** Vuelo de los paquetes caídos: arco hacia fuera y un botecito; al tocar el suelo quedan para recogerlos. */
+  private updateFlying(dt: number) {
+    const g = this.game;
+    for (let i = this.flying.length - 1; i >= 0; i--) {
+      const f = this.flying[i];
+      f.t += dt;
+      const k = Math.min(1, f.t / f.dur);
+      const m = f.mesh;
+      // avanza rápido al principio y frena al final (como algo que cae y rueda un poco)
+      m.position.lerpVectors(f.from, f.to, 1 - (1 - k) * (1 - k));
+      // arco principal (75 % del tiempo) y un bote pequeño
+      const hop = k < 0.75 ? Math.sin((k / 0.75) * Math.PI) * 1.2 : Math.sin(((k - 0.75) / 0.25) * Math.PI) * 0.3;
+      m.position.y += hop + 0.25;
+      m.rotation.x += dt * 8 * (1 - k);
+      m.rotation.y += dt * 5;
+      if (k < 1) continue;
+      g.scene.remove(m);
+      this.flying.splice(i, 1);
+      g.mod.particles?.emit('dust', f.to, { count: 4 });
+      g.mod.audio?.play('drop', { pos: f.to, volume: 0.6 });
+      const j = f.j;
+      // mientras volaba se ha podido cancelar el encargo
+      if (j.state !== 'pickup' || (j as any).dropPos !== f.to) continue;
+      g.mod.pickups?.spawn('package', f.to, 1, Math.max(5, (j as any).dropExpires - g.time.elapsed), () => {
         if (j.state !== 'pickup') return;
-        const pv = this.nearbyVehicle(this.game.mod.player.position);
+        const pv = this.nearbyVehicle(g.mod.player.position);
         j.state = 'carry';
         j.where = pv ? 'vehicle' : 'hands';
         j.vehicleId = pv?.id ?? null;
         this.clearDrop(j);
         this.updateVehiclePackages();
-        this.game.events.emit('toast', { text: '¡Paquete recuperado!', color: '#ffd23f' });
+        g.events.emit('toast', { text: '¡Paquete recuperado!', color: '#ffd23f' });
       });
-      (j as any).droppedAt = this.game.time.elapsed;
-      (j as any).dropPos = pos.clone();
-      (j as any).dropExpires = this.game.time.elapsed + 45;
-    }
-    if (jobs.length) {
-      this.game.events.emit('toast', { text: `¡Se te ha caído ${jobs.length > 1 ? jobs.length + ' paquetes' : 'un paquete'}! Recógelo rápido`, color: '#ff4f81' });
-      this.updateVehiclePackages();
     }
   }
 
@@ -546,6 +624,7 @@ export class Jobs implements System {
     }
 
     this.updateScene(dt);
+    this.updateFlying(dt);
     this.updateDog(dt);
     this.updateCarryVisual();
     this.updateHud();
