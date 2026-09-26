@@ -159,6 +159,9 @@ export class Shops implements System {
         const v = this.workVehicle();
         if (v && v.owned) {
           const o: OwnedVehicle | undefined = (v as any).ownedRef;
+          // vida máxima con el blindaje comprado (reparar no debe quitarle el extra)
+          const maxHp = v.spec.health * (1 + v.upgrades.armor * 0.3);
+          const repairPrice = Math.max(0, Math.round((1 - v.health / maxHp) * 400));
           secs.push({
             title: `Mejoras para tu ${v.spec.name.toLowerCase()}`,
             items: UPGRADES.map((u) => {
@@ -182,11 +185,11 @@ export class Shops implements System {
             items: [
               {
                 id: 'reparar', icon: '🧰', name: 'Reparación completa', desc: 'Chapa, humo y abolladuras fuera.',
-                price: Math.round((1 - v.health / v.spec.health) * 400), label: 'Reparar', disabled: v.health >= v.spec.health,
+                price: repairPrice, label: 'Reparar', disabled: v.health >= maxHp - 1,
                 buy: () => {
-                  const price = Math.round((1 - v.health / v.spec.health) * 400);
+                  const price = Math.max(0, Math.round((1 - v.health / maxHp) * 400));
                   if (!this.eco.spend(price, 'reparación')) return false;
-                  v.health = v.spec.health;
+                  v.health = maxHp;
                   v.onFire = false;
                   return true;
                 },

@@ -9,6 +9,17 @@ import type { ShopUI, ShopItem } from '../ui/shop';
 import type { Poi } from '../core/contracts';
 import { GeoBuilder, vertexColorMaterial } from '../core/geo';
 import { fx as rnd } from '../core/rng';
+import { DAY_LENGTH_SECONDS } from '../core/game';
+
+/**
+ * Lo que gana un repartidor en un día de juego (20 minutos reales) con rendimiento 100 % y la
+ * oficina sin ampliar: ~340 € (≈1.000 € por hora real). Cada nivel de oficina suma un 15 %.
+ * Contratar (600 €) + su furgoneta (3.500 €) se paga sola en unas 4 horas de juego: es una meta
+ * larga, no un atajo. Lo ganan poco a poco y lo ingresan al acabar el día (dormir no multiplica nada).
+ */
+const DAY_EARN = 340;
+const HIRE_PRICE = 600;
+const FLEET_VAN_PRICE = 3500;
 
 export interface Employee {
   id: number;
@@ -37,6 +48,13 @@ export const LUXURIES = [
   { id: 'billar', icon: '🎱', name: 'Mesa de billar', price: 6000, fame: 60, desc: 'Para las reuniones importantes.' },
 ];
 
+/** Quita los marcadores con esa marca sin crear una lista nueva. */
+function dropMarkers(list: any[], flag: string) {
+  let w = 0;
+  for (let i = 0; i < list.length; i++) if (!list[i][flag]) list[w++] = list[i];
+  list.length = w;
+}
+
 export class Company implements System {
   name = 'company';
   level = 0;
@@ -44,7 +62,7 @@ export class Company implements System {
   fleet = 0; // furgonetas de la flota (además de la tuya)
   luxuries = new Set<string>();
   private nextId = 1;
-  private rescue: { emp: Employee; pos: THREE.Vector3; timer: number; enemies: any[] } | null = null;
+  private rescue: { emp: Employee; pos: THREE.Vector3; timer: number; enemies: any[]; marker?: any } | null = null;
   private decor: THREE.Object3D[] = [];
   private office: Poi | undefined;
 
@@ -100,20 +118,20 @@ export class Company implements System {
           title: `Personal (${this.staff.length}/${max}) · cada uno necesita una furgoneta de la flota`,
           items: [
             {
-              id: 'contratar', icon: '🤝', name: 'Contratar repartidor', desc: 'Reparte por su cuenta y te deja dinero cada día de juego en el banco.',
-              price: 600, label: 'Contratar', disabled: this.staff.length >= max || this.staff.length >= this.fleet,
-              locked: this.staff.length >= this.fleet ? 'Compra otra furgoneta' : undefined,
+              id: 'contratar', icon: '🤝', name: 'Contratar repartidor', desc: `Reparte por su cuenta: unos ${fmt(this.dayEarn(1))} por día de juego, que ingresa en tu banco al acabar el día.`,
+              price: HIRE_PRICE, label: 'Contratar', disabled: this.staff.length >= max || this.staff.length >= this.fleet,
+              locked: this.staff.length >= this.fleet ? 'Compra otra furgoneta' : this.staff.length >= max ? 'Amplía la oficina' : undefined,
               buy: () => {
-                if (!this.eco.spend(600, 'contrato')) return false;
+                if (!this.eco.spend(HIRE_PRICE, 'contrato')) return false;
                 this.hire();
                 return true;
               },
             },
             {
               id: 'flota', icon: '🚐', name: 'Furgoneta para la flota', desc: 'Amarilla, con el logo. Aparece aparcada delante de la oficina.',
-              price: 3500, label: 'Comprar', disabled: this.fleet >= OFFICE_LEVELS[OFFICE_LEVELS.length - 1].maxStaff,
+              price: FLEET_VAN_PRICE, label: 'Comprar', disabled: this.fleet >= OFFICE_LEVELS[OFFICE_LEVELS.length - 1].maxStaff,
               buy: () => {
-                if (!this.eco.spend(3500, 'flota')) return false;
+                if (!this.eco.spend(FLEET_VAN_PRICE, 'flota')) return false;
                 this.fleet++;
                 this.refreshDecor();
                 return true;
@@ -149,7 +167,14 @@ export class Company implements System {
     });
   }
 
+  /** Lo que gana en un día de juego un repartidor con ese rendimiento, según el nivel de la oficina. */
+  private dayEarn(skill: number): number {
+    return DAY_EARN * skill * (1 + this.level * 0.15);
+  }
+
   hire(): Employee {
+    // tras cargar partida, que no se repitan números (y nombres) de empleados
+    for (const e of this.staff) this.nextId = Math.max(this.nextId, e.id + 1);
     const i = this.nextId++;
     const e: Employee = { id: i, name: NAMES[(i - 1) % NAMES.length], avatar: AVATARS[(i - 1) % AVATARS.length], skill: 0.8 + rnd.next() * 0.5, earnedToday: 0, robbed: false };
     this.staff.push(e);
@@ -157,20 +182,21 @@ export class Company implements System {
     return e;
   }
 
-  /** Cada día de juego: los repartidores ingresan lo ganado. */
+  /** Cada día de juego: los repartidores ingresan lo que han ido ganando. */
   private payday() {
     if (!this.staff.length) return;
     let total = 0;
     const lines: string[] = [];
+    // si el día apenas ha durado (dormir justo después de cobrar), no hay resumen que dar
+    if (this.staff.every((e) => !e.robbed && e.earnedToday < 1)) return;
     for (const e of this.staff) {
-      const earn = e.robbed ? 0 : Math.round((180 + rnd.next() * 120) * e.skill * (1 + this.level * 0.15));
+      const earn = e.robbed ? 0 : Math.round(e.earnedToday);
       total += earn;
       lines.push(`${e.avatar} ${e.name}: ${e.robbed ? 'le robaron 😢' : fmt(earn)}`);
       e.earnedToday = 0;
       e.robbed = false;
     }
-    this.eco.bank += total;
-    this.game.events.emit('money', { cash: this.eco.cash, bank: this.eco.bank, delta: 0, reason: 'banco' });
+    if (total > 0) this.eco.addBank(total, 'empresa');
     this.game.mod.messages?.receive('empresa', 'Contra Reembolso S.L.', '🏢', `Resumen del día: ${fmt(total)} ingresados en el banco.\n${lines.join('\n')}`);
   }
 
@@ -278,6 +304,10 @@ export class Company implements System {
 
   update(dt: number) {
     const g = this.game;
+    // los repartidores van ganando a lo largo del día (con alguna variación)
+    for (const e of this.staff) {
+      if (!e.robbed) e.earnedToday += (this.dayEarn(e.skill) / DAY_LENGTH_SECONDS) * dt * (0.8 + rnd.next() * 0.4);
+    }
     // repartidores que piden ayuda de vez en cuando
     if (!this.rescue && this.staff.length && rnd.next() < dt / 400) {
       const e = this.staff[Math.floor(rnd.next() * this.staff.length)];
@@ -289,8 +319,9 @@ export class Company implements System {
     const r = this.rescue;
     if (r) {
       r.timer -= dt;
-      g.hud.markers = g.hud.markers.filter((m) => !(m as any).rescue);
-      g.hud.markers.push({ x: r.pos.x, z: r.pos.z, icon: '🆘', color: '#ff4f81', label: `Ayuda a ${r.emp.name}`, rescue: true } as any);
+      dropMarkers(g.hud.markers, 'rescue');
+      r.marker ??= { x: r.pos.x, z: r.pos.z, icon: '🆘', color: '#ff4f81', label: `Ayuda a ${r.emp.name}`, rescue: true };
+      g.hud.markers.push(r.marker);
       const p = g.mod.player;
       if (!r.enemies.length && p.position.distanceTo(r.pos) < 60) r.enemies = g.mod.gang?.ambush(r.pos, 3) ?? [];
       // si se han borrado por distancia sin morir, volverán a salir cuando vuelvas
@@ -300,12 +331,13 @@ export class Company implements System {
         g.mod.messages?.receive('staff-' + r.emp.id, r.emp.name, r.emp.avatar, '¡Gracias, jefe! ¡Eres un crack! Mañana te traigo el doble. Bueno, lo normal. 🙏');
         this.eco.addFame(15, 'rescate');
         this.eco.addCash(100, 'propina empleado');
-        g.hud.markers = g.hud.markers.filter((m) => !(m as any).rescue);
+        dropMarkers(g.hud.markers, 'rescue');
         this.rescue = null;
       } else if (r.timer <= 0) {
         r.emp.robbed = true;
+        r.emp.earnedToday = 0;
         g.mod.messages?.receive('staff-' + r.emp.id, r.emp.name, r.emp.avatar, 'Se lo han llevado todo, jefe. Hoy no hay caja. 😢');
-        g.hud.markers = g.hud.markers.filter((m) => !(m as any).rescue);
+        dropMarkers(g.hud.markers, 'rescue');
         this.rescue = null;
       }
     }
