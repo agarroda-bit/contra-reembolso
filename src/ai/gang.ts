@@ -68,6 +68,8 @@ export class Gang implements System {
   private readonly truceAt = new THREE.Vector3();
   /** El jugador aún no se ha ido de la zona donde reapareció (mientras tanto sigue la tregua ahí). */
   private truceZone = false;
+  /** Tras cumplir una misión cerca de la guarida, los guardias te dejan en paz hasta que te vayas de allí. */
+  private guardsTruce = false;
   /** Emboscadas recientes (ver AMBUSH_MEMORY) y a cuál pertenece cada miembro. */
   private groups: AmbushGroup[] = [];
   private groupOf = new Map<Npc, AmbushGroup>();
@@ -79,6 +81,9 @@ export class Gang implements System {
       const b = e.npc?.brain as CombatBrain | undefined;
       if (b && b.side === 'gang') {
         b.lastHurt = game.time.elapsed;
+        // solo van a por ti si el golpe es tuyo (un coche de la calle o una bala perdida de otro no cuenta:
+        // si no, los guardias en tregua saltaban por cualquier cosa)
+        if (!hurtByPlayer(game, e.source)) return;
         b.aggro = true;
         // los compañeros cercanos también se enteran
         for (const m of this.members) if (m.position.distanceTo(e.npc.position) < 30) ((m.brain as CombatBrain).aggro = true);
@@ -193,6 +198,8 @@ export class Gang implements System {
       m.aiming = false;
       (b as any).robber = false;
       if (this.guards.includes(m)) {
+        // (y no vuelven a por ti por estar en su territorio hasta que te vayas y vuelvas)
+        this.guardsTruce = true;
         if (b.home && !m.busy) m.goTo(b.home);
         continue;
       }
@@ -365,13 +372,25 @@ export class Gang implements System {
         this.guards = [];
         this.guardsSpawned = false;
       }
-      // zona de la banda: si te acercas a menos de 45 m te atacan
-      if (d < 45) {
+      // tras cumplir una misión por aquí te dejan en paz mientras no te vayas (si les atacas, sí se defienden)
+      if (this.guardsTruce) {
+        if (d > 120 || !this.guardsSpawned) this.guardsTruce = false;
+        else
+          for (const m of this.guards) {
+            const b = m.brain as CombatBrain;
+            if (b && !b.aggro && b.calmUntil < g.time.elapsed + 1) b.calmUntil = g.time.elapsed + 1;
+          }
+      }
+      // zona de la banda: si te acercas a menos de 45 m te atacan (salvo en tregua)
+      if (d < 45 && !this.guardsTruce) {
         if (g.time.elapsed - this.territoryWarned > 30) {
           this.territoryWarned = g.time.elapsed;
           g.events.emit('toast', { text: 'Territorio de Los Devueltos', color: '#6c3bd1', time: 2.5 });
         }
-        for (const m of this.guards) if (m.alive && m.position.distanceTo(p.position) < 40) (m.brain as CombatBrain).aggro = true;
+        for (const m of this.guards) {
+          const b = m.brain as CombatBrain;
+          if (m.alive && g.time.elapsed >= b.calmUntil && m.position.distanceTo(p.position) < 40) b.aggro = true;
+        }
       }
     }
 
@@ -422,10 +441,15 @@ export class Gang implements System {
           this.members.splice(i, 1);
           continue;
         }
-        if (!m.target) {
-          tmpV.copy(m.position).sub(p.position).setY(0);
-          if (tmpV.lengthSq() < 0.01) tmpV.set(1, 0, 0);
-          tmpV.normalize().multiplyScalar(30).add(m.position);
+        // los que se retiran en calma (misión cumplida, emboscada que se cansa) siguen en calma hasta irse:
+        // si no, uno que se queda a la vista acaba volviendo a por ti
+        if (b.calmUntil > g.time.elapsed) b.calmUntil = g.time.elapsed + 5;
+        if (!m.target || m.blockedTime > 1.5) {
+          // lejos de ti; si se ha atascado (una valla) o por ahí no hay tierra, hacia un lado
+          const turn = m.blockedTime > 1.5 ? (rnd.next() < 0.5 ? -1 : 1) * (0.8 + rnd.next() * 0.8) : 0;
+          m.blockedTime = 0;
+          awayPoint(m.position, p.position, turn, tmpV);
+          if (!g.world.isLand(tmpV.x, tmpV.z)) awayPoint(m.position, p.position, (rnd.next() - 0.5) * 3.4, tmpV);
           if (g.world.isLand(tmpV.x, tmpV.z)) m.goTo(tmpV);
         }
       }
@@ -621,6 +645,30 @@ export class Gang implements System {
 
 /** Subfusil del copiloto de la furgoneta, con el daño rebajado para los enemigos (hecho una vez, no en cada ráfaga). */
 const VAN_SMG = { ...WEAPONS.smg, damage: WEAPONS.smg.damage * 0.3 };
+
+/** ¿El daño viene del jugador? (disparo, golpe o explosión suya, o atropello con su vehículo; sin datos, también) */
+function hurtByPlayer(game: Game, source: any): boolean {
+  if (!source) return true;
+  if (source.vehicle) return source.vehicle === game.mod.vehicles?.current;
+  return source.shooter?.kind === 'player';
+}
+
+/** Punto a 30 m de `from` alejándose de `threat`, girado `turn` radianes. */
+function awayPoint(from: THREE.Vector3, threat: THREE.Vector3, turn: number, out: THREE.Vector3): THREE.Vector3 {
+  let x = from.x - threat.x;
+  let z = from.z - threat.z;
+  const l = Math.hypot(x, z);
+  if (l < 0.1) {
+    x = 1;
+    z = 0;
+  } else {
+    x /= l;
+    z /= l;
+  }
+  const c = Math.cos(turn);
+  const s = Math.sin(turn);
+  return out.set(from.x + (x * c - z * s) * 30, from.y, from.z + (x * s + z * c) * 30);
+}
 
 /** ¿Queda alguno en pie? (sin funciones nuevas en cada frame) */
 function anyAlive(list: Npc[]): boolean {

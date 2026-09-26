@@ -206,7 +206,8 @@ export class Police implements System {
         if (n.police) this.crime(1.5, 'agresión a la autoridad', false, 999);
       }
       const b = n.brain as CombatBrain | undefined;
-      if (b && 'side' in b) {
+      // (los de la banda los enfada gang.ts, solo si el golpe es tuyo)
+      if (b && 'side' in b && b.side === 'police') {
         b.lastHurt = game.time.elapsed;
         b.aggro = true;
       }
