@@ -315,15 +315,23 @@ export class Police implements System {
   private pickSpot(roadblock: boolean): { eid: number; dir: 1 | -1; pos: THREE.Vector3 } | null {
     const p = this.game.mod.player;
     const focus = this.vm.current ? this.vm.current.getPosition(new THREE.Vector3()) : p.position.clone();
-    const edges = this.roads.edgesInRing(focus, roadblock ? 55 : 90, roadblock ? 100 : 160);
-    if (!edges.length) return null;
+    let edges = this.roads.edgesInRing(focus, roadblock ? 55 : 90, roadblock ? 105 : 160);
     const ahead = this.playerHeading(new THREE.Vector3());
+    if (roadblock) {
+      // solo calles de delante (de hacia donde vas), y de más de 12 m para que quepa el coche cruzado
+      edges = edges.filter((id) => {
+        const e = this.roads.g.edges[id];
+        if (this.roads.length(id) < 12) return false;
+        const m = tmpV.lerpVectors(this.roads.g.nodes[e.a].pos, this.roads.g.nodes[e.b].pos, 0.5).sub(focus).setY(0).normalize();
+        return m.dot(ahead) > 0.35;
+      });
+    }
+    if (!edges.length) return null;
     let best: { eid: number; dir: 1 | -1; pos: THREE.Vector3 } | null = null;
     let bestScore = -Infinity;
     for (let i = 0; i < 10; i++) {
       const eid = edges[Math.floor(rnd.next() * edges.length)];
       const e = this.roads.g.edges[eid];
-      if (roadblock && this.roads.length(eid) < 12) continue;
       // que salga mirando hacia el jugador (si no, lo primero que hace es dar la vuelta y se atasca)
       const a = this.roads.g.nodes[e.a].pos, b = this.roads.g.nodes[e.b].pos;
       const dir: 1 | -1 = b.distanceToSquared(focus) < a.distanceToSquared(focus) ? 1 : -1;
@@ -337,14 +345,12 @@ export class Police implements System {
         best = { eid, dir, pos };
       }
     }
-    // un control que te queda detrás no sirve de nada
-    if (roadblock && best && tmpV.copy(best.pos).sub(focus).setY(0).normalize().dot(ahead) < 0.2) return null;
     return best;
   }
 
-  private spawnUnit(roadblock = false) {
+  private spawnUnit(roadblock = false): boolean {
     const spot = this.pickSpot(roadblock);
-    if (!spot) return;
+    if (!spot) return false;
     const { eid, dir, pos } = spot;
     const kind = this.wanted >= 4 && rnd.next() < (roadblock ? 0.6 : 0.4) ? 'policevan' : 'police';
     const heading = this.roads.heading(eid, dir) + (roadblock ? Math.PI / 2 : 0);
@@ -374,6 +380,7 @@ export class Police implements System {
       this.dismount(unit);
     }
     this.units.push(unit);
+    return true;
   }
 
   private dismount(u: Unit) {
@@ -521,8 +528,9 @@ export class Police implements System {
     if (this.wanted >= 3) {
       this.roadblockTimer -= dt;
       if (this.roadblockTimer <= 0) {
-        this.roadblockTimer = 25 - this.wanted * 2;
-        if (this.units.filter((u) => u.roadblock).length < this.wanted - 2) this.spawnUnit(true);
+        // si no hay sitio bueno ahora, se vuelve a intentar enseguida
+        if (this.units.filter((u) => u.roadblock).length < this.wanted - 2) this.roadblockTimer = this.spawnUnit(true) ? 25 - this.wanted * 2 : 2;
+        else this.roadblockTimer = 3;
       }
     }
 
