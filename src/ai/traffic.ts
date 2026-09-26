@@ -5,7 +5,8 @@ import { Roads } from './roads';
 import type { VehicleManager } from '../vehicles/manager';
 import type { Vehicle } from '../vehicles/vehicle';
 import type { NpcManager } from '../actors/npcManager';
-import { TRAFFIC_KINDS } from '../vehicles/types';
+import { CRAZY_TRAFFIC_KINDS, TRAFFIC_KINDS, type VehicleKind } from '../vehicles/types';
+import { honk } from '../vehicles/sounds';
 import { RAPIER, G, groups } from '../core/physics';
 import { fx as rnd, Rng } from '../core/rng';
 import { randomLookFor } from '../actors/looks';
@@ -69,6 +70,11 @@ const castVel = { x: 0, y: 0, z: 1 };
 /** Caja que se "lanza" por delante de cada coche para ver obstáculos (una por tipo, del ancho del coche). */
 const castShapes = new Map<string, RAPIER.Cuboid>();
 const OBSTACLES = groups(G.ALL, G.VEHICLE | G.PLAYER | G.NPC | G.STATIC);
+/** Probabilidad de que un coche nuevo del tráfico sea un vehículo loco (y cuántos a la vez, como mucho). */
+const CRAZY_CHANCE = 0.05;
+const CRAZY_MAX = 2;
+/** Velocidad de crucero máxima de los locos en el tráfico (el sofá, a lo loco, se sale de la calle). */
+const CRAZY_CRUISE: Partial<Record<VehicleKind, number>> = { sofa: 6, forklift: 9, golf: 9 };
 
 /**
  * Esquina de un cruce: el punto donde se cortan el carril de llegada (edge1, dir1) y el de salida
@@ -122,16 +128,44 @@ export class Traffic implements System {
     return Math.round(16 * this.game.quality.density);
   }
 
+  /** Tipo de coche nuevo para el tráfico: casi siempre uno normal y, muy de vez en cuando, uno loco. */
+  private pickKind(): VehicleKind {
+    if (this.game.mod.fase >= 9 && rnd.next() < CRAZY_CHANCE) {
+      let n = 0;
+      for (const c of this.cars) if (CRAZY_TRAFFIC_KINDS.includes(c.spec.kind)) n++;
+      const k = CRAZY_TRAFFIC_KINDS[Math.floor(rnd.next() * CRAZY_TRAFFIC_KINDS.length)];
+      // como mucho dos a la vez, y nunca dos iguales
+      if (n < CRAZY_MAX && !this.cars.some((c) => c.spec.kind === k)) return k;
+    }
+    return TRAFFIC_KINDS[Math.floor(rnd.next() * TRAFFIC_KINDS.length)];
+  }
+
   /** Crea un coche con conductor en una arista. */
-  spawnCar(edge: number, dir: 1 | -1, t: number, kind = TRAFFIC_KINDS[Math.floor(rnd.next() * TRAFFIC_KINDS.length)]): Vehicle | null {
+  spawnCar(edge: number, dir: 1 | -1, t: number, kind: VehicleKind = this.pickKind()): Vehicle | null {
     const e = this.roads.g.edges[edge];
     const pos = this.roads.lanePoint(edge, dir, t, e.width / 4, new THREE.Vector3());
     // no aparecer encima de otro vehículo
     if (this.vm.nearest(pos, 7)) return null;
     const v = this.vm.spawn(kind, pos, this.roads.heading(edge, dir));
-    const driver = this.npcs.spawn('driver', randomLookFor(this.rng, 'civil'), pos);
+    const look = randomLookFor(this.rng, 'civil');
+    if (kind === 'granny') {
+      // la silla la lleva una yaya de verdad: moño gris y rebeca
+      look.hair = 'moño';
+      look.hairColor = '#d9d9d9';
+      look.jacket = this.rng.pick(['#9d4edd', '#6d597a', '#b5838d']);
+      look.glasses = true;
+      look.height = 0.92;
+    } else if (kind === 'forklift' || kind === 'paella') {
+      // gorra del puerto o del puesto de paellas
+      look.cap = true;
+      look.capColor = kind === 'forklift' ? '#ffc300' : '#e63946';
+    }
+    const driver = this.npcs.spawn('driver', look, pos);
     driver.enterVehicle(v);
-    (v as any).brain = this.newBrain(edge, dir, t);
+    const brain = this.newBrain(edge, dir, t);
+    const cap = CRAZY_CRUISE[kind];
+    if (cap) brain.cruise = Math.min(brain.cruise, cap);
+    (v as any).brain = brain;
     this.cars.push(v);
     return v;
   }
@@ -224,7 +258,9 @@ export class Traffic implements System {
     const s = spots[Math.floor(rnd.next() * spots.length)];
     if (this.vm.nearest(s.pos, 5)) return;
     const kinds = ['compact', 'compact', 'suv', 'taxi', 'sports', 'scooter', 'truck'] as const;
-    const v = this.vm.spawn(kinds[Math.floor(rnd.next() * kinds.length)], s.pos, s.heading);
+    // muy de vez en cuando, un sofá abandonado en la calle (que, por supuesto, tiene motor)
+    const sofa = this.game.mod.fase >= 9 && rnd.next() < 0.04 && !this.parked.some((p) => p.spec.kind === 'sofa');
+    const v = this.vm.spawn(sofa ? 'sofa' : kinds[Math.floor(rnd.next() * kinds.length)], s.pos, s.heading);
     this.parked.push(v);
   }
 
@@ -577,7 +613,8 @@ export class Traffic implements System {
       brain.blocked += dt;
       if (blockedByPlayer && brain.blocked > 1.2 && this.game.time.elapsed - brain.honked > 2.5) {
         brain.honked = this.game.time.elapsed;
-        this.game.events.emit('vehicle:horn' as any, { vehicle: v } as any);
+        honk(this.game, v);
+        this.game.events.emit('vehicle:honk' as any, { vehicle: v } as any);
         const d = v.driver && v.driver.kind === 'npc' ? v.driver.npc : null;
         if (d && rnd.next() < 0.5) this.game.mod.audio?.say(pos, 4, d.voice, 0.5);
       }
