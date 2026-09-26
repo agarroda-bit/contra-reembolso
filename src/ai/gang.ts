@@ -139,6 +139,35 @@ export class Gang implements System {
     }
   }
 
+  /**
+   * La banda se retira (al cumplir una misión de la historia): se acaban las persecuciones, los que
+   * estén a menos de `radius` de `center` se van andando (y desaparecen cuando nadie los ve) y los
+   * guardias de la guarida vuelven a su sitio. Nadie se enfada solo por verte durante `calmFor` segundos.
+   */
+  standDown(center: THREE.Vector3, radius = 250, calmFor = 60) {
+    this.clearChases();
+    const until = this.game.time.elapsed + calmFor;
+    for (const m of this.members) {
+      if (m.removed || !m.alive || m.position.distanceTo(center) > radius) continue;
+      const b = m.brain as CombatBrain | undefined;
+      if (!b) continue;
+      b.aggro = false;
+      b.mode = 'idle';
+      b.calmUntil = until;
+      b.unseenFor = 0;
+      m.aiming = false;
+      (b as any).robber = false;
+      if (this.guards.includes(m)) {
+        if (b.home && !m.busy) m.goTo(b.home);
+        continue;
+      }
+      b.home = null;
+      b.holdAt = null;
+      b.bored = true;
+      m.stop();
+    }
+  }
+
   /** ¿Es un buen sitio para que aparezca alguien? En tierra, fuera de los edificios y sin desnivel raro. */
   private goodSpot(p: THREE.Vector3, refY: number): boolean {
     const w = this.game.world;

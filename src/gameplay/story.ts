@@ -705,11 +705,16 @@ export class Story implements System {
     this.finishCleanup();
     msg(g, BOSS, a.m.outro);
     this.announced = '';
-    g.mod.economy?.addCash(r.money + bonus, 'misión');
+    // misión cumplida = fin del lío: la policía lo deja y la banda que quede cerca se retira
+    // (si no, tras el final te matan en la calle y pierdes el premio)
+    g.mod.police?.clear?.();
+    g.mod.gang?.standDown?.(playerPos(g), 250);
+    // el premio va al banco (el efectivo se pierde al morir o al ser detenido)
+    g.mod.economy?.addBank(r.money + bonus, 'misión');
     g.mod.economy?.addFame(r.fame, 'misión');
     g.mod.audio?.play('success');
     g.mod.particles?.emit('confetti', g.mod.player.position.clone().setY(g.mod.player.position.y + 2), { count: 60, speed: 1.3 });
-    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)}  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 3.5 });
+    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)} ingresados en tu cuenta  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 4 });
     // qué viene ahora (si subir de fama no lo ha anunciado ya)
     const next = this.nextMission();
     if (first && next && a.m.id !== 'jefe' && this.announced !== next.id) {
@@ -839,6 +844,9 @@ export class Story implements System {
       this.credits = null;
       g.paused = false;
       g.input.enabled = true;
+      // unos segundos de margen para situarte al volver a la calle
+      const pl = g.mod.player;
+      if (pl) pl.shield = Math.max(pl.shield ?? 0, 3);
     };
     skip.onclick = close;
     const tick = () => {
