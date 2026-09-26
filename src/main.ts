@@ -87,6 +87,8 @@ async function boot() {
     menus.onNewGame = (p) => {
       SaveSystem.wipe();
       if (save) save.enabled = true;
+      // la ropa de serie de la tienda no debe tapar el uniforme y la gorra elegidos al crear el personaje
+      game.mod.shops?.resetOutfit(p.look);
       setProfile(p);
       player.teleport(game.world.playerSpawn.pos, game.world.playerSpawn.heading);
       menus.play();

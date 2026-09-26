@@ -67,6 +67,8 @@ export function registerSaveSections(game: Game, getProfile: () => Profile, setP
         });
         for (const c of d.clothes ?? []) m.shops.clothesOwned.add(c);
         Object.assign(m.shops.equipped, d.equipped ?? {});
+        // partida de antes de que existiera «tu uniforme de siempre»: que se vea lo elegido al crear el personaje
+        if (!(d.clothes ?? []).includes('uni-propio')) m.shops.upgradeOldOutfit();
         m.shops.applyClothes();
       },
     });
