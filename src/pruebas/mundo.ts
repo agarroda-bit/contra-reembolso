@@ -18,6 +18,7 @@ async function boot() {
   game.world = world;
   (window as any).__world = world;
   (window as any).__game = game;
+  (window as any).__THREE = THREE;
 
   // luces sencillas
   const night = Number(params.get('noche') ?? 0);

@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import type { Ctx } from './ctx';
 import { GeoBuilder, SKIP, lin } from './geo';
 import { OCC } from './occ';
-import { PlanCtx, Special, Out, collectible, makePoi, ground, doorPoint, stairs, stairRun, poiAt, jumpRamp } from './special';
+import { PlanCtx, Special, Out, collectible, makePoi, ground, doorPoint, stairs, stairRun, poiAt, jumpRamp, plazaPad } from './special';
 import { glass, facadeFrame, baseDepth, stripedAwning, house, PAL } from './buildings';
 import { lotPoint, Lot } from './layout';
 import { fitText, roundRect, neonSign, FONT, FONT_SCRIPT, FONT_FUN, FONT_SERIF } from './signs';
@@ -16,6 +16,7 @@ export function planViejo(p: PlanCtx): Special[] {
   // plazuela: la manzana entre los callejones x -198 / -160 y z 33 / 62
   const px0 = -194.5, px1 = -163.5, pz0 = 36.5, pz1 = 58.5;
   for (let z = pz0; z < pz1; z++) for (let x = px0; x < px1; x++) if (occ.get(x + 0.5, z + 0.5) === OCC.FREE) occ.set(x + 0.5, z + 0.5, OCC.RESERVED);
+  p.pads.push(plazaPad(p, -198, 33, -160, 62, (px0 + px1) / 2, (pz0 + pz1) / 2, (px1 - px0) / 2, (pz1 - pz0) / 2));
   const bar1 = layout.lotNear(-172, 27, 12, 9, { kind: 'special' }, 'bar1');
   const bar2 = layout.lotNear(-146, -6, 14, 9, { kind: 'special' }, 'bar2', 'Calle Mayor del Viejo');
   const roofHouse = layout.lotNear(-150, 45, 12, 10, { kind: 'special' }, 'casa-azotea');
@@ -23,8 +24,18 @@ export function planViejo(p: PlanCtx): Special[] {
   // rincón hippie junto a la playa del poniente
   const hip = findFree(occ, -270, 40, 20, 9);
   if (hip) occ.markCircle(hip.x, hip.z, 9, OCC.RESERVED);
-  const rampSpot = findFree(occ, -268, -30, 25, 7);
-  if (rampSpot) occ.markCircle(rampSpot.x, rampSpot.z, 7, OCC.RESERVED);
+  // rampa en la franja de hierba entre las casas del poniente y la playa: se coge carrerilla hacia el norte,
+  // paralela a la costa (un pasillo de 7 x 64 m libre de árboles para correr y aterrizar)
+  let rampSpot: { x: number; z: number } | null = null;
+  for (let dz = 0; dz <= 72 && !rampSpot; dz += 4) {
+    for (const sz of [1, -1]) {
+      for (let x = -268; x >= -282 && !rampSpot; x -= 2) {
+        if (occ.rectFree(x, -20 + sz * dz, 3.5, 32, 0, 0, [OCC.FREE])) rampSpot = { x, z: -20 + sz * dz };
+      }
+      if (rampSpot) break;
+    }
+  }
+  if (rampSpot) occ.markRect(rampSpot.x, rampSpot.z, 3.5, 32, 0, OCC.PROP);
   return [
     {
       name: 'viejo',
@@ -34,7 +45,7 @@ export function planViejo(p: PlanCtx): Special[] {
         if (bar2) buildBar(ctx, out, bar2, 1, 'bar-2');
         if (roofHouse) buildRoofHouse(ctx, out, roofHouse);
         if (hip) buildHippie(ctx, out, hip.x, hip.z);
-        if (rampSpot) jumpRamp(ctx, rampSpot.x, rampSpot.z, -Math.PI / 2, 9, 5, 1.8);
+        if (rampSpot) jumpRamp(ctx, rampSpot.x, rampSpot.z + 14, Math.PI, 9, 5, 1.8);
         // callejón sin salida (de verdad)
         collectible(ctx, -146, ctx.heightAt(-146, -20.5), -20.5);
         // patinete eléctrico en las plazas de la Calle Mayor
@@ -51,7 +62,7 @@ export function planViejo(p: PlanCtx): Special[] {
 
 function buildPlazuela(ctx: Ctx, out: Out, cx: number, cz: number, hw: number, hd: number) {
   const pave = ctx.pave;
-  pave.rect(pave.walk, cx, cz, hw, hd, 0, '#d9c29a', 2.5);
+  pave.rect(pave.walk, cx, cz, hw, hd, 0, '#d9c29a', 1.6);
   // empedrado a cuadros
   for (let i = -3; i <= 3; i++) pave.rect(pave.paint, cx + i * 4.4, cz, 0.12, hd - 0.5, 0, '#c4a87a', 2.5);
   for (let j = -2; j <= 2; j++) pave.rect(pave.paint, cx, cz + j * 4.4, hw - 0.5, 0.12, 0, '#c4a87a', 2.5);

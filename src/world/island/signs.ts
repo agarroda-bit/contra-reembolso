@@ -155,7 +155,7 @@ export class Signs {
         .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying vec4 vEmit;')
         .replace(
           '#include <emissivemap_fragment>',
-          '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vEmit.w * mix(0.1, 1.15, uNight);',
+          '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * vEmit.w * mix(0.3, 1.15, uNight);',
         );
     };
     mat.customProgramCacheKey = () => 'cr-signs';

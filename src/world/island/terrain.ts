@@ -15,6 +15,9 @@ export interface Pad {
   rot: number;
   h: number;
   blend: number;
+  /** Pendiente opcional del solar (m por m en X y en Z del mundo): plazas en cuesta que siguen a las calles. */
+  gx?: number;
+  gz?: number;
 }
 
 export class Terrain {
@@ -44,13 +47,15 @@ export class Terrain {
           const k = j * r + i;
           if (w > padW[k]) {
             padW[k] = w;
-            padH[k] = p.h;
+            padH[k] = p.h + (p.gx ?? 0) * x + (p.gz ?? 0) * z;
           }
         }
       }
     }
     // relieve + solares + calles
-    const near = { id: -1, d: 0, t: 0, h: 0 };
+    const near0 = { id: -1, d: 0, t: 0, h: 0 };
+    const nearCar = { id: -1, d: 0, t: 0, h: 0 };
+    const carOnly = (e: { alley: boolean }) => !e.alley;
     for (let j = 0; j <= this.n; j++) {
       const z = -HALF + j * CELL;
       for (let i = 0; i <= this.n; i++) {
@@ -58,7 +63,13 @@ export class Terrain {
         const k = j * r + i;
         let b = shape.base(x, z);
         if (padW[k] > 0) b = lerp(b, padH[k], padW[k]);
-        net.nearest(x, z, near);
+        let near = net.nearest(x, z, near0);
+        if (near.id >= 0 && net.edges[near.id].alley) {
+          // dentro de la calzada de una calle con coches manda la calle: así no salen baches donde
+          // desemboca un callejón (el asfalto no tiene que seguir la pendiente del callejón)
+          net.nearest(x, z, nearCar, carOnly);
+          if (nearCar.id >= 0 && nearCar.d <= net.edges[nearCar.id].width / 2 + 0.6) near = nearCar;
+        }
         if (near.id >= 0) {
           const e = net.edges[near.id];
           const core = e.width / 2 + (e.alley ? 1.5 : e.noSidewalk ? 2 : SIDEWALK_VIS + (e.bays ? BAY : 0) + 1.2);

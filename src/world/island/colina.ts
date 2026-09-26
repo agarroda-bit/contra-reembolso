@@ -25,9 +25,24 @@ export function planColina(p: PlanCtx): Special[] {
         if (attic) buildAttic(ctx, out, attic);
         if (mir) buildMirador(ctx, out, mir.x, mir.z);
         if (hair) {
-          const y = ctx.heightAt(hair.x, hair.z);
-          ctx.props.add('bench', hair.x, y, hair.z, Math.PI / 2, 1);
-          collectible(ctx, hair.x + 1.5, y, hair.z);
+          // banco con paquete junto a la curva: se busca el rellano más plano cerca (la ladera es empinada)
+          let bx = hair.x, bz = hair.z, best = 1e9;
+          for (let r = 0; r <= 14; r += 2) {
+            for (let a = 0; a < 12; a++) {
+              const x = hair.x + Math.cos((a / 12) * Math.PI * 2) * r, z = hair.z + Math.sin((a / 12) * Math.PI * 2) * r;
+              const v = ctx.occ.get(x, z), v2 = ctx.occ.get(x + 1.5, z);
+              if ((v !== OCC.FREE && v !== OCC.RESERVED) || (v2 !== OCC.FREE && v2 !== OCC.RESERVED)) continue;
+              const sl = Math.max(ctx.terrain.slopeAt(x, z), ctx.terrain.slopeAt(x + 1.5, z)) + r * 0.004;
+              if (sl < best) {
+                best = sl;
+                bx = x;
+                bz = z;
+              }
+            }
+          }
+          ctx.props.add('bench', bx, ctx.heightAt(bx, bz), bz, Math.PI / 2, 1);
+          collectible(ctx, bx + 1.5, ctx.heightAt(bx + 1.5, bz), bz);
+          ctx.occ.markCircle(bx, bz, 3, OCC.RESERVED);
         }
         cliffSpot(ctx);
       },

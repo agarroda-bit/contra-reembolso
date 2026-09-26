@@ -5,17 +5,19 @@ import { GeoBuilder, lin } from './geo';
 import { RoadNet, REdge, SIDEWALK_VIS, BAY } from './network';
 
 export const ROAD_COLORS = {
-  asphalt: '#4a4f5c',
-  asphaltColina: '#51535d',
+  asphalt: '#585d69',
+  asphaltColina: '#5e6069',
   cobble: '#b8a386',
   sidewalk: '#d9cfc0',
   sidewalkViejo: '#e0cfb2',
   curb: '#bdb7ad',
   paint: '#f4f1e8',
-  bay: '#565a66',
+  bay: '#646872',
 };
 
-const LIFT = 0.02;
+/** Altura de cada capa sobre el terreno: acera < asfalto < marcas. Unos centímetros de separación real
+ *  (además del polygonOffset) para que ninguna capa asome por debajo de otra aunque se trianguen distinto. */
+const LIFT_WALK = 0.02, LIFT_ASPHALT = 0.04, LIFT_PAINT = 0.055;
 
 export class RoadMeshes {
   readonly walk = new GeoBuilder();
@@ -24,23 +26,37 @@ export class RoadMeshes {
 
   constructor(private net: RoadNet, private heightAt: (x: number, z: number) => number) {}
 
+  private liftOf(b: GeoBuilder): number {
+    return b === this.paint ? LIFT_PAINT : b === this.asphalt ? LIFT_ASPHALT : LIFT_WALK;
+  }
+
   /** Tira a lo largo de un tramo entre dos distancias laterales (derecha positiva). */
-  ribbon(b: GeoBuilder, e: REdge, lat0: number, lat1: number, s0: number, s1: number, color: string, step = 3, lift = LIFT) {
+  ribbon(b: GeoBuilder, e: REdge, lat0: number, lat1: number, s0: number, s1: number, color: string, step = 3, liftArg?: number) {
     if (s1 - s0 < 0.05) return;
+    const lift = liftArg ?? this.liftOf(b);
     const A = this.net.nodes[e.a];
     const rx = -e.dz, rz = e.dx;
     const c = lin(color).clone();
-    const across = Math.abs(lat1 - lat0) > 7 ? 2 : 1;
+    const W = Math.abs(lat1 - lat0);
     // Bajo la calle el terreno es un plano (la altura de la calle es lineal a lo largo del tramo), así que
-    // en el centro del tramo bastan trozos largos; cerca de los cruces, trozos cortos.
+    // en el centro del tramo bastan trozos largos; cerca de los cruces, donde el terreno hace aristas al
+    // pasar de una calle a otra, trozos de 1,6 m (media celda del terreno) a lo largo y a lo ancho.
     const cuts: number[] = [s0];
+    const fine: boolean[] = [];
+    const endZone = e.len - 11;
     for (let s = s0; s < s1 - 0.01; ) {
-      const nearEnd = s < 11 || s > e.len - 11 || e.district === 'colina';
-      s = Math.min(s1, s + (nearEnd ? step : Math.max(step, 12)));
+      const atEnd = s < 11 - 1e-6 || s > endZone - 1e-6;
+      const nearEnd = atEnd || e.district === 'colina';
+      let next = s + (nearEnd ? Math.min(step, 1.6) : Math.max(step, 12));
+      // un trozo largo no puede meterse en la zona del cruce (allí el terreno ya no es un plano)
+      if (!nearEnd && next > endZone) next = endZone;
+      fine.push(atEnd);
+      s = Math.min(s1, next);
       cuts.push(s);
     }
     for (let i = 0; i < cuts.length - 1; i++) {
       const sa = cuts[i], sb = cuts[i + 1];
+      const across = fine[i] ? Math.max(1, Math.ceil(W / 1.6 - 0.01)) : W > 7 ? 2 : 1;
       for (let k = 0; k < across; k++) {
         const la = lat0 + ((lat1 - lat0) * k) / across, lb = lat0 + ((lat1 - lat0) * (k + 1)) / across;
         const p = (s: number, l: number) => {
@@ -56,9 +72,10 @@ export class RoadMeshes {
   }
 
   /** Disco horizontal pegado al terreno. */
-  disc(b: GeoBuilder, x: number, z: number, r: number, color: string, seg = 16, lift = LIFT) {
+  disc(b: GeoBuilder, x: number, z: number, r: number, color: string, seg = 16, liftArg?: number) {
+    const lift = liftArg ?? this.liftOf(b);
     const c = lin(color).clone();
-    const rings = r > 5 ? 2 : 1;
+    const rings = Math.max(1, Math.ceil(r / 2.5));
     for (let ring = 0; ring < rings; ring++) {
       const r0 = (r * ring) / rings, r1 = (r * (ring + 1)) / rings;
       for (let i = 0; i < seg; i++) {
@@ -80,7 +97,8 @@ export class RoadMeshes {
   }
 
   /** Polígono plano (rectángulo girado) pegado al terreno, subdividido. */
-  rect(b: GeoBuilder, x: number, z: number, hw: number, hd: number, rot: number, color: string, step = 3, lift = LIFT) {
+  rect(b: GeoBuilder, x: number, z: number, hw: number, hd: number, rot: number, color: string, step = 3, liftArg?: number) {
+    const lift = liftArg ?? this.liftOf(b);
     const c = lin(color).clone();
     const cs = Math.cos(rot), sn = Math.sin(rot);
     const nx = Math.max(1, Math.ceil((hw * 2) / step)), nz = Math.max(1, Math.ceil((hd * 2) / step));
@@ -106,8 +124,10 @@ export class RoadMeshes {
       const viejo = e.district === 'viejo';
       const road = e.alley ? ROAD_COLORS.cobble : colina ? ROAD_COLORS.asphaltColina : ROAD_COLORS.asphalt;
       const walkCol = viejo ? ROAD_COLORS.sidewalkViejo : ROAD_COLORS.sidewalk;
+      // un callejón que desemboca en una calle empieza en su bordillo (el empedrado no pisa el asfalto)
+      const cA = e.alley ? this.carWidthAt(e.a) / 2 : 0, cB = e.alley ? this.carWidthAt(e.b) / 2 : 0;
       // calzada
-      this.ribbon(this.asphalt, e, -hw, hw, 0, e.len, road, 3);
+      this.ribbon(this.asphalt, e, -hw, hw, cA, e.len - cB, road, 3);
       if (!e.noSidewalk) {
         for (const side of [1, -1] as const) {
           this.ribbon(this.walk, e, side * hw, side * (hw + SIDEWALK_VIS), 0, e.len, walkCol, 3);
@@ -126,8 +146,9 @@ export class RoadMeshes {
         }
       } else if (e.alley) {
         // bordes de los callejones: una franja de piedra más clara
+        const wA = cA > 0 ? cA + SIDEWALK_VIS : 0, wB = cB > 0 ? cB + SIDEWALK_VIS : 0;
         for (const side of [1, -1] as const) {
-          this.ribbon(this.walk, e, side * (hw - 0.6), side * (hw + 0.6), 0, e.len, '#d8c6a4', 3);
+          this.ribbon(this.walk, e, side * (hw - 0.6), side * (hw + 0.6), wA, e.len - wB, '#d8c6a4', 3);
         }
       }
       // marcas: línea central discontinua y bordes
@@ -161,10 +182,44 @@ export class RoadMeshes {
         if (e.district === 'colina') colina = true;
         if (e.district === 'viejo') viejo = true;
       }
+      // en cruces en ángulo recto y en tramos rectos las cintas de cada calle ya tapan el cruce: sin disco
+      // (un disco grande de triángulos anchos acababa asomando por encima del asfalto)
+      if (this.squareNode(n.id)) continue;
       const col = anyAlley ? ROAD_COLORS.cobble : colina ? ROAD_COLORS.asphaltColina : ROAD_COLORS.asphalt;
       this.disc(this.asphalt, n.x, n.z, maxW / 2 + 0.05, col, 16);
       if (!allNoWalk) this.disc(this.walk, n.x, n.z, maxW / 2 + SIDEWALK_VIS, viejo ? ROAD_COLORS.sidewalkViejo : ROAD_COLORS.sidewalk, 20);
     }
+  }
+
+  /** Nodo recto (dos tramos alineados) o cruce en T/X en ángulo recto. Las esquinas (dos tramos a 90°) no. */
+  private squareNode(nodeId: number): boolean {
+    const n = this.net.nodes[nodeId];
+    if (n.edges.length < 2) return false;
+    const dirs = n.edges.map((id) => {
+      const e = this.net.edges[id];
+      const sg = e.a === nodeId ? 1 : -1;
+      return [e.dx * sg, e.dz * sg];
+    });
+    let straight = false;
+    for (let i = 0; i < dirs.length; i++) {
+      for (let j = i + 1; j < dirs.length; j++) {
+        const c = Math.abs(dirs[i][0] * dirs[j][0] + dirs[i][1] * dirs[j][1]);
+        if (c > 0.03 && c < 0.998) return false;
+        if (c >= 0.998) straight = true;
+      }
+    }
+    // dos tramos a 90° es una esquina: hace falta el disco para redondearla
+    return n.edges.length >= 3 || straight;
+  }
+
+  /** Anchura máxima de las calles con coches (no callejones) que llegan a un nodo (0 si no hay). */
+  private carWidthAt(nodeId: number): number {
+    let w = 0;
+    for (const id of this.net.nodes[nodeId].edges) {
+      const o = this.net.edges[id];
+      if (!o.alley) w = Math.max(w, o.width);
+    }
+    return w;
   }
 
   private zebraAt(e: REdge, nodeId: number): boolean {

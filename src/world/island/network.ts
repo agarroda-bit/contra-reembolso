@@ -196,8 +196,13 @@ export class RoadNet {
     const n = this.nodes[nodeId];
     if (n.edges.length <= 2) {
       if (n.edges.length === 2) {
-        // curva: si el ángulo es fuerte, un poco de recorte
-        return 0;
+        // curva o esquina: las líneas de borde de un tramo se meterían en la calzada del otro por el lado
+        // de dentro; se recortan lo que se cruzan (media calzada · tan(giro / 2))
+        const o = this.edges[n.edges[0] === e.id ? n.edges[1] : n.edges[0]];
+        const sg = (x: REdge) => (x.a === nodeId ? 1 : -1);
+        const cos = (e.dx * o.dx + e.dz * o.dz) * sg(e) * sg(o);
+        const turn = Math.PI - Math.acos(Math.max(-1, Math.min(1, cos)));
+        return Math.min(e.width * 1.5, (e.width / 2) * Math.tan(turn / 2));
       }
       return 0;
     }
@@ -208,10 +213,23 @@ export class RoadNet {
 
   /** Tramos de bahías de aparcamiento (lejos de los cruces). */
   computeBays() {
+    // margen en un extremo: en cruces y en esquinas cerradas, lo que ocupa la otra calle y su acera
+    const margin = (e: REdge, nodeId: number) => {
+      const n = this.nodes[nodeId];
+      if (n.edges.length > 2) return this.trimAt(e, nodeId) + 7;
+      if (n.edges.length === 2) {
+        const o = this.edges[n.edges[0] === e.id ? n.edges[1] : n.edges[0]];
+        const sgn = (id: number) => (this.edges[id].a === nodeId ? 1 : -1);
+        const cos = e.dx * o.dx * sgn(e.id) * sgn(o.id) + e.dz * o.dz * sgn(e.id) * sgn(o.id);
+        // cos cercano a -1: la calle sigue recta; si gira más de ~30°, es una esquina
+        if (cos > -0.85) return o.width / 2 + SIDEWALK_VIS + 5;
+      }
+      return 3;
+    };
     for (const e of this.edges) {
       if (!e.bays) continue;
-      const s0 = this.nodes[e.a].edges.length > 2 ? this.trimAt(e, e.a) + 7 : 3;
-      const s1 = e.len - (this.nodes[e.b].edges.length > 2 ? this.trimAt(e, e.b) + 7 : 3);
+      const s0 = margin(e, e.a);
+      const s1 = e.len - margin(e, e.b);
       if (s1 - s0 < 11.5) {
         e.bays = 0;
         continue;
