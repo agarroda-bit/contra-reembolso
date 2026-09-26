@@ -11,6 +11,7 @@ import type { Npc } from '../../actors/npc';
 import { randomLookFor } from '../../actors/looks';
 import { Rng, fx as rnd } from '../../core/rng';
 import { GeoBuilder, vertexColorMaterial } from '../../core/geo';
+import { SOLID } from '../../core/physics';
 
 // timeK: cuánto tiempo dan respecto a uno normal. URGENTE va justo (un buen conductor llega con
 // margen para propina; uno tranquilo, si no se entretiene); FRÁGIL obliga a ir despacio; SOSPECHOSO
@@ -46,9 +47,15 @@ function takeE(g: Game): boolean {
   return true;
 }
 
-/** Nombre corto del cliente para las frases ("Loli (siempre en el bar)" → "Loli"). */
+/** Palabras que van delante del nombre ("Doña Puri", "Tío Ramón"): con ellas se cogen dos palabras. */
+const NAME_TITLES = new Set(['Doña', 'Don', 'Tío', 'Tía', 'Sor', 'Chef', 'Capitán', 'Profesor', 'Maese', 'El', 'La', 'Los', 'Las']);
+
+/** Nombre corto del cliente para las frases ("Loli (siempre en el bar)" → "Loli", "Tío Ramón (pescador)" → "Tío Ramón"). */
 function shortName(name: string): string {
-  return name.split(/[\s(«"]/)[0] || name;
+  const base = name.split(/[(«"]/)[0].trim() || name;
+  if (base.length <= 16) return base;
+  const words = base.split(/\s+/);
+  return NAME_TITLES.has(words[0]) && words[1] ? words[0] + ' ' + words[1] : words[0];
 }
 
 /** Frases genéricas del chat (para que no se repita siempre la misma). */
@@ -75,6 +82,19 @@ const REDIRECTS = [
 
 const JOB_COLORS = ['#ffd23f', '#2ec4b6', '#ff4f81', '#ff7b54', '#06d6a0', '#9b5de5'];
 const tmpV = new THREE.Vector3();
+const tmpO = new THREE.Vector3();
+const tmpD = new THREE.Vector3();
+
+/** Caja de cartón que sale volando cuando se cae un paquete (la misma pinta que la del suelo). */
+let dropGeoCache: THREE.BufferGeometry | null = null;
+function dropGeo(): THREE.BufferGeometry {
+  if (dropGeoCache) return dropGeoCache;
+  const b = new GeoBuilder();
+  b.box(0.5, 0.4, 0.5, '#c8915a', 0, 0, 0);
+  b.box(0.51, 0.08, 0.51, '#8f6238', 0, 0.05, 0);
+  b.box(0.08, 0.41, 0.51, '#8f6238', 0, 0, 0);
+  return (dropGeoCache = b.build());
+}
 
 interface Scene {
   job: ActiveJob;
@@ -104,7 +124,8 @@ export class Jobs implements System {
   constructor(private game: Game) {
     game.mod.jobs = this;
     game.events.on('vehicle:impact' as any, (e: any) => this.onImpact(e.vehicle as Vehicle, e.dv as number));
-    game.events.on('vehicle:landed' as any, (e: any) => this.onLanded(e.vehicle as Vehicle, e.air as number));
+    // fall = velocidad de caída al tocar suelo (si algún aterrizaje no la trae, se estima por el tiempo en el aire)
+    game.events.on('vehicle:landed' as any, (e: any) => this.onLanded(e.vehicle as Vehicle, typeof e.fall === 'number' ? e.fall : (e.air ?? 0) * 5));
     game.events.on('player:died', () => this.abortScene());
     game.events.on('player:busted' as any, () => this.abortScene());
     game.events.on('player:hurt', (e) => {
@@ -171,7 +192,7 @@ export class Jobs implements System {
     const districtK = dest.district === 'colina' ? 1.5 : dest.district === 'poligono' ? 1.2 : 1;
     const pay = opts.pay ?? Math.round((25 + dist * 0.28) * info.mult * districtK * (1 + (fameLvl - 1) * 0.12) / 5) * 5;
     // tiempo: ir a recoger + llevarlo, por calle (ver fairTime)
-    const from = this.game.mod.player?.position ?? pickup.door;
+    const from = this.playerSpot() ?? pickup.door;
     const time = opts.time ?? this.fairTime(from, pickup.door, dest.door, type);
     const item = client.items[Math.floor(this.rng.next() * client.items.length)];
     const ask = client.ask[Math.floor(this.rng.next() * client.ask.length)];
@@ -185,6 +206,9 @@ export class Jobs implements System {
       id: this.nextId++, client, item, type, pickupId: pickup.id, pickupPos: pickup.door.clone(), pickupName: pickup.name,
       dest, pay, time, message, expires: this.game.time.elapsed + 110,
     };
+    // el encargo que manda el tutorial (Doña Puri, con cliente y pago fijados): paquete casi irrompible
+    const tuto = this.game.mod.tutorial;
+    if (opts.client?.id === 'puri' && opts.pay !== undefined && tuto && !tuto.done && tuto.step > 0) offer.tutorial = true;
     this.offers.push(offer);
     const extra = `\n📦 ${info.label} · 💶 ${pay} € · ⏱ ${Math.round(time)} s · Recoger en ${pickup.name}`;
     this.msgs?.receive('cliente-' + client.id, client.name, client.avatar, message + extra, [
@@ -209,9 +233,9 @@ export class Jobs implements System {
     }
     this.offers.splice(i, 1);
     // si ha tardado en aceptar y se ha alejado, el reloj se ajusta (nunca a menos de lo prometido)
-    const pl = this.game.mod.player;
-    if (pl) {
-      const fresh = this.fairTime(pl.position, o.pickupPos, o.dest.door, o.type);
+    const from = this.playerSpot();
+    if (from) {
+      const fresh = this.fairTime(from, o.pickupPos, o.dest.door, o.type);
       if (fresh > o.time) o.time = fresh;
     }
     const job: ActiveJob = {
@@ -235,6 +259,23 @@ export class Jobs implements System {
   }
 
   // ─────────── Distancias y tiempos ───────────
+
+  /**
+   * Desde dónde se cuenta el camino del jugador. Dentro del ático, la oficina o el club el jugador
+   * está en realidad lejísimos de la isla (los interiores se montan aparte), así que se cuenta desde
+   * la puerta de fuera por la que ha entrado.
+   */
+  private playerSpot(): THREE.Vector3 | null {
+    const g = this.game;
+    const p = g.mod.player;
+    if (!p) return null;
+    const it = g.mod.interiors;
+    if (it?.inside && it.current) {
+      const poi = g.world.pois.find(it.current.def.poi);
+      if (poi) return poi.door;
+    }
+    return p.position;
+  }
 
   /** Metros por calle entre dos puntos (ruta de la red de calles; sin red, línea recta con recargo). */
   roadDist(a: THREE.Vector3, b: THREE.Vector3): number {
@@ -274,13 +315,27 @@ export class Jobs implements System {
     }
   }
 
-  private onLanded(v: Vehicle, air: number) {
-    for (const j of this.carriedIn(v)) this.damage(j, air * (j.offer.type === 'fragil' ? 30 : 7));
+  /**
+   * Aterrizaje: el golpe depende de la velocidad de caída al tocar el suelo (m/s), no del tiempo en
+   * el aire (con la gravedad suave de los saltos, 1,5 s en el aire no es un golpe de 1,5 s). Medido
+   * con rampas de verdad: la furgoneta cae a ~7 m/s (FRÁGIL −9 %) y un deportivo que vuela 1,5 s, a
+   * ~11 m/s (FRÁGIL −23 %). Los demás paquetes, casi nada (−3 % y −8 %).
+   */
+  private onLanded(v: Vehicle, fall: number) {
+    const hit = Math.max(0, fall - 4.5);
+    if (!hit) return;
+    for (const j of this.carriedIn(v)) this.damage(j, hit * (j.offer.type === 'fragil' ? 3.5 : 1.2));
   }
 
   private damage(j: ActiveJob, loss: number) {
     if (loss <= 0.5) return;
     const before = j.integrity;
+    // primera entrega del tutorial: los golpes se notan un poco (para que se entienda el aviso),
+    // pero la caja no baja del 90 % y se cobra entera
+    if (j.offer.tutorial) {
+      j.integrity = Math.max(Math.min(before, 90), before - loss * 0.3);
+      return;
+    }
     j.integrity = Math.max(0, j.integrity - loss);
     if (before >= 60 && j.integrity < 60) this.game.events.emit('toast', { text: `¡El paquete de ${j.offer.client.name} está sufriendo!`, color: '#ff4f81', time: 1.8 });
     if (before > 0 && j.integrity <= 0) {
@@ -393,35 +448,99 @@ export class Jobs implements System {
     return n;
   }
 
-  /** Se caen paquetes de un vehículo (embestidas): quedan en el suelo para recogerlos. */
+  /**
+   * Se caen paquetes de un vehículo (embestidas, atracos): salen volando por detrás y caen a 4-6 m
+   * de la trasera, con un botecito; al tocar el suelo se pueden recoger (así no se recogen solos al
+   * instante por seguir el vehículo encima).
+   */
   dropFrom(v: Vehicle, count = 1) {
     const jobs = this.carriedIn(v).slice(0, count);
-    for (const j of jobs) {
+    if (!jobs.length) return;
+    const g = this.game;
+    const center = v.getPosition(new THREE.Vector3());
+    const h = v.heading;
+    const rear = v.spec.half.z;
+    // hacia atrás; si hay una pared detrás, en diagonal o hacia un lado (lo que esté libre)
+    const dirs: [number, number][] = [[0, -1], [0.7, -0.7], [-0.7, -0.7], [1, 0], [-1, 0]];
+    let bx = -Math.sin(h), bz = -Math.cos(h);
+    let room = rear + 6;
+    let best = -1;
+    for (const [sx, sz] of dirs) {
+      // (sx, sz) en ejes del coche: x = izquierda, z = delante
+      const dx = Math.cos(h) * sx + Math.sin(h) * sz;
+      const dz = -Math.sin(h) * sx + Math.cos(h) * sz;
+      const hit = g.physics.raycast(tmpO.set(center.x, center.y + 0.4, center.z), tmpD.set(dx, 0, dz), rear + 6.5, SOLID, v.body);
+      const free = hit ? hit.distance - 0.6 : rear + 6.5;
+      if (free > best) {
+        best = free;
+        bx = dx;
+        bz = dz;
+        room = free;
+      }
+      if (free >= rear + 4.5) break;
+    }
+    const rx = -bz, rz = bx; // perpendicular, para repartir si caen varios
+    const from = v.localToWorld(tmpO.set(0, 0.2, -rear), new THREE.Vector3());
+    jobs.forEach((j, i) => {
       j.state = 'pickup';
       j.where = 'none';
       j.vehicleId = null;
-      const pos = v.getPosition(new THREE.Vector3());
-      pos.x += (rnd.next() - 0.5) * 4;
-      pos.z += (rnd.next() - 0.5) * 4;
-      pos.y = this.game.world.heightAt(pos.x, pos.z);
+      const back = Math.max(1, Math.min(room, rear + 4 + rnd.next() * 2));
+      const side = (i - (jobs.length - 1) / 2) * 1.6 + (rnd.next() - 0.5) * 1.2;
+      const to = new THREE.Vector3(center.x + bx * back + rx * side, 0, center.z + bz * back + rz * side);
+      to.y = g.world.heightAt(to.x, to.z);
       this.damage(j, 15);
-      this.game.mod.pickups?.spawn('package', pos, 1, 45, () => {
+      const mesh = new THREE.Mesh(dropGeo(), vertexColorMaterial);
+      mesh.castShadow = true;
+      mesh.position.copy(from);
+      g.scene.add(mesh);
+      this.flying.push({ mesh, from: from.clone(), to, t: 0, dur: 0.75 + rnd.next() * 0.15, j });
+      (j as any).droppedAt = g.time.elapsed;
+      (j as any).dropPos = to;
+      (j as any).dropExpires = g.time.elapsed + 45;
+    });
+    g.mod.particles?.emit('cardboard', from, { count: 4 });
+    const many = jobs.length > 1;
+    this.game.events.emit('toast', { text: many ? `¡Se te han caído ${jobs.length} paquetes! Recógelos rápido` : '¡Se te ha caído un paquete! Recógelo rápido', color: '#ff4f81' });
+    this.updateVehiclePackages();
+  }
+
+  /** Paquetes caídos que aún van por el aire. */
+  private readonly flying: { mesh: THREE.Mesh; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; j: ActiveJob }[] = [];
+
+  /** Vuelo de los paquetes caídos: arco hacia fuera y un botecito; al tocar el suelo quedan para recogerlos. */
+  private updateFlying(dt: number) {
+    const g = this.game;
+    for (let i = this.flying.length - 1; i >= 0; i--) {
+      const f = this.flying[i];
+      f.t += dt;
+      const k = Math.min(1, f.t / f.dur);
+      const m = f.mesh;
+      // avanza rápido al principio y frena al final (como algo que cae y rueda un poco)
+      m.position.lerpVectors(f.from, f.to, 1 - (1 - k) * (1 - k));
+      // arco principal (75 % del tiempo) y un bote pequeño
+      const hop = k < 0.75 ? Math.sin((k / 0.75) * Math.PI) * 1.2 : Math.sin(((k - 0.75) / 0.25) * Math.PI) * 0.3;
+      m.position.y += hop + 0.25;
+      m.rotation.x += dt * 8 * (1 - k);
+      m.rotation.y += dt * 5;
+      if (k < 1) continue;
+      g.scene.remove(m);
+      this.flying.splice(i, 1);
+      g.mod.particles?.emit('dust', f.to, { count: 4 });
+      g.mod.audio?.play('drop', { pos: f.to, volume: 0.6 });
+      const j = f.j;
+      // mientras volaba se ha podido cancelar el encargo
+      if (j.state !== 'pickup' || (j as any).dropPos !== f.to) continue;
+      g.mod.pickups?.spawn('package', f.to, 1, Math.max(5, (j as any).dropExpires - g.time.elapsed), () => {
         if (j.state !== 'pickup') return;
-        const pv = this.nearbyVehicle(this.game.mod.player.position);
+        const pv = this.nearbyVehicle(g.mod.player.position);
         j.state = 'carry';
         j.where = pv ? 'vehicle' : 'hands';
         j.vehicleId = pv?.id ?? null;
         this.clearDrop(j);
         this.updateVehiclePackages();
-        this.game.events.emit('toast', { text: '¡Paquete recuperado!', color: '#ffd23f' });
+        g.events.emit('toast', { text: '¡Paquete recuperado!', color: '#ffd23f' });
       });
-      (j as any).droppedAt = this.game.time.elapsed;
-      (j as any).dropPos = pos.clone();
-      (j as any).dropExpires = this.game.time.elapsed + 45;
-    }
-    if (jobs.length) {
-      this.game.events.emit('toast', { text: `¡Se te ha caído ${jobs.length > 1 ? jobs.length + ' paquetes' : 'un paquete'}! Recógelo rápido`, color: '#ff4f81' });
-      this.updateVehiclePackages();
     }
   }
 
@@ -529,6 +648,7 @@ export class Jobs implements System {
     }
 
     this.updateScene(dt);
+    this.updateFlying(dt);
     this.updateDog(dt);
     this.updateCarryVisual();
     this.updateHud();
@@ -825,7 +945,8 @@ export class Jobs implements System {
     g.mod.particles?.emit('money', g.mod.player.position.clone().setY(g.mod.player.position.y + 1.5), { count: 10 });
     const title = perfect ? '¡ENTREGA PERFECTA!' : broken ? 'Entrega… regular' : late ? 'Entrega con retraso' : '¡Entregado!';
     g.events.emit('toast', { text: `${title}  +${pay} €${tip ? ` (+${tip} € de propina)` : ''}  ·  ⭐ +${famePts}`, color: perfect ? '#ffd23f' : broken ? '#ff4f81' : '#2ec4b6', time: 3 });
-    g.events.emit('job:done' as any, { job: j, pay, tip, perfect } as any);
+    // why: cómo acabó la escena ('paciencia' = esperó a que la abuela contara todo, 'regateo', 'prisa'…)
+    g.events.emit('job:done' as any, { job: j, pay, tip, perfect, why } as any);
     this.msgs?.receive('cliente-' + c.id, c.name, c.avatar, pick(broken ? LINES.broken : perfect ? LINES.perfect : late ? LINES.late : LINES.ok), undefined, false);
     // el cliente se mete en casa
     const npc = s.npc;
@@ -956,7 +1077,9 @@ export class Jobs implements System {
         v.key = key;
         const label = TYPE_INFO[j.offer.type].label;
         // paquete caído o robado: se recoge donde esté, no en la tienda
-        const pick = dropped ? `¡Recupera el paquete de ${shortName(j.offer.client.name)}!` : 'Recoger: ' + j.offer.pickupName;
+        // con el nombre del cliente: dos recogidas en el mismo sitio no se confunden
+        const who = shortName(j.offer.client.name);
+        const pick = dropped ? `¡Recupera el paquete de ${who}!` : `${who} · recoger en ${j.offer.pickupName}`;
         v.entry.title = `${label !== 'Normal' ? label + ' · ' : ''}${j.state === 'pickup' ? pick : j.offer.client.name + ' · ' + j.offer.dest.label}`;
         v.marker.icon = j.state === 'pickup' ? '📦' : '🏠';
         v.marker.label = j.state === 'pickup' ? (dropped ? 'Paquete perdido' : j.offer.pickupName) : j.offer.dest.label;

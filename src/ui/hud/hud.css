@@ -664,6 +664,12 @@
 }
 .hud-barra--veh .hud-barra__ico { width: 24px; height: 24px; }
 .hud-barra--veh .hud-barra__pista { height: 14px; }
+/* turbo (Shift): barra turquesa que se vacía al usarlo y se rellena sola */
+.hud-barra__ico--turbo { background: var(--cr-turquesa); font-size: 12px; }
+.hud-barra--turbo .hud-barra__ico { width: 20px; height: 20px; border-width: 2px; font-size: 10px; }
+.hud-barra--turbo .hud-barra__pista { height: 12px; }
+.hud-barra__pista > i.hud-barra--turquesa { background: var(--cr-turquesa); transition: transform 0.12s linear; }
+.hud-barra--turbo-lleno .hud-barra__pista { border-color: var(--cr-turquesa); }
 .hud-vehiculo__fila { display: flex; align-items: center; gap: 7px; min-height: 24px; }
 .hud-vehiculo__paquetes {
   flex: none;

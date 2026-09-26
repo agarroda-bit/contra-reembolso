@@ -1,7 +1,7 @@
 // El móvil (Tab): PaqueChat (mensajes y encargos), Banco, Fama, Garaje y Mapa.
 // Mientras está abierto el tiempo va a cámara lenta y el ratón queda libre para tocar.
 import type { Game, System } from '../core/game';
-import type { Messages, Chat } from '../gameplay/messages';
+import type { Messages, Chat, ChatMessage } from '../gameplay/messages';
 import { fmt, FAME_LEVELS } from '../gameplay/economy';
 import { PAD, PadEdges, padNavigate, padFocusCss } from './pad';
 
@@ -29,6 +29,9 @@ const CSS = `
 .cr-chatitem .tx div{font:900 14px system-ui}
 .cr-chatitem .tx span{display:block;font:500 13px system-ui;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.75}
 .cr-chatitem b{background:#ff2d55;color:#fff;border-radius:10px;padding:1px 7px;font:900 12px system-ui}
+.cr-chatitem.enter{background:#fff6d0;box-shadow:0 0 0 3px #ffd23f}
+.cr-chatitem .tx em,.cr-tecla-pista{display:block;font:800 11.5px system-ui;font-style:normal;color:#6c3bd1;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr-tecla-pista{margin-top:6px;text-align:center}
 .cr-msg{max-width:84%;margin:8px 0;padding:9px 12px;border-radius:16px;font:600 14px/1.3 system-ui;white-space:pre-wrap;border:2px solid #1b1030;box-shadow:2px 3px 0 rgba(27,16,48,.25)}
 .cr-msg.suyo{background:#ffffff;border-bottom-left-radius:4px}
 .cr-msg.mio{background:#2ec4b6;margin-left:auto;border-bottom-right-radius:4px;color:#1b1030}
@@ -154,9 +157,44 @@ export class Phone implements System {
     this.render();
   }
 
-  /** Enter/Retroceso: aceptar o rechazar la oferta visible más reciente. */
+  /**
+   * Sobre qué actúan Enter/Retroceso (y A/X del mando): solo sobre lo que se ve. Con una conversación
+   * abierta, su último mensaje por contestar; en la lista, la primera conversación (de arriba abajo)
+   * con algo por contestar, que se marca en amarillo. En las demás pantallas, nada.
+   */
+  private quickTarget(): { chat: Chat; msg: ChatMessage } | null {
+    const m = this.msgs;
+    if (!m || !this.open) return null;
+    if (this.screen === 'chat') {
+      const c = this.chatId ? m.chats.get(this.chatId) : null;
+      return c ? m.actionableIn(c) : null;
+    }
+    if (this.screen === 'chats') {
+      for (const c of m.sorted()) {
+        const a = m.actionableIn(c);
+        if (a) return a;
+      }
+    }
+    return null;
+  }
+
+  /** Texto de ayuda de las teclas rápidas para un mensaje con botones. */
+  private keyHint(msg: ChatMessage): string {
+    const a = msg.actions ?? [];
+    // con un mando conectado, sus botones; si no, las teclas
+    const pad = !!navigator.getGamepads?.().some((gp) => gp?.connected);
+    return `${pad ? 'Ⓐ' : '⏎ Enter'}: ${a[0]?.label ?? ''}${a[1] ? `  ·  ${pad ? 'Ⓧ' : '⌫'}: ${a[1].label}` : ''}`;
+  }
+
+  /** Enter/Retroceso: aceptar o rechazar la oferta de la conversación que se ve (ver quickTarget). */
   private quickAction(i: number) {
-    const pending = this.msgs?.latestActionable();
+    // en la pantalla de inicio, Enter no contesta nada a ciegas: abre la conversación pendiente para verla
+    if (this.screen === 'home' && i === 0) {
+      const latest = this.msgs?.latestActionable();
+      if (latest) this.show('chat', latest.chat.id);
+      return;
+    }
+    const pending = this.quickTarget();
     if (!pending) return;
     const a = pending.msg.actions?.[i];
     if (a && (!a.valid || a.valid())) {
@@ -207,7 +245,8 @@ export class Phone implements System {
         this.title.textContent = 'PaqueChat';
         const list = m.sorted();
         if (!list.length) b.innerHTML = '<div class="cr-tarjeta">Nadie te escribe. De momento.</div>';
-        for (const c of list) b.appendChild(this.chatItem(c));
+        const target = this.quickTarget();
+        for (const c of list) b.appendChild(this.chatItem(c, target?.chat === c ? target.msg : null));
         break;
       }
       case 'chat': {
@@ -215,6 +254,7 @@ export class Phone implements System {
         if (!c) return this.show('chats');
         this.title.textContent = `${c.avatar} ${c.name}`;
         m.markRead(c.id);
+        const target = m.actionableIn(c);
         for (const msg of c.messages) {
           const el = document.createElement('div');
           el.className = 'cr-msg ' + (msg.mine ? 'mio' : 'suyo');
@@ -241,6 +281,12 @@ export class Phone implements System {
               acts.appendChild(btn);
             }
             el.appendChild(acts);
+            if (target?.msg === msg) {
+              const hint = document.createElement('div');
+              hint.className = 'cr-tecla-pista';
+              hint.textContent = this.keyHint(msg);
+              el.appendChild(hint);
+            }
           }
           b.appendChild(el);
         }
@@ -286,13 +332,15 @@ export class Phone implements System {
     this.drawnVersion = m.version;
   }
 
-  private chatItem(c: Chat): HTMLElement {
+  /** Una conversación de la lista. Si `enter` es un mensaje, Enter/Retroceso contestan a ese (se marca). */
+  private chatItem(c: Chat, enter: ChatMessage | null): HTMLElement {
     const el = document.createElement('div');
-    el.className = 'cr-chatitem';
+    el.className = 'cr-chatitem' + (enter ? ' enter' : '');
     const last = c.messages[c.messages.length - 1];
-    el.innerHTML = `<div class="av">${c.avatar}</div><div class="tx"><div></div><span></span></div>${c.unread ? `<b>${c.unread}</b>` : ''}`;
+    el.innerHTML = `<div class="av">${c.avatar}</div><div class="tx"><div></div><span></span>${enter ? '<em></em>' : ''}</div>${c.unread ? `<b>${c.unread}</b>` : ''}`;
     (el.querySelector('.tx div') as HTMLElement).textContent = c.name;
     (el.querySelector('.tx span') as HTMLElement).textContent = last ? (last.mine ? 'Tú: ' : '') + last.text : '';
+    if (enter) (el.querySelector('.tx em') as HTMLElement).textContent = this.keyHint(enter);
     el.onclick = () => this.show('chat', c.id);
     return el;
   }

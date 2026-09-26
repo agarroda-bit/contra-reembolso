@@ -13,6 +13,12 @@ const DEFAULT_WAYPOINT = '#ffd23f';
 const DISTRICT_COLORS: Record<string, string> = {
   puerto: '#2ec4b6', centro: '#ff4f81', colina: '#ffd23f', poligono: '#ff7b54', viejo: '#6c3bd1',
 };
+// Cómo pinta el mapa de la isla los nombres de barrio (src/world/island/map.ts): esta letra, 15 m de
+// alto y un borde blanco de 3,5 m (1,75 m por fuera de la letra).
+const MAP_LABEL_FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+const MAP_LABEL_SIZE_M = 15;
+/** Grosor del borde oscuro de nuestro nombre encima del pintado: 2,5 m por fuera, lo tapa con margen. */
+const COVER_LINE_M = 5;
 
 type Hover =
   | { type: 'poi'; poi: Poi; x: number; y: number }
@@ -47,6 +53,8 @@ export class BigMap {
   private legendFor: WorldData | null = null;
   private seaColor = '#2f8fd0';
   private seaFor: HTMLCanvasElement | null = null;
+  /** Dónde trae pintados el mapa del mundo los nombres de barrio (este mapa los tapa con los suyos). */
+  private baked: BakedLabels | null = null;
   private wavePattern: CanvasPattern | null = null;
   private waveMatrix: DOMMatrix | null = null;
   private t = 0;
@@ -165,6 +173,25 @@ export class BigMap {
   invalidate() {
     this.seaFor = null;
     this.legendFor = null;
+    this.baked = null;
+  }
+
+  /**
+   * Busca en los ratos libres del navegador dónde están pintados los nombres de barrio en el mapa
+   * (unas decenas de ms en total, a trocitos): así abrir el mapa la primera vez no da un tirón.
+   * Lo que falte se hace al abrirlo.
+   */
+  prepareSoon(world: WorldData) {
+    const map = world.mapCanvas;
+    if (!map || this.baked?.map === map) return;
+    const ric = (window as any).requestIdleCallback as ((cb: (d: { timeRemaining(): number }) => void) => number) | undefined;
+    const b = (this.baked = new BakedLabels(map, world));
+    if (!ric) return;
+    const tick = (dl: { timeRemaining(): number }) => {
+      if (this.baked !== b || b.done) return;
+      if (!b.step(Math.max(1, dl.timeRemaining() - 2))) ric(tick);
+    };
+    ric(tick);
   }
 
   show(world: WorldData, px: number, pz: number, heading: number) {
@@ -446,6 +473,8 @@ export class BigMap {
       this.seaFor = map;
       this.wavePattern = null;
     }
+    if (this.baked?.map !== map) this.baked = new BakedLabels(map, world);
+    if (!this.baked.done) this.baked.step(Infinity);
 
     // hover (si no se arrastra)
     if (this.mouse.inside && !this.drag?.moved) this.setHover(this.pick(this.mouse.x, this.mouse.y));
@@ -471,8 +500,7 @@ export class BigMap {
     // tamaño de los iconos según el zoom
     const base = Math.round(Math.min(34, 22 + Math.max(0, scale / this.fitScale - 1) * 3));
 
-    // nombres de barrio: debajo de los iconos (que siempre se vean y se puedan señalar),
-    // buscando un hueco para no taparlos
+    // nombres de barrio: debajo de los iconos (que siempre se vean y se puedan señalar)
     this.drawDistricts(g, world, base);
 
     // línea al destino
@@ -650,16 +678,28 @@ export class BigMap {
     return n;
   }
 
-  /** Nombres de barrio: se desplazan un poco si taparían un icono. */
+  /**
+   * Nombres de barrio. Si el mapa del mundo ya trae el nombre pintado, se pinta encima el nuestro
+   * con las mismas letras y en el mismo sitio (tapándolo entero: sale una sola vez). Si no lo trae,
+   * va en el centro del barrio, con tamaño fijo en pantalla, y se aparta un poco si taparía un icono.
+   */
   private drawDistricts(g: CanvasRenderingContext2D, world: WorldData, iconSize: number) {
     const o = this.q;
     const zoom = this.scale / this.fitScale;
     const fs = Math.round(Math.min(40, Math.max(15, 17 * Math.sqrt(zoom))));
-    g.font = `900 ${fs}px ${UI_FONT}`;
-    for (const d of world.districts) {
+    const baked = this.baked?.map === world.mapCanvas ? this.baked.found : null;
+    for (let i = 0; i < world.districts.length; i++) {
+      const d = world.districts[i];
+      const color = d.color || DISTRICT_COLORS[d.id] || '#ffd23f';
+      const b = baked?.[i];
+      if (b) {
+        // si no encajaran nuestras letras, se deja el pintado tal cual (mejor eso que dos nombres)
+        if (b.cover) this.drawMapLabel(g, d.name.toUpperCase(), color, b);
+        continue;
+      }
+      g.font = `900 ${fs}px ${UI_FONT}`;
       this.toScreen(d.center.x, d.center.z, o);
       if (o.x < -200 || o.y < -60 || o.x > this.W + 200 || o.y > this.H + 60) continue;
-      const color = d.color || DISTRICT_COLORS[d.id] || '#ffd23f';
       const text = d.name.toUpperCase();
       const w = g.measureText(text).width;
       // busca un hueco sin iconos cerca del centro del barrio (primero los sitios más cercanos)
@@ -696,6 +736,40 @@ export class BigMap {
       g.fillText(text, 0, 0);
       g.restore();
     }
+  }
+
+  /**
+   * Nombre de barrio encima del que trae pintado el mapa: mismas letras, mismo sitio y mismo tamaño
+   * (crece con el zoom, como el mapa). El borde oscuro es más ancho que el blanco del pintado, así
+   * que lo tapa entero, y se ve nítido a cualquier zoom.
+   */
+  private drawMapLabel(g: CanvasRenderingContext2D, text: string, color: string, b: BakedLabel) {
+    const o = this.toScreen(b.x, b.z, this.q);
+    const k = this.scale;
+    const fs = Math.round(b.size * k * 10) / 10;
+    // fuera de la vista (el texto mide menos de 0,75 × alto de letra por carácter)
+    const reach = text.length * fs * 0.4 + COVER_LINE_M * k;
+    if (o.x < -reach || o.x > this.W + reach || o.y < -fs * 1.5 || o.y > this.H + fs * 1.5) return;
+    g.save();
+    g.font = `900 ${fs}px ${MAP_LABEL_FONT}`;
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const w = g.measureText(text).width;
+    // cinta de color debajo
+    const rh = Math.max(3, fs * 0.2);
+    g.fillStyle = color;
+    g.globalAlpha = 0.9;
+    roundRect(g, o.x - w / 2 - fs * 0.3, o.y + fs * 0.3, w + fs * 0.6, rh, rh / 2);
+    g.fill();
+    g.globalAlpha = 1;
+    g.lineJoin = 'round';
+    g.lineCap = 'round';
+    g.lineWidth = COVER_LINE_M * k;
+    g.strokeStyle = NOCHE;
+    g.strokeText(text, o.x, o.y);
+    g.fillStyle = '#fff6e0';
+    g.fillText(text, o.x, o.y);
+    g.restore();
   }
 
   private label(g: CanvasRenderingContext2D, text: string, x: number, y: number, size: number, color: string) {
@@ -781,6 +855,201 @@ function hoverKey(h: Hover): string {
   if (h.type === 'poi') return 'p:' + h.poi.id;
   if (h.type === 'marker') return 'm:' + h.label + h.icon;
   return h.type;
+}
+
+/** Nombre de barrio que trae pintado el mapa del mundo: dónde está y si se puede tapar. */
+interface BakedLabel {
+  /** Centro del texto (metros del mundo). */
+  x: number;
+  z: number;
+  /** Alto de letra (metros). */
+  size: number;
+  /** true si se ha podido calcar letra a letra: entonces se tapa con el nuestro, idéntico de forma. */
+  cover: boolean;
+}
+
+/**
+ * Busca los nombres de barrio que trae pintados el mapa de la isla (para el minimapa). El mapa
+ * grande no los borra (borrar deja manchas, porque lo que hay debajo de las letras no se sabe):
+ * pinta encima los suyos con las mismas letras, en el mismo sitio y al mismo tamaño, con un
+ * borde oscuro más ancho que tapa el pintado entero. Así cada nombre sale una sola vez y nítido.
+ *
+ * Cómo se encuentra: el relleno de cada nombre es exactamente el color del barrio. Se buscan esos
+ * píxeles, se pintan las mismas letras en un lienzo pequeño y se mira dónde encajan. Se hace una
+ * vez por mapa y a trozos (step), para repartirlo en los ratos libres del navegador sin tirones.
+ */
+class BakedLabels {
+  done = false;
+  /** Por barrio (mismo orden que world.districts); null si ese nombre no está pintado en el mapa. */
+  readonly found: (BakedLabel | null)[];
+  private copy: HTMLCanvasElement | null;
+  private g: CanvasRenderingContext2D | null;
+  private phase = 0;
+  private row = 0;
+  private di = 0;
+  private readonly keys: number[];
+  /** Rojos de los colores de barrio (para descartar rápido casi todos los píxeles). */
+  private readonly redLut = new Uint8Array(256);
+  private hitsX: number[][];
+  private hitsY: number[][];
+
+  constructor(readonly map: HTMLCanvasElement, private world: WorldData) {
+    this.found = world.districts.map(() => null);
+    this.copy = document.createElement('canvas');
+    this.copy.width = map.width;
+    this.copy.height = map.height;
+    this.g = this.copy.getContext('2d', { willReadFrequently: true });
+    const probe = new Uint32Array(1);
+    const probe8 = new Uint8Array(probe.buffer);
+    this.keys = world.districts.map((dd) => {
+      const c = hexRgb(dd.color || DISTRICT_COLORS[dd.id] || '');
+      if (!c) return -1;
+      probe8[0] = c[0];
+      probe8[1] = c[1];
+      probe8[2] = c[2];
+      probe8[3] = 255;
+      this.redLut[c[0]] = 1;
+      return probe[0];
+    });
+    this.hitsX = this.keys.map(() => []);
+    this.hitsY = this.keys.map(() => []);
+    if (!this.g || !map.width || !map.height) this.finish();
+  }
+
+  /** Trabaja unos milisegundos como mucho (budget). Devuelve true cuando ha terminado. */
+  step(budget: number): boolean {
+    const t0 = performance.now();
+    const w = this.map.width, h = this.map.height;
+    try {
+      while (!this.done && this.g && performance.now() - t0 < budget) {
+        const g = this.g;
+        if (this.phase === 0) {
+          g.drawImage(this.map, 0, 0);
+          this.phase = 1;
+        } else if (this.phase === 1) {
+          // busca por franjas los píxeles del color exacto de algún barrio (el relleno de las letras es liso)
+          const rows = Math.min(48, h - this.row);
+          const img = g.getImageData(0, this.row, w, rows);
+          const px = new Uint32Array(img.data.buffer, img.data.byteOffset, w * rows);
+          const lut = this.redLut, keys = this.keys;
+          for (let n = 0; n < px.length; n++) {
+            const v = px[n];
+            if (!lut[v & 255]) continue;
+            for (let i = 0; i < keys.length; i++) {
+              if (v === keys[i]) {
+                this.hitsX[i].push(n % w);
+                this.hitsY[i].push(this.row + ((n / w) | 0));
+                break;
+              }
+            }
+          }
+          this.row += rows;
+          if (this.row >= h) this.phase = 2;
+        } else if (this.di < this.keys.length) this.locate(this.di++);
+        else this.finish();
+      }
+    } catch {
+      // sin permiso para leer el lienzo: los nombres se quedan como estén
+      this.finish();
+    }
+    return this.done;
+  }
+
+  /** Suelta la copia del mapa y las listas (unos megas). */
+  private finish() {
+    this.done = true;
+    this.g = null;
+    if (this.copy) this.copy.width = this.copy.height = 0;
+    this.copy = null;
+    this.hitsX = [];
+    this.hitsY = [];
+  }
+
+  /** Encuentra dónde está pintado el nombre del barrio i y comprueba que nuestras letras encajan. */
+  private locate(i: number) {
+    const g = this.g!;
+    const xs = this.hitsX[i], ys = this.hitsY[i];
+    if (xs.length < 40) return;
+    const d = this.world.districts[i];
+    const mps = this.world.mapPixelSize;
+    const w = this.map.width, h = this.map.height;
+    // mismas letras que el mapa de la isla (src/world/island/map.ts): 15 m de alto
+    const fontPx = Math.round(MAP_LABEL_SIZE_M / mps);
+    // el grupo del nombre: alrededor de la mediana (por si hubiera algún píxel suelto del mismo color)
+    const mx = median(xs), my = median(ys);
+    const halfW = d.name.length * fontPx * 0.5 + 20, halfH = fontPx * 1.4;
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    for (let n = 0; n < xs.length; n++) {
+      if (Math.abs(xs[n] - mx) > halfW || Math.abs(ys[n] - my) > halfH) continue;
+      if (xs[n] < x0) x0 = xs[n];
+      if (xs[n] > x1) x1 = xs[n];
+      if (ys[n] < y0) y0 = ys[n];
+      if (ys[n] > y1) y1 = ys[n];
+    }
+    if (x1 < 0) return;
+    const key = this.keys[i];
+    const text = d.name.toUpperCase();
+    const pad = Math.ceil(fontPx * 0.6);
+    const cw = x1 - x0 + 1 + pad * 2, ch = y1 - y0 + 1 + pad * 2;
+    const tmp = document.createElement('canvas');
+    tmp.width = cw;
+    tmp.height = ch;
+    const q = tmp.getContext('2d', { willReadFrequently: true });
+    if (!q) return;
+    let best = -1, bestX = 0, bestY = 0;
+    // el centro del texto puede caer en medio píxel: se prueban las cuatro posibilidades
+    for (let k = 0; k < 4; k++) {
+      const ax = Math.floor(cw / 2) + (k & 1) * 0.5, ay = Math.floor(ch / 2) + (k >> 1) * 0.5;
+      q.clearRect(0, 0, cw, ch);
+      q.font = `900 ${fontPx}px ${MAP_LABEL_FONT}`;
+      q.textAlign = 'center';
+      q.textBaseline = 'middle';
+      q.fillStyle = '#000';
+      q.fillText(text, ax, ay);
+      const mine = q.getImageData(0, 0, cw, ch).data;
+      // esquina de nuestras letras (píxeles llenos del todo), para ponerlas encima de las del mapa
+      let a0 = cw, b0 = ch;
+      for (let n = 3, p = 0; n < mine.length; n += 4, p++) {
+        if (mine[n] !== 255) continue;
+        const x = p % cw, y = (p / cw) | 0;
+        if (x < a0) a0 = x;
+        if (y < b0) b0 = y;
+      }
+      if (a0 === cw) continue;
+      const ox = x0 - a0, oy = y0 - b0;
+      const there = g.getImageData(ox, oy, cw, ch);
+      const tp = new Uint32Array(there.data.buffer, there.data.byteOffset, cw * ch);
+      // parecido: píxeles llenos en los dos / llenos en alguno
+      let both = 0, any = 0;
+      for (let p = 0; p < tp.length; p++) {
+        const a = mine[p * 4 + 3] === 255, b = tp[p] === key;
+        if (a && b) both++;
+        if (a || b) any++;
+      }
+      const score = any ? both / any : 0;
+      if (score > best) {
+        best = score;
+        bestX = ax + ox;
+        bestY = ay + oy;
+      }
+    }
+    // muy distinto: no es un nombre pintado (serían píxeles sueltos del mismo color)
+    if (best < 0.5) return;
+    const half = this.world.size / 2;
+    this.found[i] = { x: bestX * mps - half, z: bestY * mps - half, size: fontPx * mps, cover: best > 0.9 };
+  }
+}
+
+function hexRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  const v = parseInt(m[1], 16);
+  return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+}
+
+function median(a: number[]): number {
+  const s = a.slice().sort((p, q) => p - q);
+  return s[s.length >> 1];
 }
 
 function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {

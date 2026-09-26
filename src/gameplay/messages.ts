@@ -95,13 +95,20 @@ export class Messages {
     return [...this.chats.values()].sort((a, b) => b.last - a.last);
   }
 
-  /** Busca la última acción disponible (para aceptar rápido con el teclado). */
+  /** Busca la última acción disponible (para abrir el móvil directamente en esa conversación). */
   latestActionable(): { chat: Chat; msg: ChatMessage } | null {
     for (const c of this.sorted()) {
-      for (let i = c.messages.length - 1; i >= 0; i--) {
-        const m = c.messages[i];
-        if (m.actions && !m.used && m.actions.some((a) => !a.valid || a.valid())) return { chat: c, msg: m };
-      }
+      const a = this.actionableIn(c);
+      if (a) return a;
+    }
+    return null;
+  }
+
+  /** El último mensaje de una conversación que aún se puede contestar (aceptar/rechazar), si hay. */
+  actionableIn(c: Chat): { chat: Chat; msg: ChatMessage } | null {
+    for (let i = c.messages.length - 1; i >= 0; i--) {
+      const m = c.messages[i];
+      if (m.actions && !m.used && m.actions.some((a) => !a.valid || a.valid())) return { chat: c, msg: m };
     }
     return null;
   }

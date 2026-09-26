@@ -20,6 +20,9 @@ export class PhotoMode implements System {
   private poseIdx = 0;
   private hudWas = true;
   private hourWas = 12;
+  /** La hora se ha tocado en el modo foto (al salir se devuelve la de antes). */
+  private hourTouched = false;
+  private poseWas: CharacterPose = 'normal';
 
   constructor(private game: Game) {
     game.mod.photo = this;
@@ -72,9 +75,14 @@ export class PhotoMode implements System {
     this.hudWas = g.hud.visible;
     g.hud.visible = false;
     this.hourWas = g.clock.hour;
+    this.hourTouched = false;
     const p = g.mod.player;
+    this.poseWas = p.pose;
     this.target.copy(p.state === 'vehicle' && g.mod.vehicles?.current ? g.mod.vehicles.current.getPosition(new THREE.Vector3()) : p.position);
     this.target.y += 1.1;
+    // en un vehículo la cámara empieza más lejos (a 5 m se metía casi dentro de la furgoneta)
+    this.dist = p.state === 'vehicle' ? 9 : 5;
+    this.pitch = p.state === 'vehicle' ? 0.25 : 0.15;
     this.yaw = (g.mod.cameraRig?.yaw ?? 0);
     this.panel.innerHTML = '<span>📸 MODO FOTO · arrastra para girar, rueda para acercar</span>';
     // los botones dicen lo que hay puesto (hora y pose), no solo lo que hacen
@@ -82,10 +90,8 @@ export class PhotoMode implements System {
     const hourBtn = this.button(hourLabel(), () => {
       const hours = [8, 12, 17, 19.5, 20.5, 23];
       const i = hours.findIndex((h) => h > g.clock.hour + 0.1);
-      g.clock.hour = hours[i < 0 ? 0 : i];
-      g.mod.dayNight?.setHour?.(g.clock.hour);
-      // un paso de actualización del cielo sin mover el juego
-      for (const s of g.systems) if (s.name === 'dayNight') s.update?.(0.0001);
+      this.setHour(hours[i < 0 ? 0 : i]);
+      this.hourTouched = true;
       hourBtn.textContent = hourLabel();
     });
     const poseLabel = () => `🕺 Pose: ${POSES[this.poseIdx][1]}`;
@@ -108,8 +114,24 @@ export class PhotoMode implements System {
     this.panel.style.display = 'none';
     g.paused = false;
     g.hud.visible = this.hudWas;
+    // la hora de la foto era solo para la foto: vuelve la de antes (el juego estaba en pausa, no ha pasado el tiempo)
+    if (this.hourTouched) {
+      this.hourTouched = false;
+      this.setHour(this.hourWas);
+    }
+    // la pose de la foto también era solo para la foto (dentro de un vehículo, la de ir sentado)
     const pl = g.mod.player;
     if (pl && pl.state === 'foot') pl.pose = 'normal';
+    else if (pl && pl.state === 'vehicle') pl.pose = this.poseWas;
+  }
+
+  /** Cambia la hora y avisa al ciclo de día y noche para que el cielo y las luces se pongan al momento. */
+  private setHour(h: number) {
+    const g = this.game;
+    g.clock.hour = h;
+    g.mod.dayNight?.setHour?.(h);
+    // un paso de actualización del cielo sin mover el juego
+    for (const s of g.systems) if (s.name === 'dayNight') s.update?.(0.0001);
   }
 
   private snap() {

@@ -47,7 +47,8 @@ export class Achievements implements System {
       if (e.perfect) this.give('perfecta');
       if (e.job?.offer?.type === 'fragil' && e.job.integrity >= 99.5) this.give('fragil');
       if (e.job?.offer?.client?.id === 'mari') this.give('perro');
-      if (e.job?.offer?.client?.quirk === 'abuela_centimos' && e.pay >= e.job.offer.pay) this.give('abuela');
+      // la abuela ha contado todos los céntimos (aunque el paquete llegara tocado y se cobrase menos)
+      if (e.job?.offer?.client?.quirk === 'abuela_centimos' && (e.why === 'paciencia' || (e.why === undefined && e.pay >= e.job.offer.pay))) this.give('abuela');
     });
     ev.on('money', (e) => {
       const t = e.cash + e.bank;
