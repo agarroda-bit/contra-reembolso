@@ -272,6 +272,7 @@ export function installDayNight(game: Game): DayNight {
     U.uSunCol.value.copy(sunCol);
     U.uSunHalo.value.copy(sunHalo);
     U.uSunSize.value = 0.036 + low * 0.018; // radio angular (rad)
+    U.uSunLow.value = low;
     U.uSunVis.value = smoothstep(-0.09, -0.01, sunDir.y);
     U.uMoonDir.value.copy(moonDir);
     U.uMoonVis.value = (0.35 + 0.65 * night) * smoothstep(-0.04, 0.03, moonDir.y);

@@ -23,6 +23,7 @@ uniform vec3 uSunCol;
 uniform vec3 uSunHalo;
 uniform float uSunSize;
 uniform float uSunVis;
+uniform float uSunLow;
 uniform vec3 uMoonDir;
 uniform vec3 uMoonCol;
 uniform float uMoonSize;
@@ -59,8 +60,9 @@ void main() {
   float cosR = cos(uSunSize);
   float aa = max(fwidth(sd) * 1.5, 1e-5);
   float disc = smoothstep(cosR - aa, cosR + aa, sd);
-  // el disco nunca más oscuro que el halo que lo rodea (si no, parece un agujero)
-  col = mix(col, max(uSunCol, min(col, vec3(1.0))), disc * uSunVis);
+  // alto, el disco nunca más oscuro que su halo (si no, parece un agujero); bajo, naranja saturado
+  vec3 discCol = mix(max(uSunCol, min(col, vec3(1.0))), uSunCol, smoothstep(0.35, 0.8, uSunLow));
+  col = mix(col, discCol, disc * uSunVis);
 
   // halo de la luna (antes del disco para no tapar los cráteres)
   float md = dot(d, uMoonDir);
@@ -143,6 +145,7 @@ export class SkyDome {
     uSunHalo: { value: v3() },
     uSunSize: { value: 0.04 },
     uSunVis: { value: 1 },
+    uSunLow: { value: 0 }, // 0 = sol alto, 1 = pegado al horizonte
     uMoonDir: { value: new THREE.Vector3(0, -1, 0) },
     uMoonCol: { value: new THREE.Vector3(0.9, 0.93, 1) },
     uMoonSize: { value: 0.042 },
