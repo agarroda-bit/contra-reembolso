@@ -1,6 +1,8 @@
 // Banco de pruebas de la RADIO: cambia de emisora, sube/baja del "coche", pausa, distorsión,
 // medidores de nivel, espectrograma en vivo y análisis offline (espectrograma + cromagrama).
-// Parámetros: ?emisora=0..2  ?fuera=1 (empieza fuera del coche)  ?analisis=0..2&seg=20&cancion=N
+// Parámetros: ?emisora=0..2  ?fuera=1 (empieza fuera del coche)
+//   ?analisis=0..2&seg=20&cancion=N&desde=compás&mute=kick,bass  (render offline + cromagrama)
+// Desde la consola: __voces(), __sanity(), __stems(i, seg), __loud(), __bench(), __stats(), __levels()
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Game } from '../core/game';
@@ -130,11 +132,6 @@ async function main() {
   cv.width = 760;
   cv.height = 260;
   box.appendChild(cv);
-  const cv2 = document.createElement('canvas');
-  cv2.width = 760;
-  cv2.height = 1;
-  cv2.style.display = 'none';
-  box.appendChild(cv2);
   game.ui.appendChild(box);
   const g2 = cv.getContext('2d')!;
   g2.fillStyle = '#1b1030';
