@@ -502,6 +502,12 @@ export class Traffic implements System {
     const steer = THREE.MathUtils.clamp(-angle * 2.2, -1, 1);
     // frenar en curvas
     wantSpeed *= THREE.MathUtils.clamp(1 - Math.abs(angle) * 1.1, 0.35, 1);
+    // En persecución, con el objetivo muy de lado o detrás (media vuelta), despacio: a toda pastilla el
+    // volante apenas gira (a 16 m/s hacen falta 37 m para dar la vuelta) y se sale de la calzada; en la
+    // costa, al mar (el rival de la carrera se tiraba al agua nada más salir).
+    if (brain.mode === 'chase' && Math.abs(angle) > 0.8) {
+      wantSpeed = Math.min(wantSpeed, 6 + 14 * THREE.MathUtils.clamp((1.6 - Math.abs(angle)) / 0.8, 0, 1));
+    }
 
     // obstáculos delante: una caja del ancho del coche que se lanza hacia donde va a girar
     const h = v.spec.half;
