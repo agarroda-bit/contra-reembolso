@@ -14,7 +14,7 @@ async function arrancar(page: Page, extra = '') {
     if (m.type() === 'error') errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(String(e)));
-  await page.goto(`./?debug=1&prueba=1&fase=${FASE}${extra}`);
+  await page.goto(`./?debug=1&prueba=1&calidad=baja&fase=${FASE}${extra}`);
   await page.waitForFunction(() => (window as any).__ready === true, null, { timeout: 120_000 });
   await page.waitForTimeout(1500);
   return errors;
@@ -80,8 +80,8 @@ test('subir a la furgoneta y conducir 10 segundos', async ({ page }) => {
   await g(page, `(() => { const v = __cr.mod.vehicles.list.find(v => v.spec.kind === 'van'); const d = __cr.mod.vehicles.doorPoint(v, new THREE.Vector3()); d.y = __cr.world.heightAt(d.x, d.z); __cr.mod.player.teleport(d); })()`);
   await page.waitForTimeout(300);
   await page.keyboard.press('KeyF');
-  await page.waitForTimeout(1500);
-  expect(await g(page, `__cr.mod.player.state`)).toBe('vehicle');
+  // con SwiftShader va a pocos fps: se espera a que se siente (máx. 20 s)
+  await page.waitForFunction(() => (window as any).__cr.mod.player.state === 'vehicle', null, { timeout: 20_000 });
   await page.keyboard.down('KeyW');
   await page.waitForTimeout(10000);
   const speed = (await g(page, `__cr.hud.vehicle ? __cr.hud.vehicle.speedKmh : 0`)) as number;

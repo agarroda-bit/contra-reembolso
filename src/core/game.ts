@@ -69,6 +69,9 @@ export class Game {
     this.params = new URLSearchParams(location.search);
     this.debug = this.params.get('debug') === '1';
     this.settings = loadSettings();
+    // ?calidad=baja|media|alta fuerza la calidad (pruebas), sin guardarla
+    const q0 = this.params.get('calidad');
+    if (q0 === 'baja' || q0 === 'media' || q0 === 'alta') this.settings.quality = q0;
     const q = this.quality;
     this.renderer = new THREE.WebGLRenderer({
       antialias: this.settings.quality !== 'baja',

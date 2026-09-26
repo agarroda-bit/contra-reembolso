@@ -4,7 +4,16 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 2 — Vehículos (integrando)
+## Fase actual: 3 — Armas y enemigos (integrando)
+
+## Fase 2 — Vehículos ✅ (26/09, 06:40, publicada)
+- Furgoneta de reparto (6 paquetes), scooter (2) y coches de calle: utilitario, taxi, deportivo, todoterreno y furgón. Física de Rapier con ruedas por rayos y ayudas arcade (turbo con Shift, freno de mano con Espacio, se enderezan solos).
+- Subir y bajar con F; junto a un coche con conductor, F lo roba sacando al conductor con animación; tirarse en marcha te hace rodar.
+- Tráfico con IA (≈16 coches alrededor del jugador) que sigue su carril, frena si te pones delante y pita; coches aparcados; peatones que pasean, miran el móvil, huyen y se levantan cabreados si los atropellas.
+- Daño visible: abolladuras, humo, fuego y explosión con piezas volando; cosas rompibles (vallas, cajas, puestos de fruta, papeleras, bancos, conos).
+- Sonido sintetizado: motores con revoluciones, derrapes, claxon, golpes, cristales, explosiones.
+- Pruebas: todas las de la fase 1 + subir a la furgoneta y conducir 10 s (`capturas/fase-2/`).
+- Fps: 60 con GPU real (≈150-290 draw calls con tráfico).
 
 ## Fase 1 — Isla y personaje ✅ (26/09, 06:15, publicada)
 - Isla Puerto Paquete (≈600 × 600 m) con los cinco barrios: Puerto (oficina, muelles, grúas, contenedores, barco, faro), Centro (plaza, tiendas, casino, club), Colina (chalets con piscina, ático), Polígono (naves, taller, armería, desguace, guarida), Barrio Viejo (callejones, tendederos, bares).
