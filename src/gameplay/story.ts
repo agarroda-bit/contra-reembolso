@@ -254,8 +254,9 @@ function missions(): Mission[] {
             c.data.van.packages = 5;
             c.data.off = c.g.events.on('vehicle:impact' as any, (e: any) => {
               if (e.vehicle === c.data.van) {
-                c.data.integrity -= Math.max(0, e.dv - 3.5) * 6;
-                if (e.dv > 7) c.g.mod.bubbles?.say(c.g.mod.player, ['¡El flamenco!', '¡Crac! Eso era el espejo…', 'La lámpara de lava ya no es de lava'][Math.floor(rnd.next() * 3)], 1.8);
+                // un roce con un bordillo o una farola (dv 7-10) quita un 7-17 %; un buen choque (dv 15), un 35 %
+                c.data.integrity -= Math.max(0, e.dv - 5) * 3.5;
+                if (e.dv > 7.5) c.g.mod.bubbles?.say(c.g.mod.player, ['¡El flamenco!', '¡Crac! Eso era el espejo…', 'La lámpara de lava ya no es de lava'][Math.floor(rnd.next() * 3)], 1.8);
               }
             });
             c.data.off2 = c.g.events.on('vehicle:landed' as any, (e: any) => {
@@ -271,7 +272,7 @@ function missions(): Mission[] {
               c.data.failText = 'La furgoneta con la mudanza ha quedado para chatarra.';
               return 'fail';
             }
-            if (c.data.integrity <= 20) {
+            if (c.data.integrity < 10) {
               c.data.failText = 'Los muebles han llegado en formato «hágalo usted mismo».';
               return 'fail';
             }
