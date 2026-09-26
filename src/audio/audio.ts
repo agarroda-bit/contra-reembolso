@@ -513,9 +513,25 @@ export class AudioEngine implements System {
     l.set?.(param);
   }
 
-  postUpdate() {
+  private stepTimer = 0;
+  private stepSide = 0;
+
+  postUpdate(dt = 0) {
     const ctx = this.ctx;
     if (!ctx) return;
+    // pasos del repartidor
+    const p = this.game.mod.player;
+    if (p && p.state === 'foot' && p.grounded) {
+      const sp = Math.hypot(p.velocity.x, p.velocity.z);
+      if (sp > 0.8) {
+        this.stepTimer -= dt;
+        if (this.stepTimer <= 0) {
+          this.stepTimer = sp > 5 ? 0.28 : 0.46;
+          this.stepSide ^= 1;
+          this.play('step', { volume: sp > 5 ? 0.5 : 0.32, pitch: this.stepSide ? 1 : 0.9 });
+        }
+      } else this.stepTimer = 0.1;
+    }
     // oyente = cámara
     const cam = this.game.camera;
     this.listener.copy(cam.position);
