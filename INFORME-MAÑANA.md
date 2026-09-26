@@ -6,7 +6,18 @@
 
 ## ⚠️ LO QUE FALTA O NO HA SALIDO BIEN (léelo primero)
 
-- **El Mac se durmió de 08:12 a 14:20** y el trabajo se paró esas seis horas. Ahora lo mantengo despierto con `caffeinate` solo mientras dura la sesión (no cambia ningún ajuste del Mac).
+- **Sesión parada por ti el 27/09.** Lo publicado en el enlace (fases 0 a 9) está probado y funciona. Quedó **a medias la segunda ronda de mejoras de la fase 9**, guardada en seis ramas de GitHub (`fase9/…`) sin mezclar con el juego ni probar:
+  - Vehículos locos nuevos: silla de la yaya, paella-móvil, sofá del rastro y carretilla del puerto.
+  - Sucesos nuevos: boda, gallina, turista y atraco.
+  - 8 clientes y 8 logros nuevos.
+  - 11 prendas y 8 lujos del ático.
+  - Animaciones con más gracia.
+  - Detalles del mapa.
+  - Mando jugando.
+
+  Cómo retomarla: apartado «Cómo retomar» de `PROGRESO.md`.
+
+- **El Mac se durmió de 08:12 a 14:20** y el trabajo se paró esas seis horas. Después lo mantuve despierto con `caffeinate` solo durante la sesión; ya está quitado.
 - **Nadie lo ha jugado con las manos todavía.** Lo han probado agentes con scripts: uno jugó la partida entera de principio a fin, con las cinco misiones, las tiendas, el casino, el ático y guardar y continuar. Pero la sensación real de conducir y disparar hay que probarla.
 - **La música y los sonidos nadie los ha oído.** Están hechos por código y comprobados por análisis (volumen, sin saturar), no de oído.
 - **La publicación automática de GitHub (Actions) no está activada.** El GitHub de este Mac no tiene permiso para subir workflows, así que publico con `npm run deploy` (rama `gh-pages`). Funciona igual. Si quieres la automática: `gh auth refresh -s workflow` y mover `herramientas/github-actions-deploy.yml` a `.github/workflows/`.
@@ -63,7 +74,7 @@ Todas las fases, de la 0 a la 9, están publicadas en el enlace. El detalle est�
   - Interfaz más clara y mando en los menús.
   - 60 fps en las tres calidades con la GPU del Mac.
   - Un agente jugó la partida entera y encontró 18 fallos: **arreglados todos** y comprobados por otro agente.
-- **Fase 9 — Mejoras:** eventos aleatorios (ladrón de bolsos, camión que pierde paquetes, carrera callejera), modo foto, 20 logros y reto del día. *(Sigo con más mejoras: ver abajo.)*
+- **Fase 9 — Mejoras:** eventos aleatorios (ladrón de bolsos, camión que pierde paquetes, carrera callejera), modo foto, 20 logros y reto del día. *(La segunda ronda quedó a medias: ver arriba.)*
 
 ## Fallos conocidos (pequeños)
 - Al entrar por primera vez en un interior puede notarse un tirón corto (menos de medio segundo) dentro del fundido.
@@ -74,11 +85,12 @@ Todas las fases, de la 0 a la 9, están publicadas en el enlace. El detalle est�
 
 ## Ideas para la siguiente noche (de más a menos impacto)
 1. **Que lo juegues tú 20 minutos** y me digas qué no te divierte: es lo que más cambia el juego.
-2. Más misiones de historia (una segunda banda, un jefe en barco) y encargos en cadena con un mismo cliente.
-3. Música de verdad para la radio (más canciones y locutores) y voces graciosas generadas.
-4. Versión para móvil (controles táctiles), para enseñarlo por WhatsApp.
-5. Más vehículos locos y un modo «carreras» con récords.
-6. Multijugador sencillo: ver el récord de dinero de otros.
+2. Terminar, probar y publicar la segunda ronda de la fase 9 que quedó en las ramas `fase9/…` (lo más avanzado: vehículos locos y sucesos).
+3. Más misiones de historia (una segunda banda, un jefe en barco) y encargos en cadena con un mismo cliente.
+4. Música de verdad para la radio (más canciones y locutores) y voces graciosas generadas.
+5. Versión para móvil (controles táctiles), para enseñarlo por WhatsApp.
+6. Un modo «carreras» con récords.
+7. Multijugador sencillo: ver el récord de dinero de otros.
 
 ## Capturas
 ![Isla al atardecer](capturas/destacadas/isla-atardecer.png)

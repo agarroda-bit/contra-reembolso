@@ -4,13 +4,35 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 9 — Mejoras sin fin
+## Fase actual: 9 — Mejoras sin fin (PARADA el 27/09: ver «Cómo retomar»)
 
-## Fase 9 — Mejoras sin fin (en curso)
+## ⏸️ SESIÓN PARADA (27/09) — CÓMO RETOMAR
+Rodri pidió parar y dejarlo todo para otro día. Estado:
+- **Publicado y probado (rama `main`, enlace en vivo):** fases 0 a 9. Es lo que se juega en el enlace.
+- **A medias, SIN mezclar con `main` y SIN probar:** la segunda ronda de mejoras de la fase 9, una rama por área, también subidas a GitHub. Todas compilan (`tsc`), pero ninguna pasó la revisión:
+
+| Rama | Qué lleva | Cómo quedó |
+|---|---|---|
+| `fase9/vehiculos-locos` | 4 locos nuevos (silla eléctrica de la yaya, paella-móvil, sofá del rastro, carretilla del puerto), claxon por vehículo, motores propios, cartel con el nombre al subir, locos de vez en cuando en el tráfico | 5 commits, primera pasada completa |
+| `fase9/eventos-logros-retos` | sucesos nuevos (boda sin tarta, gallina fugitiva, turista al faro, atraco de Los Devueltos), 8 clientes nuevos, cotilleos en el móvil, 8 logros nuevos y lista de logros en el móvil, 6 retos del día nuevos, logro «boom» solo si lo revientas tú | 5 commits + 1 «A MEDIAS» |
+| `fase9/ropa-y-atico` | 11 prendas nuevas en Moda Paquetona, 8 lujos nuevos en el ático | 2 commits; faltan los lujos de la oficina |
+| `fase9/animaciones` | reposo con vida, andar y correr con más gracia, salto con preparación, puñetazo, retroceso, celebrar al cobrar, aburrirse, agacharse, levantarse tras un derribo | 2 commits + 1 «A MEDIAS» (bailes y peatones) |
+| `fase9/mapa-detalles` | colisor del toldo de los puestos de fruta (cámara) | 1 commit + 1 «A MEDIAS» grande (aves, murales, secretos, vida en el Centro y en la costa) |
+| `fase9/policia-y-mando` | patrullas que ya no se quedan paradas en La Colina | 1 commit + 1 «A MEDIAS» (mando jugando, arma loca nueva) |
+
+**Para retomar:** relee `ENCARGO.md`, este archivo y `DECISIONES.md`. Rama por rama:
+1. Termina lo «A MEDIAS» (el mensaje del commit lo dice).
+2. Prueba con `node herramientas/captura.mjs --gpu` y haz que otro agente intente romperlo.
+3. Fusiona en `main`, pasa `npm test` con el Mac descargado y publica con `npm run deploy`.
+4. Comprueba `version.txt` en el enlace.
+
+Las más avanzadas son vehículos locos y eventos; la de mapa es la más verde. Lanza los agentes de uno en uno o de dos en dos: con seis a la vez el Mac llega a carga 300 y las pruebas sin GPU no terminan.
+
+## Fase 9 — Mejoras sin fin (primera ronda publicada; segunda ronda a medias, ver arriba)
 - **27/09, 00:00 · Activada y publicada:** eventos aleatorios por la isla (ladrón de bolsos, camión que va perdiendo paquetes, carrera callejera), modo foto (K: poses, hora del día, guardar foto), 20 logros con aviso, reto del día en el móvil, mando en los menús. Prueba nueva de la fase 9 (reto, ladrón, modo foto y logro): pasan las 12 pruebas (`capturas/fase-9/`).
 
 ## Fase 8 — Pulido ✅ (26/09, 23:40, publicada)
-Nota: el Mac se durmió de 08:12 a 14:20 y el trabajo se paró esas horas; ahora queda despierto con `caffeinate` mientras dura la sesión.
+Nota: el Mac se durmió de 08:12 a 14:20 y el trabajo se paró esas horas; después lo mantuve despierto con `caffeinate` (quitado al parar la sesión el 27/09).
 
 Cinco agentes pulieron una parte cada uno y un sexto jugó la partida entera como un jugador, apuntando fallos:
 - **Conducción:** saltos más largos y aterrizando plano (rampa del Puerto: de 25 a 40 m), frenos más firmes (90 → 0 km/h en 24-32 m), freno de mano que gira sin trompo, sales volando de la moto en choques fuertes, cámara que tiembla en los choques y no se mete en las paredes. Tráfico que sigue su carril en las curvas, adelanta a los 7 s si algo le bloquea y no aparece delante de la cámara. Ruedas compartidas: los vehículos pasan de 132 a 52 draw calls.
