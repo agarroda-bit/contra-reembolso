@@ -59,7 +59,8 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
   void shopUI;
   const messages = fase >= 4 ? new Messages(game) : null;
   void messages;
-  if (fase >= 3) add(new Economy(game));
+  add(new Economy(game));
+  add(new Pickups(game)); // los 20 paquetes perdidos existen desde la fase 1
 
   if (fase >= 2) {
     add(new VehicleManager(game));
@@ -72,7 +73,6 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
     add(new Combat(game));
     add(new Police(game));
     add(new Gang(game));
-    add(new Pickups(game));
     add(new Respawn(game));
   }
   if (fase >= 4) {

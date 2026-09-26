@@ -157,11 +157,15 @@ export class Menus implements System {
     const panel = document.createElement('div');
     panel.className = 'cr-panel cr-creacion';
     panel.innerHTML = `<h2>Tu repartidor</h2>`;
+    panel.style.padding = '16px 22px';
+    (panel.querySelector('h2') as HTMLElement).style.margin = '0 0 6px';
     const row = (label: string, content: HTMLElement) => {
       const r = document.createElement('div');
       r.className = 'cr-fila';
       r.style.flexDirection = 'column';
       r.style.alignItems = 'stretch';
+      r.style.margin = '5px 0';
+      r.style.gap = '5px';
       const l = document.createElement('div');
       l.textContent = label;
       r.append(l, content);
