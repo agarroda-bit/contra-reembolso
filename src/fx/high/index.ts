@@ -21,6 +21,7 @@ export interface High {
 const RISE = 3; // segundos en subir
 const FALL = 8; // segundos finales bajando
 const MAX_TOTAL = 300; // tope al ir alargando
+const WARM_MAX = 1.2; // como mucho se espera esto (s reales) a que compilen los shaders
 const TIME_KEY = 'hierbas';
 
 export class HighEffect implements High, System {
@@ -43,6 +44,9 @@ export class HighEffect implements High, System {
   private readonly savedQuat = new THREE.Quaternion();
   private lastWobble = -1;
   private lastRadio = -1;
+  private warmToken = 0; // cambia en cada colocón nuevo (para ignorar avisos de uno anterior)
+  private warming = false; // compilando shaders: el nivel espera en 0
+  private warmWait = 0;
 
   constructor(private readonly game: Game) {
     this.pass = new PsychePass(game.renderer);
@@ -51,6 +55,10 @@ export class HighEffect implements High, System {
     this.hum = new CosmicHum(() => game.mod.audio as AudioEngine | undefined);
     this.thoughts.onSpawn = (text) => this.hum.blip(text);
     this.lastReal = game.time.real;
+    // al reaparecer (hospital, comisaría, orilla) ya se te ha pasado: no queda nada colgado
+    game.events.on('player:respawn', () => {
+      if (this.active) this.stop();
+    });
   }
 
   get active(): boolean {
@@ -71,6 +79,17 @@ export class HighEffect implements High, System {
     this.ramp = 0;
     this.t = 0;
     this.thoughts.begin();
+    this.warmUp();
+  }
+
+  /** Compila en segundo plano lo que hace falta para pintar a textura; mientras, el nivel no sube. */
+  private warmUp() {
+    const token = ++this.warmToken;
+    this.warming = true;
+    this.warmWait = 0;
+    this.pass.warm(this.game.scene, this.game.camera).then(() => {
+      if (token === this.warmToken) this.warming = false;
+    });
   }
 
   stop() {
@@ -108,7 +127,10 @@ export class HighEffect implements High, System {
     this.t += dt;
     if (this.forced !== null) {
       this.level = this.forced;
+    } else if (this.warming && (this.warmWait += dt) < WARM_MAX) {
+      return; // una fracción de segundo: aún no se nota nada
     } else {
+      this.warming = false;
       this.remaining = Math.max(0, this.remaining - dt);
       this.ramp = Math.min(1, this.ramp + dt / RISE);
       const lin = Math.min(this.ramp, this.remaining / FALL);
@@ -126,6 +148,7 @@ export class HighEffect implements High, System {
     if (!this.active) return;
     this.t += dt; // las ondas siguen moviéndose detrás del menú
     this.thoughts.setHidden(true);
+    this.hum.update(dt, 0); // en pausa, el zumbido se calla (como los motores); vuelve al seguir
   }
 
   private apply(dt: number) {
@@ -155,6 +178,8 @@ export class HighEffect implements High, System {
     this.remaining = 0;
     this.ramp = 0;
     this.t = 0;
+    this.warming = false;
+    this.warmToken++;
     g.timeScaleMods.delete(TIME_KEY);
     const p = g.mod.player;
     if (p && this.lastWobble >= 0 && p.wobble === this.lastWobble) p.wobble = 0;

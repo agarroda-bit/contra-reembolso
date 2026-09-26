@@ -65,7 +65,7 @@ export class CosmicHum {
 
     for (const o of this.oscs) o.start(now);
     this.out = out;
-    this.live = this.nodes.length;
+    this.live += this.nodes.length; // suma: los del apagado anterior pueden seguir soltándose
     this.lastSet = -1;
     return true;
   }

@@ -40,6 +40,12 @@ export const FRASES: readonly string[] = [
   '¿Los peces reciben paquetes? Qué vida más triste.',
   'Nota mental: los bolardos también son personas.',
   'Me siento ligero como un paquete de pipas.',
+  '¿Y si Puerto Paquete es un paquete que nadie ha venido a recoger?',
+  'El Devolución también fue un niño. Un niño con albarán.',
+  'La abuela de los céntimos tenía razón en todo.',
+  'Me voy a pedir una pizza contra reembolso. Y me la traigo yo.',
+  'Si piso las rayas del paso de cebra, pierdo. Así funciona esto.',
+  'Oye, ¿y si la policía solo quiere un abrazo? …No. No quiere.',
 ];
 
 const INICIO = ['Uy… esto sube.', 'Oye… ¿y esta música de dónde sale?', 'Vale. Vale. Vale. Todo bien.'];
@@ -47,6 +53,8 @@ const FINAL = ['Creo que se me está pasando…', 'Vuelvo a la realidad. Qué pe
 
 const CSS = `
 .hb-capa{position:fixed;inset:0;pointer-events:none;z-index:20;overflow:hidden}
+.hb-capa.hb-quieta{visibility:hidden}
+.hb-capa.hb-quieta *{animation-play-state:paused!important}
 .hb-frase{position:absolute;width:min(700px,72vw);margin-left:calc(min(700px,72vw) / -2);text-align:center;
   font:900 clamp(24px,2.9vw,42px)/1.18 system-ui,-apple-system,'Segoe UI',sans-serif;letter-spacing:.5px;
   transform:rotate(var(--rot));animation:hb-entra .7s cubic-bezier(.2,1.5,.4,1) both,hb-sale .9s ease-in var(--fuera) forwards}
@@ -73,6 +81,7 @@ export class Thoughts {
   private slot = 0; // 0 = franja de arriba, 1 = franja de abajo
   /** Cuántas frases se han mostrado (para pruebas). */
   shown = 0;
+  private shownNow = 0; // frases de este colocón
   /** Se llama con el texto cada vez que aparece una frase (para el sonido). */
   onSpawn: ((text: string) => void) | null = null;
 
@@ -85,6 +94,7 @@ export class Thoughts {
     this.timer = 1.8;
     this.endSaid = false;
     this.pendingStart = true;
+    this.shownNow = 0;
   }
 
   /** Se ha alargado el efecto: si ya se había despedido, vuelven los pensamientos. */
@@ -97,7 +107,7 @@ export class Thoughts {
   /** realDt: segundos reales; remaining: segundos que quedan; fall: duración de la bajada. */
   update(realDt: number, level: number, remaining: number, fall: number) {
     // frase de despedida al empezar a bajar
-    if (!this.endSaid && remaining > 0 && remaining < fall - 0.5 && this.shown > 0) {
+    if (!this.endSaid && remaining > 0 && remaining < fall - 0.5 && this.shownNow > 0) {
       this.endSaid = true;
       this.timer = 1e9; // ya no salen más
       this.spawn(pick(FINAL));
@@ -110,11 +120,12 @@ export class Thoughts {
     this.pendingStart = false;
   }
 
-  /** Oculta las frases (p. ej. con el juego en pausa). */
+  /** Oculta las frases (p. ej. con el juego en pausa). Se congelan donde estaban, sin reiniciar
+   *  las animaciones (con display:none volverían a entrar desde cero al quitar la pausa). */
   setHidden(h: boolean) {
     if (h === this.hidden) return;
     this.hidden = h;
-    if (this.layer) this.layer.style.display = h ? 'none' : '';
+    this.layer?.classList.toggle('hb-quieta', h);
   }
 
   private next(): string {
@@ -140,9 +151,10 @@ export class Thoughts {
       this.layer = document.createElement('div');
       this.layer.className = 'hb-capa';
       this.layer.style.pointerEvents = 'none';
-      if (this.hidden) this.layer.style.display = 'none';
-      this.ui.appendChild(this.layer);
+      this.layer.classList.toggle('hb-quieta', this.hidden);
     }
+    // por si alguien ha vaciado la interfaz entre medias
+    if (!this.layer.isConnected) this.ui.appendChild(this.layer);
     return this.layer;
   }
 
@@ -189,6 +201,7 @@ export class Thoughts {
     });
     layer.appendChild(el);
     this.shown++;
+    this.shownNow++;
     this.onSpawn?.(text);
   }
 
