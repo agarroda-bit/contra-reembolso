@@ -42,6 +42,8 @@ export class Input {
   lookDY = 0;
   wheel = 0;
   pointerLocked = false;
+  /** Intentos seguidos de enganchar el ratón que han fallado (si el navegador no deja, el clic dispara igual). */
+  private lockFails = 0;
   /** Última tecla pulsada (para menús de reasignar, pruebas, etc.). */
   lastKey = '';
   private gamepadIndex: number | null = null;
@@ -54,7 +56,13 @@ export class Input {
     window.addEventListener('blur', () => this.releaseAll());
     canvas.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
-      if (!this.pointerLocked) this.requestPointerLock();
+      if (!this.pointerLocked) {
+        // el clic de «haz clic en el juego para usar el ratón» solo engancha el ratón: no dispara ni da
+        // puñetazos (salvo que el navegador no deje engancharlo: entonces el clic dispara como siempre)
+        const lockWorks = this.lockFails === 0;
+        this.requestPointerLock();
+        if (lockWorks && e.button === 0) return;
+      }
       if (e.button === 0) this.set('fire', true);
       if (e.button === 2) this.set('aim', true);
     });
@@ -78,7 +86,9 @@ export class Input {
     );
     document.addEventListener('pointerlockchange', () => {
       this.pointerLocked = document.pointerLockElement === this.canvas;
+      if (this.pointerLocked) this.lockFails = 0;
     });
+    document.addEventListener('pointerlockerror', () => this.lockFails++);
     window.addEventListener('gamepadconnected', (e) => {
       this.gamepadIndex = (e as GamepadEvent).gamepad.index;
     });
@@ -86,10 +96,17 @@ export class Input {
 
   requestPointerLock() {
     try {
-      const p = (this.canvas as any).requestPointerLock?.();
-      if (p && typeof p.catch === 'function') p.catch(() => {});
+      const req = (this.canvas as any).requestPointerLock;
+      if (typeof req !== 'function') {
+        this.lockFails++;
+        return;
+      }
+      const p = req.call(this.canvas);
+      // (el fallo puede llegar por aquí y también por 'pointerlockerror': da igual contarlo dos veces)
+      if (p && typeof p.catch === 'function') p.catch(() => this.lockFails++);
     } catch {
       /* navegadores sin pointer lock (pruebas) */
+      this.lockFails++;
     }
   }
 

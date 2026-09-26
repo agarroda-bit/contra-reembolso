@@ -366,7 +366,8 @@ export class Combat implements System {
   fire(shooter: Shooter, def: WeaponDef, muzzle: THREE.Vector3, target: THREE.Vector3, spreadMul = 1) {
     const g = this.game;
     g.mod.audio?.play(def.sound, { pos: shooter.kind === 'player' ? null : muzzle, volume: shooter.kind === 'player' ? 0.9 : 1 });
-    g.events.emit('weapon:shot' as any, { pos: muzzle.clone(), shooter, weapon: def.id } as any);
+    // un puñetazo al aire no es un «disparo» (la policía no viene por eso): melee() avisa solo si golpea a alguien
+    if (def.mode !== 'melee') g.events.emit('weapon:shot' as any, { pos: muzzle.clone(), shooter, weapon: def.id } as any);
     const dir = tmpDir.copy(target).sub(muzzle).normalize();
     switch (def.mode) {
       case 'melee':
