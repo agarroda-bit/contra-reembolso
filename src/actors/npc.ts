@@ -17,7 +17,11 @@ export type NpcState =
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+const tmpO = new THREE.Vector3();
+const tmpD = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
+/** Contra qué no se puede andar (edificios, muros y coches). */
+const WALK_BLOCK = G.STATIC | G.VEHICLE;
 let nextId = 1;
 
 export class Npc implements NpcDriver {
@@ -59,6 +63,10 @@ export class Npc implements NpcDriver {
   private avoidTurn = 0;
   private animSkip = 0;
   private poofTimer = -1;
+  /** Segundos que lleva pegado (cinta) o aturdido (sellos). */
+  private holdFor = 0;
+  /** Segundos seguidos que lleva queriendo andar sin poder (contra una pared). La IA lo usa para cambiar de plan. */
+  blockedTime = 0;
   onDeath: ((npc: Npc) => void) | null = null;
 
   constructor(
@@ -118,9 +126,20 @@ export class Npc implements NpcDriver {
     this.health -= amount;
     this.game.events.emit('npc:hurt' as any, { npc: this, amount, source } as any);
     this.game.mod.audio?.say(this.position, 2, this.voice, 0.5);
+    const lethal = this.killable && this.health <= 0;
     if (knock > 0 || this.health <= 0) {
       const d = dir ? tmpV.copy(dir).setY(0).normalize() : tmpV.set(rnd.next() - 0.5, 0, rnd.next() - 0.5).normalize();
-      this.knock(d.multiplyScalar(Math.max(3, knock)).setY(Math.max(3, knock * 0.5)));
+      // el derribo se tiene que ver: sale volando hacia atrás dando vueltas
+      const h = lethal ? Math.max(5.5, knock) : Math.max(3, knock);
+      const up = lethal ? Math.max(5.5, knock * 0.6) : Math.max(3, knock * 0.5);
+      this.knock(d.multiplyScalar(h).setY(up));
+      if (lethal) this.spin *= 1.6;
+    }
+    if (lethal) {
+      // primer estallido de confeti al caer (la nube de cartón grande sale al hacer «puf»)
+      const pt = tmpV2.copy(this.position).setY(this.position.y + 1.1);
+      this.game.mod.particles?.emit('confetti', pt, { count: 10, speed: 0.7 });
+      this.game.mod.particles?.emit('cardboard', pt, { count: 4, speed: 0.6 });
     }
     if (this.health <= 0) {
       if (this.killable) {
@@ -156,16 +175,26 @@ export class Npc implements NpcDriver {
   /** Pegado al suelo con cinta (arma loca). */
   tape(seconds = 4) {
     if (!this.alive) return;
+    if (this.vehicle) return; // dentro de un coche no se le puede precintar
     this.target = null;
-    this.setState('taped');
-    this.brain = { ...(this.brain ?? {}), tapedFor: seconds };
+    // (no se sustituye `brain`: otros módulos guardan referencias a él)
+    if (this.state === 'taped') this.holdFor = Math.max(this.holdFor, this.stateTime + seconds);
+    else {
+      this.setState('taped');
+      this.holdFor = seconds;
+    }
   }
   /** Aturdido (pistola de sellos). */
   stun(seconds = 2.5) {
-    if (!this.alive || this.state === 'taped') return;
+    if (!this.alive || this.state === 'taped' || this.vehicle) return;
+    // en el aire no: primero que aterrice (si no, se quedaría flotando)
+    if (this.state === 'knocked' || this.state === 'down' || this.state === 'getup' || this.state === 'dead') return;
     this.target = null;
-    this.setState('stunned');
-    this.brain = { ...(this.brain ?? {}), stunnedFor: seconds };
+    if (this.state === 'stunned') this.holdFor = Math.max(this.holdFor, this.stateTime + seconds * 0.5);
+    else {
+      this.setState('stunned');
+      this.holdFor = seconds;
+    }
   }
 
   // ─────────── Vehículos ───────────
@@ -238,8 +267,24 @@ export class Npc implements NpcDriver {
         if (this.vehicle && !this.vehicle.disposed) this.vehicle.getPosition(this.position);
         break;
       case 'knocked': {
-        // vuelo balístico con rebote
+        // vuelo balístico con rebote (y rebota en las paredes en vez de atravesarlas)
         this.vy -= 22 * dt;
+        const hs = Math.hypot(this.velocity.x, this.velocity.z);
+        if (hs > 0.3) {
+          const o = tmpO.set(this.position.x, this.position.y + 0.6, this.position.z);
+          const d = tmpD.set(this.velocity.x / hs, 0, this.velocity.z / hs);
+          const hit = this.game.physics.raycast(o, d, hs * dt + 0.4, G.STATIC);
+          if (hit && hit.distance > 0.001) {
+            const n = hit.normal;
+            const vn = this.velocity.x * n.x + this.velocity.z * n.z;
+            if (vn < 0) {
+              this.velocity.x -= 2 * vn * n.x;
+              this.velocity.z -= 2 * vn * n.z;
+            }
+            this.velocity.multiplyScalar(0.35);
+            this.game.mod.particles?.emit('dust', hit.point, { count: 3, dir: n, scale: 0.6 });
+          }
+        }
         this.position.addScaledVector(this.velocity, dt);
         this.position.y += this.vy * dt;
         this.heading += this.spin * dt;
@@ -278,7 +323,11 @@ export class Npc implements NpcDriver {
         if (this.poofTimer >= 0) {
           this.poofTimer -= dt;
           if (this.poofTimer < 0) {
-            this.game.mod.particles?.poof(tmpV.copy(this.position).setY(this.position.y + 0.5));
+            const pt = tmpV.copy(this.position).setY(this.position.y + 0.5);
+            this.game.mod.particles?.poof(pt);
+            // que se vea bien de lejos: trozos de caja grandes y un chorro de confeti hacia arriba
+            this.game.mod.particles?.emit('cardboard', pt, { count: 6, scale: 1.8, speed: 1.1 });
+            this.game.mod.particles?.emit('confetti', pt, { count: 14, speed: 1.3, scale: 1.4 });
             this.game.mod.audio?.play('pop', { pos: this.position });
             this.removed = true;
             this.rig.root.visible = false;
@@ -288,11 +337,13 @@ export class Npc implements NpcDriver {
         break;
       case 'taped':
         pose = 'taped';
-        if (this.stateTime > (this.brain?.tapedFor ?? 4)) this.setState('getup');
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (this.stateTime > (this.holdFor || 4)) this.setState('getup');
         break;
       case 'stunned':
         pose = 'stunned';
-        if (this.stateTime > (this.brain?.stunnedFor ?? 2.5)) this.setState(this.hostile ? 'idle' : 'flee');
+        if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
+        if (this.stateTime > (this.holdFor || 2.5)) this.setState(this.hostile ? 'idle' : 'flee');
         break;
       case 'pulled':
         pose = 'pulled';
@@ -319,10 +370,10 @@ export class Npc implements NpcDriver {
             let want = Math.atan2(to.x, to.z);
             // esquivar obstáculos cada poco
             this.avoidTimer -= dt;
-            if (this.avoidTimer <= 0 && !far) {
+            if (this.avoidTimer <= 0 && (!far || this.hostile)) {
               this.avoidTimer = 0.35;
               const origin = tmpV2.copy(this.position).setY(this.position.y + 1);
-              const fwd = new THREE.Vector3(Math.sin(want), 0, Math.cos(want));
+              const fwd = tmpD.set(Math.sin(want), 0, Math.cos(want));
               const hit = this.game.physics.raycast(origin, fwd, 1.8, SOLID | G.VEHICLE);
               this.avoidTurn = hit ? (this.avoidTurn || (rnd.next() < 0.5 ? 1 : -1)) : 0;
             }
@@ -331,10 +382,16 @@ export class Npc implements NpcDriver {
             d = Math.atan2(Math.sin(d), Math.cos(d));
             this.heading += d * Math.min(1, dt * 8);
             speed = run ? this.runSpeed : this.walkSpeed;
-            this.position.x += Math.sin(this.heading) * speed * dt;
-            this.position.z += Math.cos(this.heading) * speed * dt;
+            const mx = Math.sin(this.heading) * speed * dt;
+            const mz = Math.cos(this.heading) * speed * dt;
+            // cerca de la cámara (o si es de los que pelean) no atraviesa paredes ni coches: resbala por ellos
+            if (!far || this.hostile) this.slideMove(mx, mz, dt);
+            else {
+              this.position.x += mx;
+              this.position.z += mz;
+            }
           }
-        }
+        } else this.blockedTime = 0;
         if (w) this.position.y = w.heightAt(this.position.x, this.position.z);
         pose = this.aiming ? 'normal' : 'normal';
         break;
@@ -360,6 +417,43 @@ export class Npc implements NpcDriver {
       });
       this.shotPulse = false;
     }
+  }
+
+  /**
+   * Avanza (mx, mz) sin meterse en edificios ni coches: si hay algo delante, resbala por la pared;
+   * si está en una esquina, se queda quieto (y blockedTime sube para que la IA cambie de plan).
+   * Si ya está dentro de algo (ha aparecido dentro), le deja salir.
+   */
+  private slideMove(mx: number, mz: number, dt: number) {
+    const len = Math.hypot(mx, mz);
+    if (len < 1e-6) return;
+    const ph = this.game.physics;
+    const o = tmpO.set(this.position.x, this.position.y + 0.6, this.position.z);
+    const d = tmpD.set(mx / len, 0, mz / len);
+    const hit = ph.raycast(o, d, len + 0.35, WALK_BLOCK);
+    let bx = mx, bz = mz;
+    if (hit && hit.distance > 0.001) {
+      const n = hit.normal;
+      const nl = Math.hypot(n.x, n.z);
+      if (nl > 0.2) {
+        const nx = n.x / nl, nz = n.z / nl;
+        const into = bx * nx + bz * nz;
+        if (into < 0) {
+          bx -= into * nx;
+          bz -= into * nz;
+        }
+        const sl = Math.hypot(bx, bz);
+        if (sl > 1e-6) {
+          const h2 = ph.raycast(o, d.set(bx / sl, 0, bz / sl), sl + 0.35, WALK_BLOCK);
+          if (h2 && h2.distance > 0.001) bx = bz = 0;
+        }
+      } else bx = bz = 0;
+    }
+    this.position.x += bx;
+    this.position.z += bz;
+    // atasco: avanza menos de un tercio de lo que quería
+    if (Math.hypot(bx, bz) < len * 0.35) this.blockedTime += dt;
+    else this.blockedTime = Math.max(0, this.blockedTime - dt * 2);
   }
 
   private syncRoot() {

@@ -34,13 +34,27 @@ interface Projectile {
   fuse: number;
   owner: Shooter;
   hit: Set<Npc>;
+  /** Daño (paquete FRÁGIL: el de quien lo lanza; el jefe lanza unos más flojos). */
+  damage?: number;
+  /** Paquete FRÁGIL del jugador: ya ha tocado algo (explota enseguida). */
+  landed?: boolean;
 }
+
+const nearList: Npc[] = [];
+const SHELL_DIR = new THREE.Vector3(1, 1, 0);
 
 const HIT_MASK = SOLID | G.NPC | G.VEHICLE | G.PLAYER | G.PROP;
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpDir = new THREE.Vector3();
 const tmpO = new THREE.Vector3();
+const tmpA = new THREE.Vector3();
+const tmpB = new THREE.Vector3();
+
+/** Ayuda de apuntado: cono (radianes) alrededor del centro de la pantalla y fuerza del imán. */
+const ASSIST_CONE = 0.075;
+const ASSIST_PULL = 2;
+const ASSIST_RANGE = 45;
 
 const tracerGeo = new THREE.BoxGeometry(0.03, 0.03, 1);
 const tracerMat = new THREE.MeshBasicMaterial({ color: '#fff3b0', toneMapped: false });
@@ -50,6 +64,8 @@ const tapeGeo = new THREE.TorusGeometry(0.12, 0.05, 6, 10);
 const tapeMat = new THREE.MeshLambertMaterial({ color: '#d9b26f', flatShading: true });
 const fragileGeo = new THREE.BoxGeometry(0.4, 0.32, 0.4);
 const fragileMat = new THREE.MeshLambertMaterial({ color: '#d9a870', flatShading: true });
+const fragileBandGeo = new THREE.BoxGeometry(0.41, 0.08, 0.41);
+const fragileBandMat = new THREE.MeshLambertMaterial({ color: '#e63946' });
 
 export class Combat implements System {
   name = 'combat';
@@ -61,12 +77,29 @@ export class Combat implements System {
   private gunMesh: THREE.Mesh | null = null;
   private projectiles: Projectile[] = [];
   private tracers: { mesh: THREE.Mesh; t: number }[] = [];
+  /** Trazadoras libres (se reutilizan: nada de mallas nuevas en cada disparo). */
+  private tracerPool: THREE.Mesh[] = [];
   private wheelTimer = 0;
+  /** Segundos que le quedan al jugador con los pies precintados (cinta de la banda). */
+  private tapedPlayer = 0;
   /** Sin munición infinita salvo trucos. */
   infiniteAmmo = false;
+  /** Ayuda de apuntado suave (imán hacia el enemigo más cercano al centro al apuntar). */
+  aimAssist = true;
 
   constructor(private game: Game) {
     game.mod.combat = this;
+    // al recibir un golpe: la cámara tiembla y da un pequeño respingo (más cuanto más daño)
+    game.events.on('player:hurt', (e) => {
+      const a = e.amount || 0;
+      if (a < 1) return;
+      game.events.emit('camera:shake', { amount: Math.min(0.6, 0.18 + a / 30) });
+      const cam = this.cam;
+      if (cam && this.player?.state !== 'dead') {
+        cam.pitch += Math.min(0.03, 0.006 + a * 0.0012);
+        cam.yaw += (rnd.next() - 0.5) * Math.min(0.03, a * 0.0015);
+      }
+    });
   }
 
   private get player(): Player {
@@ -225,8 +258,62 @@ export class Combat implements System {
           };
     if (this.reloading > 0 && g.hud.weapon) g.hud.weapon.name = def.name + ' (recargando…)';
 
+    if (this.tapedPlayer > 0) {
+      this.tapedPlayer -= dt;
+      if (this.tapedPlayer <= 0) p.speedMul = 1;
+    }
+    if (aiming && this.aimAssist) this.assistAim(dt);
+
     this.updateProjectiles(dt);
     this.updateTracers(dt);
+  }
+
+  /**
+   * Imán leve: si al apuntar hay un enemigo cerca del centro de la pantalla (y se le ve),
+   * la mira se desliza un poco hacia él. Se nota, pero no apunta por ti.
+   */
+  private assistAim(dt: number) {
+    const g = this.game;
+    const npcs = g.mod.npcs?.list as Npc[] | undefined;
+    const cam = this.cam;
+    if (!npcs || !cam) return;
+    const p = this.player;
+    const camPos = g.camera.position;
+    const look = g.camera.getWorldDirection(tmpA);
+    let best: Npc | null = null;
+    let bestK = 1;
+    for (const n of npcs) {
+      if (!n.hostile || !n.alive || n.removed || n.vehicle) continue;
+      // a la policía que solo quiere detenerte no se le «ayuda» a disparar (sería un disgusto)
+      if (n.police && n.brain?.arrestOnly) continue;
+      const dx = n.position.x - p.position.x, dz = n.position.z - p.position.z;
+      if (dx * dx + dz * dz > ASSIST_RANGE * ASSIST_RANGE) continue;
+      tmpB.set(n.position.x, n.position.y + (n.state === 'knocked' || n.state === 'taped' ? 0.4 : 1.15), n.position.z).sub(camPos);
+      const dist = tmpB.length();
+      if (dist < 1.5) continue;
+      const ang = Math.acos(Math.min(1, look.dot(tmpB) / dist));
+      // cono: unos grados más el tamaño del cuerpo a esa distancia
+      const cone = ASSIST_CONE + Math.atan(0.45 / dist);
+      const k = ang / cone;
+      if (k < bestK) {
+        bestK = k;
+        best = n;
+      }
+    }
+    if (!best) return;
+    tmpB.set(best.position.x, best.position.y + (best.state === 'knocked' || best.state === 'taped' ? 0.4 : 1.15), best.position.z);
+    const d = tmpB.sub(camPos);
+    const len = d.length();
+    if (g.physics.raycast(camPos, d, len - 0.5, SOLID)) return; // detrás de una pared: nada
+    d.divideScalar(len);
+    const wantYaw = Math.atan2(-d.x, -d.z);
+    const wantPitch = Math.asin(THREE.MathUtils.clamp(d.y, -1, 1));
+    let dy = wantYaw - cam.yaw;
+    dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+    // más fuerte cuanto más centrado (así no «salta» de un enemigo a otro)
+    const pull = Math.min(1, dt * ASSIST_PULL * (1 - bestK * 0.6));
+    cam.yaw += dy * pull;
+    cam.pitch += (wantPitch - cam.pitch) * pull;
   }
 
   private startReload() {
@@ -293,7 +380,7 @@ export class Combat implements System {
         this.spawnTape(shooter, muzzle, dir);
         return;
       case 'grenade':
-        this.spawnGrenade(shooter, muzzle, dir);
+        this.spawnGrenade(shooter, muzzle, dir, def.damage);
         return;
     }
     // hitscan y sellos
@@ -312,7 +399,7 @@ export class Combat implements System {
       if (hit) this.applyHit(hit, def, shooter, d);
     }
     if (def.mode === 'hitscan' && shooter.kind === 'player' && this.gunMesh) {
-      this.particles?.emit('shell', muzzle, { count: 1, dir: new THREE.Vector3(1, 1, 0) });
+      this.particles?.emit('shell', muzzle, { count: 1, dir: SHELL_DIR });
     }
   }
 
@@ -324,11 +411,16 @@ export class Combat implements System {
   private tracer(from: THREE.Vector3, to: THREE.Vector3) {
     const len = from.distanceTo(to);
     if (len < 1) return;
-    const m = new THREE.Mesh(tracerGeo, tracerMat);
+    let m = this.tracerPool.pop();
+    if (!m) {
+      m = new THREE.Mesh(tracerGeo, tracerMat);
+      m.frustumCulled = false;
+      this.game.scene.add(m);
+    }
+    m.visible = true;
     m.position.lerpVectors(from, to, 0.5);
     m.lookAt(to);
     m.scale.set(1, 1, len);
-    this.game.scene.add(m);
     this.tracers.push({ mesh: m, t: 0 });
   }
 
@@ -338,7 +430,8 @@ export class Combat implements System {
       t.t += dt;
       t.mesh.scale.x = t.mesh.scale.y = Math.max(0.01, 1 - t.t / 0.07);
       if (t.t > 0.07) {
-        this.game.scene.remove(t.mesh);
+        t.mesh.visible = false;
+        this.tracerPool.push(t.mesh);
         this.tracers.splice(i, 1);
       }
     }
@@ -350,6 +443,12 @@ export class Combat implements System {
     const g = this.game;
     if (owner instanceof Npc) {
       if (shooter.kind === 'npc' && shooter.npc === owner) return;
+      // entre los de un mismo bando no se hacen daño (la bala se para en él, pero sin más)
+      if (shooter.kind === 'npc' && shooter.npc && owner.hostile && owner.police === shooter.npc.police && owner.role !== 'civil') {
+        this.particles?.emit('cardboard', hit.point, { count: 2, scale: 0.5 });
+        return;
+      }
+      const wasAlive = owner.alive;
       if (def.mode === 'stamp') {
         owner.stun(2.5);
         owner.hurt(def.damage, { cause: 'sellos', shooter }, dir, 0);
@@ -357,8 +456,15 @@ export class Combat implements System {
         const knock = def.id === 'shotgun' ? 5 : def.id === 'rifle' ? 3 : 0;
         owner.hurt(def.damage, { cause: 'bala', shooter }, dir, knock);
       }
-      this.particles?.emit(def.mode === 'stamp' ? 'stamps' : 'cardboard', hit.point, { count: 3, dir: dir.clone().negate(), spread: 0.6, scale: 0.6 });
-      if (shooter.kind === 'player') g.events.emit('hitmarker' as any, { kill: !owner.alive } as any);
+      const back = tmpA.copy(dir).negate();
+      this.particles?.emit(def.mode === 'stamp' ? 'stamps' : 'cardboard', hit.point, { count: def.mode === 'stamp' ? 3 : 5, dir: back, spread: 0.6, scale: 0.6 });
+      if (def.mode !== 'stamp') this.particles?.emit('dust', hit.point, { count: 2, dir: back, scale: 0.45, life: 0.6 });
+      // (a uno que ya está derribado no se le cuenta otra «baja»)
+      if (shooter.kind === 'player' && wasAlive) {
+        g.events.emit('hitmarker' as any, { kill: !owner.alive } as any);
+        g.mod.audio?.play('wood', { pos: hit.point, volume: 0.3, pitch: 1.5 });
+        if (!owner.alive) this.particles?.emit('stars', hit.point, { count: 4 });
+      }
       return;
     }
     if (owner instanceof Vehicle) {
@@ -449,7 +555,7 @@ export class Combat implements System {
     this.projectiles.push({ kind: 'tape', mesh, pos: pos.clone(), vel: dir.clone().multiplyScalar(38), t: 0, fuse: 0, owner, hit: new Set() });
   }
 
-  private spawnGrenade(owner: Shooter, pos: THREE.Vector3, dir: THREE.Vector3) {
+  private spawnGrenade(owner: Shooter, pos: THREE.Vector3, dir: THREE.Vector3, damage = WEAPONS.fragile.damage) {
     const w = this.game.physics.world;
     const throwDir = dir.clone();
     throwDir.y += 0.35;
@@ -467,11 +573,11 @@ export class Combat implements System {
     );
     const mesh = new THREE.Mesh(fragileGeo, fragileMat);
     // cartel FRÁGIL (banda roja)
-    const band = new THREE.Mesh(new THREE.BoxGeometry(0.41, 0.08, 0.41), new THREE.MeshLambertMaterial({ color: '#e63946' }));
+    const band = new THREE.Mesh(fragileBandGeo, fragileBandMat);
     mesh.add(band);
     mesh.castShadow = true;
     this.game.scene.add(mesh);
-    this.projectiles.push({ kind: 'grenade', mesh, body, pos: pos.clone(), vel: dir.clone(), t: 0, fuse: 2.4, owner, hit: new Set() });
+    this.projectiles.push({ kind: 'grenade', mesh, body, pos: pos.clone(), vel: throwDir.clone().multiplyScalar(17), t: 0, fuse: 2.4, owner, hit: new Set(), damage });
     this.game.mod.audio?.play('whoosh');
   }
 
@@ -499,8 +605,14 @@ export class Combat implements System {
         const lv = pr.body!.linvel();
         const sp = Math.hypot(lv.x, lv.y, lv.z);
         if (sp > 5 && npcs) {
-          for (const n of npcs.within(pr.pos, 1.1) as Npc[]) {
-            if (pr.hit.has(n) || !n.alive || n.vehicle || (pr.owner.kind === 'npc' && pr.owner.npc === n)) continue;
+          // choque con el cuerpo entero (de los pies a la cabeza), no solo cerca de los pies
+          const ownerNpc = pr.owner.kind === 'npc' ? pr.owner.npc : null;
+          for (const n of npcs.within(pr.pos, 2.2, nearList)) {
+            if (pr.hit.has(n) || !n.alive || n.vehicle || ownerNpc === n) continue;
+            const dy = pr.pos.y - n.position.y;
+            if (dy < -0.3 || dy > 2 || Math.hypot(pr.pos.x - n.position.x, pr.pos.z - n.position.z) > 0.85) continue;
+            // las cajas de la banda no tumban a los suyos (ni las de la policía a la policía)
+            if (ownerNpc && n.hostile && n.police === ownerNpc.police && n.role !== 'civil') continue;
             pr.hit.add(n);
             n.hurt(WEAPONS.launcher.damage, { cause: 'caja', shooter: pr.owner }, new THREE.Vector3(lv.x, 0, lv.z).normalize(), 7);
             g.mod.audio?.play('wood', { pos: pr.pos });
@@ -510,8 +622,9 @@ export class Combat implements System {
         }
         // el jugador también se lleva cajazos de la banda
         const p = this.player;
-        if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && p.position.distanceTo(pr.pos) < 1.3 && !pr.hit.size) {
-          p.hurt(15, { cause: 'caja' });
+        const pdy = pr.pos.y - p.position.y;
+        if (pr.owner.kind === 'npc' && sp > 5 && p.state === 'foot' && !pr.hit.size && pdy > -0.3 && pdy < 2 && Math.hypot(pr.pos.x - p.position.x, pr.pos.z - p.position.z) < 0.9) {
+          p.hurt(12, { cause: 'caja', shooter: pr.owner, from: pr.pos.clone() });
           p.push.set(lv.x * 0.3, 3, lv.z * 0.3);
           pr.hit.add(null as any);
         }
@@ -522,8 +635,20 @@ export class Combat implements System {
       } else if (pr.kind === 'tape') {
         const step = tmpV.copy(pr.vel).multiplyScalar(dt);
         const len = step.length();
-        const hit = g.physics.raycast(pr.pos, step, len + 0.3, HIT_MASK, pr.owner.exclude);
+        let hit = g.physics.raycast(pr.pos, step, len + 0.3, HIT_MASK, pr.owner.exclude);
         pr.mesh.rotation.x += dt * 20;
+        // pasar rozando también precinta (el rollo es gordo y los muñecos, delgados)
+        if (npcs && (!hit || !(hit.owner instanceof Npc))) {
+          const probe = tmpV2.copy(pr.pos).addScaledVector(step, 0.5);
+          for (const n of npcs.within(probe, 1.4, nearList)) {
+            if (!n.alive || n.vehicle || (pr.owner.kind === 'npc' && pr.owner.npc === n)) continue;
+            const dy = probe.y - n.position.y;
+            if (dy < 0.1 || dy > 1.9 || Math.hypot(probe.x - n.position.x, probe.z - n.position.z) > 0.75) continue;
+            if (hit && hit.distance < probe.distanceTo(pr.pos)) break; // hay una pared antes
+            hit = { point: probe.clone(), normal: step.clone().normalize().negate(), distance: 0, collider: null as any, owner: n };
+            break;
+          }
+        }
         if (hit) {
           const owner: any = hit.owner;
           if (owner instanceof Npc) {
@@ -532,7 +657,7 @@ export class Combat implements System {
             g.mod.audio?.play('shot_tape', { pos: hit.point, volume: 0.5, pitch: 0.7 });
           } else if (owner === this.player && pr.owner.kind === 'npc') {
             this.player.speedMul = 0.3;
-            setTimeout(() => (this.player.speedMul = 1), 2500);
+            this.tapedPlayer = 2.5;
             g.events.emit('toast', { text: '¡Te han precintado los pies!', time: 1.5 });
           } else {
             this.particles?.emit('tape', hit.point, { count: 4 });
@@ -546,13 +671,33 @@ export class Combat implements System {
         if (pr.t > 2) this.removeProjectile(i);
       } else if (pr.kind === 'grenade') {
         pr.fuse -= dt;
+        if (pr.owner.kind === 'player' && pr.body && !pr.landed) {
+          // al primer golpe (cambio brusco de velocidad) o junto a un enemigo: ¡crac! y explota
+          const lv = pr.body.linvel();
+          const dv = Math.hypot(lv.x - pr.vel.x, lv.y - pr.vel.y, lv.z - pr.vel.z);
+          pr.vel.set(lv.x, lv.y, lv.z);
+          let near = false;
+          if (npcs && pr.t > 0.12) {
+            for (const n of npcs.within(pr.pos, 1.3, nearList)) {
+              if (n.alive && n.hostile && !n.vehicle) {
+                near = true;
+                break;
+              }
+            }
+          }
+          if ((dv > 4 && pr.t > 0.08) || near) {
+            pr.landed = true;
+            pr.fuse = Math.min(pr.fuse, near ? 0.05 : 0.3);
+            g.mod.audio?.play('glass', { pos: pr.pos, volume: 0.6 });
+          }
+        }
         // parpadeo al final
         const blink = pr.fuse < 0.8 && Math.sin(pr.t * 40) > 0;
         (pr.mesh as THREE.Mesh).scale.setScalar(blink ? 1.15 : 1);
         if (pr.fuse <= 0) {
           const pos = pr.pos.clone();
           this.removeProjectile(i);
-          this.explode(pos, 7, WEAPONS.fragile.damage, pr.owner);
+          this.explode(pos, 7, pr.damage ?? WEAPONS.fragile.damage, pr.owner);
         }
       }
     }
@@ -568,12 +713,17 @@ export class Combat implements System {
     g.events.emit('weapon:shot' as any, { pos: pos.clone(), shooter: source, weapon: 'explosion' } as any);
     if (big) g.slowMo(0.8, 0.35);
     const npcs: Npc[] = g.mod.npcs?.within(pos, radius) ?? [];
+    let downed = 0;
     for (const n of [...npcs]) {
       const d = n.position.distanceTo(pos);
       const k = 1 - d / radius;
       const dir = n.position.clone().sub(pos).setY(0).normalize();
+      const was = n.alive && n.hostile;
       n.hurt(damage * k, { cause: 'explosión', shooter: source }, dir, 6 + k * 10);
+      if (was && !n.alive) downed++;
     }
+    // un paquete FRÁGIL que tumba a varios de golpe, cerca de ti: cámara lenta un instante
+    if (!big && downed >= 2 && this.player && this.player.position.distanceTo(pos) < 35) g.slowMo(0.55, 0.3);
     for (const v of g.mod.vehicles?.list ?? []) {
       const d = (v as Vehicle).getPosition(tmpV).distanceTo(pos);
       if (d < radius) {
@@ -594,7 +744,7 @@ export class Combat implements System {
           p.pose = 'knocked';
           p.poseTimer = 1;
         }
-        p.hurt(damage * 0.6 * k, { cause: 'explosión' });
+        p.hurt(damage * 0.6 * k, { cause: 'explosión', from: pos.clone() });
       }
     }
     g.mod.breakables?.explosion?.(pos, radius);

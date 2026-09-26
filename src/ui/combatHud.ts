@@ -1,7 +1,12 @@
-// Extras de combate en pantalla: rueda de armas, marca de impacto, aviso de arresto
-// y puntos de enemigos en el minimapa.
+// Extras de combate en pantalla: rueda de armas, marca de impacto, aviso de arresto,
+// de dónde vienen los disparos que te dan y puntos de enemigos en el minimapa.
+import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import { WEAPONS, type WeaponId } from '../combat/weapons';
+
+const tmpF = new THREE.Vector3();
+const tmpR = new THREE.Vector3();
+const tmpP = new THREE.Vector3();
 
 const CSS = `
 .cr-rueda,.cr-impacto,.cr-arresto{pointer-events:none !important}
@@ -16,6 +21,8 @@ const CSS = `
 .cr-arresto{position:fixed;left:50%;top:26%;transform:translateX(-50%);z-index:21;pointer-events:none;background:rgba(29,53,87,.92);color:#fff;border:3px solid #fff;border-radius:16px;padding:10px 18px;font:900 20px system-ui;text-align:center;display:none}
 .cr-arresto i{display:block;height:8px;background:#1b1030;border-radius:4px;margin-top:8px;overflow:hidden}
 .cr-arresto i b{display:block;height:100%;background:#2ec4ff}
+.cr-dano-dir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:21;pointer-events:none;opacity:0}
+.cr-dano-dir i{position:absolute;left:-70px;top:calc(-1 * min(30vh, 210px));width:140px;height:40px;box-sizing:border-box;border-top:9px solid #ff2d55;border-radius:50%/100% 100% 0 0;filter:drop-shadow(0 -2px 0 #1b1030) drop-shadow(0 0 6px rgba(255,45,85,.8))}
 `;
 
 export class CombatHud implements System {
@@ -25,6 +32,10 @@ export class CombatHud implements System {
   private arrest: HTMLDivElement;
   private shownList = '';
   private hitTimer = 0;
+  /** Flechas de «te disparan desde aquí» (se reutilizan). */
+  private dirs: { el: HTMLDivElement; from: THREE.Vector3; t: number }[] = [];
+  /** Marcas de enemigos del minimapa (se reutilizan cada frame). */
+  private threatPool: { x: number; z: number; icon: string; color: string; threat: true }[] = [];
 
   constructor(private game: Game) {
     const st = document.createElement('style');
@@ -39,6 +50,25 @@ export class CombatHud implements System {
     this.arrest.className = 'cr-arresto';
     this.arrest.innerHTML = '🚓 ¡TE ESTÁN DETENIENDO! Muévete<i><b></b></i>';
     game.ui.append(this.wheel, this.hit, this.arrest);
+    for (let i = 0; i < 4; i++) {
+      const el = document.createElement('div');
+      el.className = 'cr-dano-dir';
+      el.appendChild(document.createElement('i'));
+      game.ui.appendChild(el);
+      this.dirs.push({ el, from: new THREE.Vector3(), t: 0 });
+    }
+    game.events.on('player:hurt', (e) => {
+      const src = e.source as any;
+      const from: THREE.Vector3 | undefined = src?.from ?? src?.shooter?.npc?.position;
+      if (!from || (e.amount || 0) < 1) return;
+      const p = game.mod.player?.position;
+      if (!p || Math.hypot(from.x - p.x, from.z - p.z) < 0.8) return;
+      // la más vieja (o una libre)
+      let slot = this.dirs[0];
+      for (const d of this.dirs) if (d.t < slot.t) slot = d;
+      slot.from.copy(from);
+      slot.t = 1.3;
+    });
     game.events.on('hitmarker' as any, (e: any) => {
       this.hit.classList.toggle('baja', !!e.kill);
       this.hit.style.opacity = '1';
@@ -56,6 +86,23 @@ export class CombatHud implements System {
   postUpdate(dt: number) {
     const g = this.game;
     (this as any).tickWheel(dt);
+    // de dónde vienen los golpes: un arco rojo alrededor de la mira que apunta al tirador
+    const cam = g.mod.cameraRig;
+    const pp = g.mod.player?.position;
+    for (const d of this.dirs) {
+      if (d.t <= 0) continue;
+      d.t -= dt;
+      if (d.t <= 0 || !cam || !pp || !g.hud.visible) {
+        d.el.style.opacity = '0';
+        continue;
+      }
+      const f = cam.forwardXZ(tmpF);
+      const r = cam.rightXZ(tmpR);
+      const tx = d.from.x - pp.x, tz = d.from.z - pp.z;
+      const ang = Math.atan2(tx * r.x + tz * r.z, tx * f.x + tz * f.z);
+      d.el.style.transform = `rotate(${ang.toFixed(3)}rad)`;
+      d.el.style.opacity = String(Math.min(1, d.t / 0.5));
+    }
     // rueda de armas
     const c = g.mod.combat;
     if (c) {
@@ -82,17 +129,26 @@ export class CombatHud implements System {
     this.arrest.style.display = a > 0 && g.hud.visible ? 'block' : 'none';
     if (a > 0) (this.arrest.querySelector('b') as HTMLElement).style.width = `${Math.round(a * 100)}%`;
     // enemigos en el minimapa
+    // (se quitan las del frame anterior sin crear listas nuevas)
     const hud = g.hud;
-    hud.markers = hud.markers.filter((m) => !(m as any).threat);
+    const mk = hud.markers;
+    let w = 0;
+    for (let i = 0; i < mk.length; i++) if (!(mk[i] as any).threat) mk[w++] = mk[i];
+    mk.length = w;
     const p = g.mod.player?.position;
     if (p && g.mod.npcs) {
       let n = 0;
       for (const npc of g.mod.npcs.list) {
         if (n > 14) break;
         if (!npc.hostile || !npc.alive || npc.removed) continue;
-        const pos = npc.vehicle ? npc.vehicle.getPosition(npc.position.clone()) : npc.position;
+        const pos = npc.vehicle ? npc.vehicle.getPosition(tmpP) : npc.position;
         if (pos.distanceTo(p) > 90) continue;
-        hud.markers.push({ x: pos.x, z: pos.z, icon: '•', color: npc.police ? '#2ec4ff' : '#ff2d55', threat: true } as any);
+        let m = this.threatPool[n];
+        if (!m) m = this.threatPool[n] = { x: 0, z: 0, icon: '•', color: '', threat: true };
+        m.x = pos.x;
+        m.z = pos.z;
+        m.color = npc.police ? '#2ec4ff' : '#ff2d55';
+        mk.push(m as any);
         n++;
       }
     }
