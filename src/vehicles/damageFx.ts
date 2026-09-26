@@ -22,7 +22,10 @@ interface Debris {
 
 export class VehicleDamageFx implements System {
   name = 'vehicleDamageFx';
-  private timers = new Map<number, { smoke: number; fire: number; burning: number; dead: number }>();
+  /** Temporizadores de humo/fuego de cada vehículo (por objeto: así se pueden limpiar sin buscar ids). */
+  private timers = new Map<Vehicle, { smoke: number; fire: number; burning: number; dead: number }>();
+  /** Cada cuánto se barren los temporizadores de vehículos que ya no existen. */
+  private pruneTimer = 3;
   private debris: Debris[] = [];
   private debrisGeo = new THREE.BoxGeometry(1, 1, 1);
 
@@ -40,14 +43,16 @@ export class VehicleDamageFx implements System {
 
   update(dt: number) {
     const cam = this.game.camera.position;
-    // olvidar los temporizadores de vehículos que ya no existen (el tráfico va y viene)
-    if (this.timers.size > this.vm.list.length + 30) {
-      const alive = new Set(this.vm.list.map((v) => v.id));
-      for (const id of this.timers.keys()) if (!alive.has(id)) this.timers.delete(id);
+    // olvidar los temporizadores de vehículos que ya no existen (el tráfico va y viene): cada 3 s
+    this.pruneTimer -= dt;
+    if (this.pruneTimer <= 0) {
+      this.pruneTimer = 3;
+      const list = this.vm.list;
+      for (const v of this.timers.keys()) if (v.disposed || !list.includes(v)) this.timers.delete(v);
     }
     for (const v of this.vm.list) {
-      let t = this.timers.get(v.id);
-      if (!t) this.timers.set(v.id, (t = { smoke: 0, fire: 0, burning: 0, dead: 0 }));
+      let t = this.timers.get(v);
+      if (!t) this.timers.set(v, (t = { smoke: 0, fire: 0, burning: 0, dead: 0 }));
       v.getPosition(tmpV);
       const far = tmpV.distanceToSquared(cam) > 150 * 150;
       if (v.destroyed) {
@@ -63,7 +68,7 @@ export class VehicleDamageFx implements System {
         }
         if (t.dead > 40 && v.transient && far && v !== this.vm.current) {
           this.vm.remove(v);
-          this.timers.delete(v.id);
+          this.timers.delete(v);
         }
         continue;
       }
@@ -88,7 +93,7 @@ export class VehicleDamageFx implements System {
             v.onFire = true;
             if (v === this.vm.current) this.game.events.emit('toast', { text: '¡Está ardiendo! ¡Sal de ahí!', color: '#ff5400' });
           }
-          this.game.mod.audio?.loop('fire' + v.id, 'fire', engine, 0.5);
+          this.game.mod.audio?.loop(v.fireKey, 'fire', engine, 0.5);
           if (t.burning > 7) v.damage(99999);
         }
       }
@@ -111,6 +116,16 @@ export class VehicleDamageFx implements System {
         }
       }
     }
+  }
+
+  /** Olvida el humo y el fuego de un vehículo (el tráfico lo reutiliza como si fuera nuevo). */
+  forget(v: Vehicle) {
+    this.timers.delete(v);
+  }
+
+  /** Cuántos temporizadores hay (para pruebas: no debe crecer sin fin). */
+  get timerCount() {
+    return this.timers.size;
   }
 
   /** Explosión de un vehículo. */

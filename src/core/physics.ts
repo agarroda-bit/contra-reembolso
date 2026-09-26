@@ -26,8 +26,16 @@ export function groups(membership: number, filter: number): number {
 /** Lo que choca con el mundo sólido (para cámara, balas, etc.). */
 export const SOLID = G.GROUND | G.STATIC;
 
+/** Temporales de raycast() y groundHeight() (se llaman muchísimo: nada de objetos nuevos si no hay impacto). */
+const rayDir = new THREE.Vector3();
+const groundFrom = new THREE.Vector3();
+const DOWN = new THREE.Vector3(0, -1, 0);
+let sharedRay: RAPIER.Ray | null = null;
+
 export interface RayHit {
+  /** Punto de impacto: objeto nuevo en cada impacto (se puede guardar). */
   point: THREE.Vector3;
+  /** Normal en el punto de impacto: objeto nuevo en cada impacto (se puede guardar). */
   normal: THREE.Vector3;
   distance: number;
   collider: RAPIER.Collider;
@@ -99,6 +107,7 @@ export class Physics {
   /**
    * Lanza un rayo. `mask` = grupos contra los que choca.
    * `exclude` = colisor o cuerpo a ignorar (el propio jugador, el propio coche...).
+   * No toca `origin` ni `dir`. Si no choca no crea ningún objeto; si choca, `point` y `normal` son nuevos.
    */
   raycast(
     origin: THREE.Vector3,
@@ -107,8 +116,15 @@ export class Physics {
     mask: number = SOLID,
     exclude?: RAPIER.Collider | RAPIER.RigidBody | null,
   ): RayHit | null {
-    const d = dir.clone().normalize();
-    const ray = new RAPIER.Ray({ x: origin.x, y: origin.y, z: origin.z }, { x: d.x, y: d.y, z: d.z });
+    const d = rayDir.copy(dir).normalize();
+    // un solo rayo de Rapier para todo (se le cambian el origen y la dirección)
+    const ray = sharedRay ?? (sharedRay = new RAPIER.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: -1, z: 0 }));
+    ray.origin.x = origin.x;
+    ray.origin.y = origin.y;
+    ray.origin.z = origin.z;
+    ray.dir.x = d.x;
+    ray.dir.y = d.y;
+    ray.dir.z = d.z;
     const exCol = exclude && 'handle' in exclude && !(exclude as any).numColliders ? (exclude as RAPIER.Collider) : undefined;
     const exBody = exclude && (exclude as any).numColliders ? (exclude as RAPIER.RigidBody) : undefined;
     const hit = this.world.castRayAndGetNormal(
@@ -128,7 +144,7 @@ export class Physics {
 
   /** Altura del suelo sólido bajo (x, z), o null. */
   groundHeight(x: number, z: number, fromY = 200, mask: number = SOLID): number | null {
-    const hit = this.raycast(new THREE.Vector3(x, fromY, z), new THREE.Vector3(0, -1, 0), fromY + 50, mask);
+    const hit = this.raycast(groundFrom.set(x, fromY, z), DOWN, fromY + 50, mask);
     return hit ? hit.point.y : null;
   }
 

@@ -31,9 +31,18 @@ const HANDBRAKE_K = 0.6;
 const ENGINE_K = 1.55;
 /** En el aire la gravedad pesa menos: saltos más largos y vistosos (la del mundo es muy fuerte, −22). */
 const AIR_GRAVITY = 0.62;
+/** Contra qué chocan los rayos de las ruedas. */
+const WHEEL_GROUPS = groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE);
+/** Amortiguamiento normal del chasis (en el mar sube a 3: se frena y se hunde despacio). */
+const LIN_DAMPING = 0.08;
+const ANG_DAMPING = 0.9;
 
 export class Vehicle {
   readonly id = nextId++;
+  /** Nombres de sus bucles de sonido (hechos una vez, no en cada frame). */
+  readonly skidKey = 'skid' + this.id;
+  readonly sirenKey = 'siren' + this.id;
+  readonly fireKey = 'fire' + this.id;
   readonly spec: VehicleSpec;
   readonly mesh: VehicleMesh;
   readonly body: RAPIER.RigidBody;
@@ -77,6 +86,8 @@ export class Vehicle {
   readonly wheelContact = [false, false, false, false];
   /** Velocidad lateral (m/s): derrape. */
   slip = 0;
+  /** true si la carrocería tiene alguna abolladura (entonces no se puede reutilizar como nuevo). */
+  dented = false;
 
   constructor(private game: Game, kind: VehicleKind, pos: THREE.Vector3, heading: number, color?: string) {
     this.spec = VEHICLES[kind];
@@ -93,8 +104,8 @@ export class Vehicle {
       RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(pos.x, spawnY, pos.z)
         .setRotation({ x: tmpQ.x, y: tmpQ.y, z: tmpQ.z, w: tmpQ.w })
-        .setLinearDamping(0.08)
-        .setAngularDamping(0.9)
+        .setLinearDamping(LIN_DAMPING)
+        .setAngularDamping(ANG_DAMPING)
         .setCanSleep(true)
         .setCcdEnabled(s.maxSpeed > 30),
     );
@@ -189,6 +200,18 @@ export class Vehicle {
       if (this.airborne && !this.disposed) this.setAirborne(false);
       return;
     }
+    // Aparcado, sin nadie dentro y dormido en Rapier (quieto del todo): no hace falta simular las ruedas
+    // (4 rayos por paso) ni las ayudas. Un golpe, una explosión o subirse lo despiertan y vuelve a lo normal.
+    // Si está volcado o encallado se sigue simulando, para que se enderece solo como siempre.
+    // Con alguien al volante (o acelerando, como en el banco de pruebas) se mantiene siempre despierto;
+    // sin nadie, las ayudas no lo despiertan (así, cuando se para, Rapier lo puede dormir y deja de gastar).
+    const wake = this.driver !== null || Math.abs(this.controls.throttle) > 0.05;
+    if (!wake && this.flipTimer === 0 && this.beachedTimer === 0 && this.body.isSleeping()) {
+      this.speed = 0;
+      this.slip = 0;
+      return;
+    }
+    if (wake && this.body.isSleeping()) this.body.wakeUp();
     const s = this.spec;
     const c = this.controller;
     const ctl = this.controls;
@@ -252,7 +275,8 @@ export class Vehicle {
       c.setWheelFrictionSlip(1, grip);
     }
 
-    c.updateVehicle(dt, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, groups(G.ALL, G.GROUND | G.STATIC | G.VEHICLE), (col) => col.handle !== this.collider.handle);
+    // (Rapier ya deja fuera el propio chasis en los rayos de las ruedas: sin filtro en JS, que cada llamada cuesta)
+    c.updateVehicle(dt, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, WHEEL_GROUPS);
 
     // Ayudas arcade
     let contacts = 0;
@@ -268,10 +292,10 @@ export class Vehicle {
         // volante a la derecha (steer > 0) = giro negativo alrededor de Y
         const target = -(this.speed < 0 ? -1 : 1) * ctl.steer * 3 * THREE.MathUtils.clamp(1500 / s.mass, 0.35, 1);
         if (Math.sign(w.y) !== Math.sign(target) || Math.abs(w.y) < Math.abs(target)) {
-          this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, true);
+          this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, wake);
         }
       } else if (!ctl.handbrake && this.slip > 2.5 && ctl.steer * w.y >= 0) {
-        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * 2.5)), z: w.z }, true);
+        this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * 2.5)), z: w.z }, wake);
       }
     }
 
@@ -288,14 +312,14 @@ export class Vehicle {
       const tq = tmpTq.crossVectors(bodyUp, UP);
       if (this.driver?.kind === 'player' && bodyUp.y > 0.5) {
         // el del jugador se mantiene plano en el aire: aterriza sobre las ruedas y no clava el morro
-        this.body.applyTorqueImpulse({ x: 0, y: -ctl.steer * mass * 0.6 * dt, z: 0 }, true);
+        this.body.applyTorqueImpulse({ x: 0, y: -ctl.steer * mass * 0.6 * dt, z: 0 }, wake);
         const w = this.body.angvel();
         const k = Math.min(1, dt * 5);
-        this.body.setAngvel({ x: w.x + (tq.x * 2.5 - w.x) * k, y: w.y, z: w.z + (tq.z * 2.5 - w.z) * k }, true);
+        this.body.setAngvel({ x: w.x + (tq.x * 2.5 - w.x) * k, y: w.y, z: w.z + (tq.z * 2.5 - w.z) * k }, wake);
       } else {
         const levelK = mass * 2.2;
-        this.body.applyTorqueImpulse({ x: tq.x * levelK * dt * 3, y: -ctl.steer * mass * 0.6 * dt, z: tq.z * levelK * dt * 3 }, true);
-        this.body.setAngvel({ x: av.x * 0.995, y: av.y, z: av.z * 0.995 }, true);
+        this.body.applyTorqueImpulse({ x: tq.x * levelK * dt * 3, y: -ctl.steer * mass * 0.6 * dt, z: tq.z * levelK * dt * 3 }, wake);
+        this.body.setAngvel({ x: av.x * 0.995, y: av.y, z: av.z * 0.995 }, wake);
       }
     } else {
       if (this.airborne) this.setAirborne(false);
@@ -304,15 +328,15 @@ export class Vehicle {
       this.airTime = 0;
       // carga aerodinámica: pega al suelo a alta velocidad
       const down = Math.min(absSpeed, 50) * mass * 0.12;
-      this.body.applyImpulse({ x: -bodyUp.x * down * dt, y: -bodyUp.y * down * dt, z: -bodyUp.z * down * dt }, true);
+      this.body.applyImpulse({ x: -bodyUp.x * down * dt, y: -bodyUp.y * down * dt, z: -bodyUp.z * down * dt }, wake);
       // anti-vuelco: momento que mantiene derecho
       const tq = tmpTq.crossVectors(bodyUp, UP).multiplyScalar(mass * (s.twoWheels ? 14 : 5));
-      this.body.applyTorqueImpulse({ x: tq.x * dt, y: 0, z: tq.z * dt }, true);
+      this.body.applyTorqueImpulse({ x: tq.x * dt, y: 0, z: tq.z * dt }, wake);
     }
     if (s.twoWheels) {
       // la moto no vuelca: amortigua el balanceo (con el giro ya corregido arriba)
       const w = this.body.angvel();
-      this.body.setAngvel({ x: w.x * 0.9, y: w.y, z: w.z * 0.8 }, true);
+      this.body.setAngvel({ x: w.x * 0.9, y: w.y, z: w.z * 0.8 }, wake);
     }
 
     // Volcado (o de lado contra una pared): se endereza solo a los 2,5 s si va despacio
@@ -391,6 +415,7 @@ export class Vehicle {
 
   /** Deforma la carrocería cerca del punto de impacto (dirección de la velocidad perdida). */
   private dent(dv: number) {
+    this.dented = true;
     const geo = this.mesh.bodyGeo;
     const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     // punto de impacto aproximado: la cara del chasis en la dirección del movimiento previo
@@ -427,6 +452,33 @@ export class Vehicle {
     this.flipTimer = 0;
   }
 
+  /**
+   * Lo deja como recién salido a la calle para reutilizarlo en otro sitio (el tráfico recicla sus coches).
+   * Solo para vehículos sin abolladuras ni destruidos: no arregla la carrocería. Después, place().
+   */
+  resetForReuse() {
+    this.health = this.spec.health;
+    this.onFire = false;
+    this.packages = 0;
+    this.sirenOn = false;
+    this.hornTimer = 0;
+    this.boost = 1;
+    this.speed = 0;
+    this.slip = 0;
+    this.flipTimer = 0;
+    this.beachedTimer = 0;
+    this.airTime = 0;
+    this.steerSmooth = 0;
+    this.onImpact = null;
+    if (this.airborne) this.setAirborne(false);
+    const c = this.controls;
+    c.throttle = 0;
+    c.steer = 0;
+    c.handbrake = false;
+    c.boost = false;
+    this.prevVel.set(0, 0, 0);
+  }
+
   /** Coloca el vehículo en un sitio (teletransporte, pedir al garaje). */
   place(pos: THREE.Vector3, heading: number) {
     tmpQ.setFromAxisAngle(UP, heading);
@@ -436,6 +488,15 @@ export class Vehicle {
     this.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     this.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
     this.prevVel.set(0, 0, 0);
+    // Sacado del mar (rescate de un perseguidor, el garaje que te lo trae...): vuelve a ser un vehículo
+    // normal, sin el frenado del agua. Si se deja otra vez en el agua, el siguiente paso lo vuelve a marcar.
+    if (this.sinking) {
+      this.sinking = false;
+      this.body.setLinearDamping(LIN_DAMPING);
+      this.body.setAngularDamping(ANG_DAMPING);
+    }
+    this.flipTimer = 0;
+    this.beachedTimer = 0;
   }
 
   syncVisual(dt: number) {
