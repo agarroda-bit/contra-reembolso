@@ -85,6 +85,9 @@ interface LampSlot {
 }
 
 export function installDayNight(game: Game): DayNight {
+  // una sola vez por partida: si ya está, se devuelve el que hay (dos soles y dos cielos, no)
+  const existing = game.mod.dayNight as DayNight | undefined;
+  if (existing) return existing;
   const scene = game.scene;
   const S = new Float32Array(SKY_STRIDE);
 
