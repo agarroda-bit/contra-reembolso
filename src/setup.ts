@@ -34,6 +34,7 @@ import { PhotoMode } from './ui/photoMode';
 import { Achievements } from './gameplay/achievements';
 import { Daily } from './gameplay/daily';
 import { WeaponSpawns } from './gameplay/weaponSpawns';
+import { setupLuxury } from './luxury';
 import { ShopUI } from './ui/shop';
 import { Shops } from './gameplay/shops';
 import { Company } from './gameplay/company';
@@ -105,7 +106,11 @@ export function setupSystems(game: Game, fase: number, look: CharacterLook = def
     add(new Breakables(game));
     add(new Particles(game));
   }
-  if (fase >= 6) add(new CrazyVehicles(game));
+  if (fase >= 6) {
+    add(new CrazyVehicles(game));
+    setupLuxury(game);
+  }
+  game.mod.fase = fase;
   if (fase >= 9) {
     add(new RandomEvents(game));
     add(new PhotoMode(game));

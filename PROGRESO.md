@@ -4,7 +4,18 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 6 — La vida de lujo (integrando)
+## Fase actual: 7 — La historia del tablón (integrando)
+
+## Fase 6 — La vida de lujo ✅ (26/09, 07:45, publicada)
+- Casino «La Suerte Loca» (Centro): vestíbulo y tres juegos de verdad con animaciones y sonido: tragaperras «La Paquetera», ruleta europea y blackjack «El 21 del Puerto». Apuestas de 10 a 500 € con el dinero del juego.
+- Club Reembolso VIP (Centro): interior con pista de baile de colores, DJ, focos, bola de espejos y gente bailando; mesa VIP (1.500 €) y botellas de champán (300 €): fiesta con luces, confeti y subida de FAMA. Sin contenido sexual.
+- El de las hierbas (Barrio Viejo): 50 €; efecto psicodélico de pantalla (colores, ondas), cámara lenta, el personaje anda raro, la radio suena distorsionada y salen frases graciosas.
+- El ático (Colina): se compra por 25.000 € y se decora desde la tablet (sofá gigante, tele enorme, jacuzzi, acuario, estatua dorada, cuadros, neones, colección de coches); dormir en la cama pasa al día siguiente, cura y guarda.
+- Interior de la oficina con el tablón de encargos, que cambia con el nivel de la empresa y enseña los lujos comprados (café, sillón, acuario, cuadro, billar).
+- Radio en los vehículos con 3 emisoras de música generada por código (reguetón, electrónica y rumba), locutores y anuncios inventados; Q/E cambia de emisora.
+- Vehículos locos repartidos por la isla: carrito del súper con motor (rueda loca), patinete eléctrico, camión de la basura (lo arrasa todo), carrito de golf y grúa del puerto (el volante va al revés a ratos).
+- Resto de armas locas: paquete FRÁGIL explosivo y pistola de sellos (en la armería y tiradas por la isla).
+- Pruebas: + casino, club, hierbas y vehículos locos (`capturas/fase-6/`).
 
 ## Fase 5 — Tiendas y progreso ✅ (26/09, 07:25, publicada)
 - Menú principal con la isla de fondo (Continuar / Nueva partida / Opciones / Controles), creación del repartidor (nombre, piel, peinado, color de pelo, uniforme, gorra) con vista previa girando, pausa (Esc) y opciones (sensibilidad, invertir eje, volúmenes, calidad baja/media/alta, campo de visión).

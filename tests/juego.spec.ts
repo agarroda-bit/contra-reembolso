@@ -148,7 +148,10 @@ test('menú principal y creación del repartidor', async ({ page }) => {
 test('tiendas: armería, ropa, taller y empresa', async ({ page }) => {
   test.skip(FASE < 5, 'las tiendas llegan en la fase 5');
   const errors = await arrancar(page);
-  for (const [kind, file] of [['gunshop', '09-armeria'], ['clothes', '10-ropa'], ['garage', '11-taller'], ['office', '12-empresa']]) {
+  // desde la fase 6 la puerta de la oficina lleva al interior (el tablón está dentro)
+  const shops = [['gunshop', '09-armeria'], ['clothes', '10-ropa'], ['garage', '11-taller']];
+  if (FASE < 6) shops.push(['office', '12-empresa']);
+  for (const [kind, file] of shops) {
     await g(page, `__cr.mod.player.teleport(__cr.world.pois.find(p => p.kind === '${kind}').door.clone())`);
     await page.waitForFunction(() => !!(window as any).__cr.mod.interaction.current, null, { timeout: 15_000 });
     await page.keyboard.press('KeyE');
@@ -157,6 +160,39 @@ test('tiendas: armería, ropa, taller y empresa', async ({ page }) => {
     await page.keyboard.press('Escape');
     await page.waitForFunction(() => !(window as any).__cr.mod.shopUI.isOpen, null, { timeout: 15_000 });
   }
+  expect(errors).toEqual([]);
+});
+
+test('la vida de lujo: casino, club, hierbas y vehículo loco', async ({ page }) => {
+  test.skip(FASE < 6, 'llega en la fase 6');
+  test.setTimeout(240_000);
+  const errors = await arrancar(page);
+  await g(page, `__cr.mod.economy.cash = 90000`);
+  // casino
+  await g(page, `__cr.mod.player.teleport(__cr.world.pois.find(p => p.kind === 'casino').door.clone())`);
+  await page.waitForFunction(() => !!(window as any).__cr.mod.interaction.current, null, { timeout: 15_000 });
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(3000);
+  await page.screenshot({ path: `${DIR}/13-casino.png` });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => !(window as any).__cr.paused, null, { timeout: 15_000 });
+  // club VIP
+  await g(page, `__cr.mod.player.teleport(__cr.world.pois.find(p => p.kind === 'club').door.clone())`);
+  await page.waitForFunction(() => !!(window as any).__cr.mod.interaction.current, null, { timeout: 15_000 });
+  await page.keyboard.press('KeyE');
+  await page.waitForFunction(() => (window as any).__cr.mod.interiors.inside, null, { timeout: 30_000 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: `${DIR}/14-club.png` });
+  await g(page, `__cr.mod.interiors.exit()`);
+  await page.waitForFunction(() => !(window as any).__cr.mod.interiors.inside, null, { timeout: 30_000 });
+  // hierbas
+  await g(page, `__cr.mod.high.start(20)`);
+  await page.waitForTimeout(4000);
+  await page.screenshot({ path: `${DIR}/15-hierbas.png` });
+  await g(page, `__cr.mod.high.stop()`);
+  // vehículo loco: el carrito del súper
+  const n = await g(page, `__cr.mod.crazy.list.length`);
+  expect(n).toBeGreaterThan(0);
   expect(errors).toEqual([]);
 });
 

@@ -222,7 +222,9 @@ export class Shops implements System {
       color: '#e63946',
       icon: '🔫',
       sections: () => {
-        const weapons = WEAPON_ORDER.filter((w) => w !== 'fists').map((w) => {
+        // el paquete FRÁGIL y la pistola de sellos llegan con la fase 6
+        const later = (g.mod.fase ?? 9) < 6 ? ['fragile', 'stamp'] : [];
+        const weapons = WEAPON_ORDER.filter((w) => w !== 'fists' && !later.includes(w)).map((w) => {
           const d = WEAPONS[w];
           const has = combat.owned.has(w);
           const lock = d.crazy ? 2 : w === 'rifle' ? 3 : 1;
