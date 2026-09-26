@@ -57,6 +57,10 @@ export class Character implements CharacterRig {
   /** Triángulos de la geometría actual. */
   triangles = 0;
   private skeleton: THREE.Skeleton;
+  /** Último castShadow que puso el nivel de detalle (para notar si lo cambia otro). */
+  private lodShadow = true;
+  /** Alguien ha quitado la sombra a propósito: el nivel de detalle no la vuelve a poner. */
+  private shadowOptOut = false;
 
   constructor(look: CharacterLook) {
     this.root.name = 'personaje';
@@ -131,12 +135,22 @@ export class Character implements CharacterRig {
   update(dt: number, p: CharacterAnimParams) {
     this.anim.update(dt, p);
     this.apply();
-    // sombra solo de cerca (posición del frame anterior: de sobra para esto)
-    const e = this.root.matrixWorld.elements;
-    const eye = characterLod.eye;
-    const dx = e[12] - eye.x, dy = e[13] - eye.y, dz = e[14] - eye.z;
-    const sd = characterLod.shadowDistance;
-    this.mesh.castShadow = dx * dx + dy * dy + dz * dz < sd * sd;
+    this.shadowLod();
+  }
+
+  /** Sombra solo de cerca (con la posición del frame anterior: de sobra para esto). */
+  private shadowLod() {
+    const m = this.mesh;
+    // si alguien de fuera ha cambiado castShadow (p. ej. la gente del club, sin sombra), manda él
+    if (m.castShadow !== this.lodShadow) this.shadowOptOut = !m.castShadow;
+    if (!this.shadowOptOut) {
+      const e = this.root.matrixWorld.elements;
+      const eye = characterLod.eye;
+      const dx = e[12] - eye.x, dy = e[13] - eye.y, dz = e[14] - eye.z;
+      const sd = characterLod.shadowDistance;
+      m.castShadow = dx * dx + dy * dy + dz * dz < sd * sd;
+    }
+    this.lodShadow = m.castShadow;
   }
 
   /** Copia la pose calculada a los huesos. */
