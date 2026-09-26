@@ -4,7 +4,16 @@ Enlace: https://agarroda-bit.github.io/contra-reembolso/
 
 Si pierdes el contexto: relee `ENCARGO.md`, este archivo y `DECISIONES.md`, y sigue.
 
-## Fase actual: 1 — Isla y personaje (integrando)
+## Fase actual: 2 — Vehículos (integrando)
+
+## Fase 1 — Isla y personaje ✅ (26/09, 06:15, publicada)
+- Isla Puerto Paquete (≈600 × 600 m) con los cinco barrios: Puerto (oficina, muelles, grúas, contenedores, barco, faro), Centro (plaza, tiendas, casino, club), Colina (chalets con piscina, ático), Polígono (naves, taller, armería, desguace, guarida), Barrio Viejo (callejones, tendederos, bares).
+- Terreno con cuestas y colisor exacto, calles con aceras y pasos de cebra, 24 sitios de interés, 84 puntos de entrega, 20 paquetes perdidos, farolas, neones y ventanas que se encienden de noche.
+- Personaje articulado (un draw call) con animaciones por código; andar, correr con aguante, saltar; cámara en tercera persona que no atraviesa paredes.
+- Cielo con ciclo de día y noche (20 min = un día), atardeceres, estrellas, nubes, sombras que siguen al jugador.
+- HUD con dinero, fama, reloj, sirenas, minimapa giratorio y mapa grande (M).
+- Pruebas: carga sin errores, andar y saltar, capturas de cada barrio, atardecer y noche (`capturas/fase-1/`).
+- Fps: 60 fps con la GPU real (Apple M4), 104 draw calls, ~500 k triángulos.
 
 ## Fase 0 — Esqueleto y publicación ✅ (26/09, 04:00)
 - Proyecto Vite + TypeScript + Three.js + Rapier.
