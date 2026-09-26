@@ -40,7 +40,7 @@ const CSS = `
 .cr-bt{font:900 26px system-ui;text-align:left;color:#1b1030;background:#ffd23f;border:4px solid #1b1030;border-radius:18px;padding:12px 26px;cursor:pointer;
   box-shadow:6px 6px 0 #1b1030;transition:transform .12s,box-shadow .12s,background .12s;min-width:300px}
 .cr-bt:hover,.cr-bt:focus{transform:translate(-3px,-3px) rotate(-1deg);box-shadow:9px 9px 0 #1b1030;background:#ff7b54;outline:none}
-.cr-bt:disabled{opacity:.45;cursor:default;transform:none}
+.cr-bt:disabled{opacity:.62;cursor:default;transform:none;filter:saturate(.35)}
 .cr-bt small{display:block;font:700 13px system-ui;opacity:.75}
 .cr-panel{box-sizing:border-box;background:#fff7e6;color:#1b1030;border:4px solid #1b1030;border-radius:26px;box-shadow:10px 10px 0 rgba(27,16,48,.7);padding:24px 28px;max-width:min(720px,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;position:relative}
 .cr-panel h2{margin:0 0 16px;font:900 34px system-ui;color:#1b1030;transform:rotate(-1deg)}
@@ -178,8 +178,8 @@ export class Menus implements System {
     const save = SaveSystem.peek();
     col.appendChild(this.button('▶ Continuar', save ? `Día ${save.day} · ${fmt(save.cash + save.bank)} · fama ${Math.round(save.fame)}` : 'No hay partida guardada', () => this.onContinue?.(), !save));
     col.appendChild(this.button('✚ Nueva partida', save ? 'Empieza de cero (borra la partida guardada)' : 'Crea a tu repartidor', () => this.showCreate()));
-    col.appendChild(this.button('⚙ Opciones', null, () => this.showOptions(() => this.showMain())));
-    col.appendChild(this.button('⌨ Controles', null, () => this.showControls(() => this.showMain())));
+    col.appendChild(this.button('⚙️ Opciones', null, () => this.showOptions(() => this.showMain())));
+    col.appendChild(this.button('⌨️ Controles', null, () => this.showControls(() => this.showMain())));
     el.appendChild(col);
     const v = document.createElement('div');
     v.className = 'cr-version';
@@ -341,8 +341,8 @@ export class Menus implements System {
       }, 1600);
     });
     col.appendChild(saveBtn);
-    col.appendChild(this.button('⚙ Opciones', null, () => this.showOptions(() => this.showPauseMenu())));
-    col.appendChild(this.button('⌨ Controles', null, () => this.showControls(() => this.showPauseMenu())));
+    col.appendChild(this.button('⚙️ Opciones', null, () => this.showOptions(() => this.showPauseMenu())));
+    col.appendChild(this.button('⌨️ Controles', null, () => this.showControls(() => this.showPauseMenu())));
     col.appendChild(this.button('⏏ Salir al menú', 'Se guarda antes de salir', () => {
       this.game.mod.save?.save();
       location.reload();
