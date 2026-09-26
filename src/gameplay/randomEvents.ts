@@ -96,7 +96,7 @@ export class RandomEvents implements System {
       const far = roads.g.nodes[Math.floor(rnd.next() * roads.g.nodes.length)].pos;
       let route = roads.route(pos, far);
       if (route.length < 4) route = roads.route(pos, roads.g.nodes[Math.floor(rnd.next() * roads.g.nodes.length)].pos);
-      const cps = route.filter((_, i) => i % 2 === 1).slice(0, 5);
+      const cps: THREE.Vector3[] = (route as THREE.Vector3[]).filter((_: THREE.Vector3, i: number) => i % 2 === 1).slice(0, 5);
       if (cps.length < 2) {
         g.mod.vehicles.remove(rival);
         return;
