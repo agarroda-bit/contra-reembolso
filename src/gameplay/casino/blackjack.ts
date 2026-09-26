@@ -81,7 +81,7 @@ export class Zapato {
 
 // ─────────────────────────────── Mesa ───────────────────────────────
 
-const ANCHO = 100, ALTO = 140, PASO = 62;
+const ANCHO = 100, PASO = 62; // carta de 100×140
 const Y_BANCA = 112, Y_JUGADOR = 338, CX = 600;
 const ORIGEN = { x: 990, y: 50 }; // el zapato
 const DESCARTE = { x: 110, y: 50 };

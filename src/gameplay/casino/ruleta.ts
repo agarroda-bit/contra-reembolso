@@ -415,6 +415,22 @@ function dibujarRueda(S: number): HTMLCanvasElement {
   return c;
 }
 
+/** La bola (con su brillo), dibujada una vez: radio br píxeles. */
+function dibujarBola(br: number): HTMLCanvasElement {
+  const t = Math.ceil(br * 2 + 4);
+  const [c, g] = lienzo(t);
+  const m = t / 2;
+  const gb = g.createRadialGradient(m - br * 0.35, m - br * 0.4, br * 0.1, m, m, br);
+  gb.addColorStop(0, '#ffffff');
+  gb.addColorStop(0.6, '#e8e8ee');
+  gb.addColorStop(1, '#9a9aa8');
+  g.fillStyle = gb;
+  g.beginPath();
+  g.arc(m, m, br, 0, TAU);
+  g.fill();
+  return c;
+}
+
 /** Brillo de cristal por encima de todo. */
 function dibujarBrillo(S: number): HTMLCanvasElement {
   const [c, g] = lienzo(S);
@@ -463,8 +479,8 @@ export class Ruleta implements PantallaCasino {
   private fondo: HTMLCanvasElement | null = null;
   private rueda: HTMLCanvasElement | null = null;
   private brillo: HTMLCanvasElement | null = null;
+  private bola: HTMLCanvasElement | null = null;
   private tamLienzo = 0;
-  private escalaLienzo = 1;
   // rueda y bola
   private phi0 = Math.random() * TAU;
   private ts = 0;
@@ -854,18 +870,18 @@ export class Ruleta implements PantallaCasino {
     const S = Math.max(200, Math.round(430 * escala * dpr));
     if (S === this.tamLienzo) return;
     this.tamLienzo = S;
-    this.escalaLienzo = S / 430;
     this.canvas.width = this.canvas.height = S;
     this.fondo = dibujarFondo(S);
     this.rueda = dibujarRueda(S);
     this.brillo = dibujarBrillo(S);
+    this.bola = dibujarBola((S / 2 - 2) * 0.03);
     this.dibujar();
   }
 
   private dibujar() {
     const g = this.g;
     const S = this.tamLienzo;
-    if (!S || !this.fondo || !this.rueda || !this.brillo) return;
+    if (!S || !this.fondo || !this.rueda || !this.brillo || !this.bola) return;
     const R = S / 2 - 2;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, S, S);
@@ -899,14 +915,8 @@ export class Ruleta implements PantallaCasino {
     g.beginPath();
     g.arc(bx + br * 0.35, by + br * 0.45, br, 0, TAU);
     g.fill();
-    const gb = g.createRadialGradient(bx - br * 0.35, by - br * 0.4, br * 0.1, bx, by, br);
-    gb.addColorStop(0, '#ffffff');
-    gb.addColorStop(0.6, '#e8e8ee');
-    gb.addColorStop(1, '#9a9aa8');
-    g.fillStyle = gb;
-    g.beginPath();
-    g.arc(bx, by, br, 0, TAU);
-    g.fill();
+    const mb = this.bola.width / 2;
+    g.drawImage(this.bola, bx - mb, by - mb);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.drawImage(this.brillo, 0, 0);
   }

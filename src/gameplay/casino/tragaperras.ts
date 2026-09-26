@@ -78,7 +78,7 @@ const FILAS: { id: string; s: Sim[]; t?: string; m: number; malo?: boolean }[] =
 ];
 
 const CELDA = 96;
-const VEL = 22; // celdas por segundo a toda máquina
+const VEL = 24; // celdas por segundo a toda máquina
 const REBOTE = 0.32;
 const T_REBOTE = 0.3;
 const D_FRENO = 6; // casillas de frenada
@@ -370,7 +370,7 @@ export class Tragaperras implements PantallaCasino {
       r.t = 0;
       r.desde = r.pos;
       r.parada = this.paradas[i];
-      r.tParar = 0.8 + i * 0.45 + (i === 2 && suspense ? 1.2 : 0);
+      r.tParar = 0.6 + i * 0.4 + (i === 2 && suspense ? 1.2 : 0);
       r.celda = Math.floor(r.pos);
     });
     return prom;
@@ -439,7 +439,7 @@ export class Tragaperras implements PantallaCasino {
             c.sonido.golpeRodillo();
             r.caja.classList.remove('suspense');
             // tensión: los dos primeros iguales y buenos → el tercero se hace de rogar
-            if (i === 1 && !this.suspenseHecho && this.rodillos[2].tParar > 2.2) {
+            if (i === 1 && !this.suspenseHecho && this.rodillos[2].tParar > 2) {
               this.suspenseHecho = true;
               this.rodillos[2].caja.classList.add('suspense');
               c.sonido.suspense(1.2);

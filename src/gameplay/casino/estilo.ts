@@ -203,7 +203,8 @@ const CSS = `
 .cc-tabla td.m{text-align:right;font-weight:900;color:#6c3bd1}
 .cc-tabla td.e{text-align:right;font-weight:900;width:84px}
 .cc-tabla tr.malo td{color:#c2185b}
-.cc-tabla tr.ilum td{background:#ffd23f;animation:cc-late .5s 2}
+.cc-tabla tr.ilum td{background:#ffd23f;animation:cc-fila .25s steps(2) 6}
+@keyframes cc-fila{50%{background:#fff7e6}}
 .cc-tabla .rtp{margin-top:8px;font:700 11.5px/1.3 system-ui;opacity:.7}
 .cc-tp-ultimos{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .cc-tp-ultimos span{background:#fff;border:2px solid #1b1030;border-radius:10px;padding:1px 6px;font:800 13px system-ui}
