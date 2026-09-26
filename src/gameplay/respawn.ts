@@ -169,6 +169,8 @@ export class Respawn implements System {
     p.push.set(0, 0, 0);
     p.setActive(true);
     p.teleport(pos, heading);
+    // unos segundos sin que te puedan hacer daño (y parpadeando) para poder situarte
+    p.shield = 3;
     g.mod.police?.clear?.();
     g.events.emit('player:respawn', { where });
   }

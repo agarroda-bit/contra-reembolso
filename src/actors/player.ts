@@ -34,6 +34,8 @@ export class Player implements System {
   armor = 0;
   stamina = 100;
   invincible = false;
+  /** Segundos de invulnerabilidad que quedan (al reaparecer: el personaje parpadea). */
+  shield = 0;
   /** Pose especial mientras dure (bailar, etc.). */
   pose: CharacterPose = 'normal';
   poseTimer = 0;
@@ -145,6 +147,11 @@ export class Player implements System {
     const input = g.input;
     const cam = g.mod.cameraRig as CameraRig | undefined;
     if (this.state !== 'dead' && this.health < 60 && g.time.elapsed - this.lastHurt > 8) this.health = Math.min(60, this.health + dt * 2.5);
+    if (this.shield > 0) {
+      this.shield = Math.max(0, this.shield - dt);
+      // parpadeo mientras dura (así se ve que aún no te pueden hacer daño)
+      if (this.rig) this.rig.root.visible = this.shield <= 0 || Math.floor(this.shield * 8) % 2 === 0;
+    }
     if (this.state !== 'foot') {
       this.syncVisual(dt);
       return;
@@ -288,7 +295,7 @@ export class Player implements System {
 
   /** Recibir daño (lo usan balas, golpes, explosiones). Devuelve true si ha muerto. */
   hurt(amount: number, source?: unknown): boolean {
-    if (this.invincible || this.state === 'dead') return false;
+    if (this.invincible || this.shield > 0 || this.state === 'dead') return false;
     let a = amount;
     if (this.armor > 0) {
       const absorbed = Math.min(this.armor, a * 0.7);

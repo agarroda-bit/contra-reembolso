@@ -17,6 +17,10 @@ import { driveChaseCar, offscreen, type ChaseNav } from './police';
 
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
+/** Segundos de tregua tras reaparecer: las emboscadas que salgan cerca esperan apostadas sin atacar. */
+const TRUCE = 45;
+/** Radio de la tregua alrededor del punto de reaparición. */
+const TRUCE_RADIUS = 130;
 
 interface Chase extends ChaseNav {
   van: Vehicle;
@@ -39,6 +43,9 @@ export class Gang implements System {
   private territoryWarned = 0;
   /** Desactivar persecuciones aleatorias (tutorial, misiones tranquilas). */
   calm = false;
+  /** Tregua tras reaparecer (ver TRUCE): hasta cuándo y alrededor de dónde. */
+  private truceUntil = -1;
+  private readonly truceAt = new THREE.Vector3();
 
   constructor(private game: Game) {
     game.mod.gang = this;
@@ -73,6 +80,10 @@ export class Gang implements System {
     game.events.on('player:died', () => this.clearChases());
     game.events.on('player:respawn', () => {
       this.clearChases();
+      // tregua: lo que salga cerca de donde reapareces (p. ej. la emboscada del rescate de un empleado
+      // junto a la oficina) espera apostado en vez de ir a por ti nada más levantarte
+      this.truceUntil = game.time.elapsed + TRUCE;
+      this.truceAt.copy(game.mod.player.position);
       this.calmDown();
     });
   }
@@ -120,6 +131,7 @@ export class Gang implements System {
         b.aggro = false;
         b.mode = 'idle';
         m.aiming = false;
+        if (m.position.distanceTo(this.truceAt) < TRUCE_RADIUS) b.calmUntil = this.truceUntil;
         if (b.home && m.alive && !m.busy) m.goTo(b.home);
         continue;
       }
@@ -145,7 +157,9 @@ export class Gang implements System {
     // en su sitio hasta que llegues; si no, cruzarían media isla (o se borrarían por estar lejos)
     const cur = this.vm.current;
     const ppos = cur ? cur.getPosition(tmpV2) : this.game.mod.player.position;
-    const posted = ppos.distanceTo(pos) > 120;
+    // recién reaparecido y cerca de donde reapareces: también apostados, y sin enfadarse solo por verte
+    const truce = this.game.time.elapsed < this.truceUntil && pos.distanceTo(this.truceAt) < TRUCE_RADIUS;
+    const posted = truce || ppos.distanceTo(pos) > 120;
     for (let i = 0; i < count; i++) {
       // un sitio a 7-14 m, fuera de los edificios y, si se puede, donde no se vea aparecer
       let p: THREE.Vector3 | null = null;
@@ -164,6 +178,7 @@ export class Gang implements System {
       if (posted) {
         (m.brain as CombatBrain).home = p.clone();
         (m.brain as CombatBrain).holdAt = p.clone();
+        if (truce) (m.brain as CombatBrain).calmUntil = this.truceUntil;
       }
       out.push(m);
     }
@@ -274,10 +289,26 @@ export class Gang implements System {
       }
       const b = m.brain as CombatBrain;
       // los que bajan de la furgoneta intentan sacarte del vehículo y quitarte los paquetes
+      // (solo si siguen a por ti y estás cerca: no cruzan media isla cada vez que paras)
       const cur = this.vm.current;
-      if ((b as any).robber && m.alive && !m.busy && !m.vehicle && cur && Math.abs(cur.speed) < 2) {
+      if ((b as any).robber && b.aggro && m.alive && !m.busy && !m.vehicle && cur && Math.abs(cur.speed) < 2 && cur.getPosition(tmpV).distanceTo(m.position) < 40) {
         this.tryRob(m);
         continue;
+      }
+      // han perdido el interés: se van andando y, cuando nadie los ve, se retiran
+      if (b.bored && !b.aggro && !b.home && m.alive && !m.busy && !m.vehicle) {
+        const dp = m.position.distanceTo(p.position);
+        if (dp > 35 && offscreen(g, m.position)) {
+          this.npcs.remove(m);
+          this.members.splice(i, 1);
+          continue;
+        }
+        if (!m.target) {
+          tmpV.copy(m.position).sub(p.position).setY(0);
+          if (tmpV.lengthSq() < 0.01) tmpV.set(1, 0, 0);
+          tmpV.normalize().multiplyScalar(30).add(m.position);
+          if (g.world.isLand(tmpV.x, tmpV.z)) m.goTo(tmpV);
+        }
       }
       if (!b.aggro && b.home && !m.busy && !m.vehicle) {
         // patrulla tranquila alrededor de su sitio
