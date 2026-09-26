@@ -223,8 +223,10 @@ export class Traffic implements System {
           const dir: 1 | -1 = rnd.next() < 0.5 ? 1 : -1;
           const t = 0.2 + rnd.next() * 0.6;
           const p = this.roads.lanePoint(eid, dir, t, 0, tmpV);
-          // solo donde no se ve (fuera del encuadre), para que no aparezcan coches de la nada
-          if (!this.inView(p, 4)) this.spawnCar(eid, dir, t);
+          // solo donde no se ve (fuera del encuadre), para que no aparezcan coches de la nada;
+          // con la cámara lejos del jugador (vista aérea del menú) vale lo que quede lejos de ella
+          const camFar = cam.distanceTo(focus) > 50;
+          if (!this.inView(p, 4) || (camFar && p.distanceTo(cam) > 80)) this.spawnCar(eid, dir, t);
         }
       }
       if (this.parked.length < Math.round(8 * this.game.quality.density)) this.spawnParked();
