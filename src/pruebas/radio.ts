@@ -163,11 +163,12 @@ async function main() {
 
   function ui() {
     const r = game.hud.radio;
-    em.textContent = r ? r.station : game.mod.vehicles.current ? '—' : '(a pie: la radio no suena)';
+    em.textContent = r ? r.station : !game.mod.vehicles.current ? '(a pie: la radio no suena)' : radio.station < 0 ? '📻 (apagada)' : '—';
     sh.textContent = r?.show ?? '';
     const n = radio.nowPlaying();
     np.textContent = n ? `${n.title} · ${n.artist}\n${SECCION[n.section] ?? n.section} · compás ${n.bar + 1}/${n.bars} · ${n.bpm} BPM · ${NOTAS[n.key]} menor` : '';
-    dk.textContent = distInput.value;
+    // lo que tiene pedido la radio (también si se cambia desde la consola o desde otro módulo)
+    dk.textContent = ((radio as any).distTarget ?? 0).toFixed(2);
     const s = radio.stats;
     if (s) stats.textContent = `nodos vivos: ${s.live}  (máx ${s.peak})\nfuentes vivas: ${s.sources}\nnodos fijos: ${s.fixed}\ncreados en total: ${s.created}\nmuestras: ${s.buffers} (${s.bufferMB.toFixed(1)} MB)\naudio: ${audio.ctx?.state ?? 'sin crear'} · fps ${game.fps.toFixed(0)}`;
     // medidor + espectrograma

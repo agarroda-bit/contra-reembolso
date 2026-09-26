@@ -26,8 +26,8 @@ export interface Radio {
 
 /** Volumen general de la radio antes del bus de música (medido para que no tape el motor). */
 const LEVEL = 0.24;
-/** Cuánto se programa por adelantado (s). */
-const LOOKAHEAD = 0.3;
+/** Cuánto se programa por adelantado (s): aguanta tirones del juego (shaders, cargas) de hasta ~0,4 s sin cortes. */
+const LOOKAHEAD = 0.4;
 
 /** Cadena de salida común: compresor, filtro, "wow" de cinta, eco y reverb. */
 export interface RadioChain {
