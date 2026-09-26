@@ -621,6 +621,12 @@ export class Story implements System {
     return !!this.active;
   }
 
+  /** Misión de la historia contra Los Devueltos en marcha (la policía no viene por los tiros). */
+  get gangMission(): boolean {
+    const id = this.active?.m.id;
+    return id === 'reloj' || id === 'guarida' || id === 'jefe';
+  }
+
   /** Premio de una misión (repetirla paga menos: si no, el jefe final sería un cajero automático). */
   reward(m: Mission): { money: number; fame: number } {
     const again = this.completed.has(m.id);

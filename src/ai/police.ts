@@ -22,6 +22,14 @@ const POLICE_ACC = [0.46, 0.46, 0.46, 0.48, 0.55, 0.62];
 const HEAT_SHOT = 0.3;
 /** Sin un policía delante, los disparos (la gente llamando) no pasan de 2 sirenas. */
 const HEAT_CAP_UNSEEN_SHOTS = HEAT_LEVELS[3] - 0.01;
+/** Por disparar, como mucho 1 de calor cada 2,5 s (una ráfaga de subfusil no dispara la búsqueda). */
+const SHOT_HEAT_MAX = 1;
+const SHOT_HEAT_REFILL = SHOT_HEAT_MAX / 2.5;
+/** Tiroteo con la banda (defenderte o asaltarles): sin testigos no pasa de 1 sirena y con policía delante, de 2. */
+const HEAT_CAP_GANG_UNSEEN = HEAT_LEVELS[2] - 0.01;
+const HEAT_CAP_GANG_SEEN = HEAT_LEVELS[3] - 0.01;
+/** Distancia a la que un enfrentamiento con la banda cuenta como «tiroteo con la banda». */
+const GANG_FIGHT_DIST = 60;
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpE = new THREE.Vector3();
@@ -166,6 +174,8 @@ export class Police implements System {
   private roads: Roads;
   private roadblockTimer = 10;
   private paintCooldown = 0;
+  /** Calor que aún pueden dar los disparos ahora mismo (se recarga poco a poco: ver SHOT_HEAT_MAX). */
+  private shotBudget = SHOT_HEAT_MAX;
 
   constructor(private game: Game) {
     game.mod.police = this;
@@ -174,7 +184,14 @@ export class Police implements System {
     // crímenes
     ev.on('vehicle:steal' as any, (e: any) => this.crime(e.npc?.police ? 3 : 1, 'robo', true));
     ev.on('weapon:shot' as any, (e: any) => {
-      if (e.shooter?.kind === 'player') this.crime(e.melee ? 0.15 : HEAT_SHOT, 'disparos', false, 60, HEAT_CAP_UNSEEN_SHOTS);
+      if (e.shooter?.kind !== 'player') return;
+      // en las misiones de la historia contra la banda, los tiros no traen a la policía
+      if (game.mod.story?.gangMission) return;
+      const w = Math.min(e.melee ? 0.15 : HEAT_SHOT, this.shotBudget);
+      if (w <= 0.001) return;
+      this.shotBudget -= w;
+      const gang = this.gangFight();
+      this.crime(w, 'disparos', false, 60, gang ? HEAT_CAP_GANG_UNSEEN : HEAT_CAP_UNSEEN_SHOTS, gang ? HEAT_CAP_GANG_SEEN : Infinity);
     });
     ev.on('npc:runover' as any, (e: any) => {
       if (e.vehicle === game.mod.vehicles?.current) this.crime(e.npc.police ? 2 : 0.6, 'atropello', true);
@@ -211,10 +228,30 @@ export class Police implements System {
   }
 
   /**
-   * Un delito. `needsWitness`: solo cuenta si lo ve la policía (o con probabilidad si lo ve la gente).
-   * maxDist: distancia a la que la policía lo oye/ve.
+   * ¿Hay un enfrentamiento con la banda alrededor del jugador? (alguno de Los Devueltos enfadado cerca,
+   * o estás en su territorio). Entonces los disparos cuentan poco: te estás defendiendo o es cosa de bandas.
    */
-  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55, capUnseen = Infinity) {
+  private gangFight(): boolean {
+    const gang = this.game.mod.gang;
+    if (!gang) return false;
+    const p = this.game.mod.player;
+    const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpF) : p.position;
+    const h = gang.hideout;
+    if (h && h.door.distanceTo(pos) < GANG_FIGHT_DIST) return true;
+    for (const m of gang.members as Npc[]) {
+      if (!m.alive || m.removed) continue;
+      const b = m.brain as CombatBrain | undefined;
+      if (b?.aggro && m.position.distanceTo(pos) < GANG_FIGHT_DIST) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Un delito. `needsWitness`: solo cuenta si lo ve la policía (o con probabilidad si lo ve la gente).
+   * maxDist: distancia a la que la policía lo oye/ve. capUnseen/capSeen: tope de calor que puede dar
+   * este delito sin testigos / con un policía delante (si ya hay más calor, no lo baja).
+   */
+  crime(weight: number, what: string, needsWitness: boolean, maxDist = 55, capUnseen = Infinity, capSeen = Infinity) {
     const p = this.game.mod.player;
     if (!p) return;
     const pos = p.state === 'vehicle' && this.vm.current ? this.vm.current.getPosition(tmpV) : p.position;
@@ -228,8 +265,8 @@ export class Police implements System {
       if (rnd.next() > 0.35) return;
     }
     const before = this.wanted;
-    if (seen) this.heat += weight;
-    else if (this.heat < capUnseen) this.heat = Math.min(capUnseen, this.heat + weight);
+    const cap = seen ? capSeen : capUnseen;
+    if (this.heat < cap) this.heat = Math.min(cap, this.heat + weight);
     this.recalc();
     this.unseen = 0;
     this.lastSeen.copy(pos);
@@ -427,6 +464,7 @@ export class Police implements System {
     const p = g.mod.player;
     if (!p || !g.world) return;
     g.hud.wanted = this.wanted;
+    this.shotBudget = Math.min(SHOT_HEAT_MAX, this.shotBudget + SHOT_HEAT_REFILL * dt);
     this.paintCooldown -= dt;
     this.checkPaintShop();
 
