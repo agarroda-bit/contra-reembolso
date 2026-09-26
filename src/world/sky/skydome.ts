@@ -8,6 +8,8 @@ varying vec3 vDir;
 void main() {
   vDir = position;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  // en el plano lejano: se pinta el último y solo donde no hay nada delante (ver abajo)
+  gl_Position.z = gl_Position.w;
 }
 `;
 
@@ -167,13 +169,15 @@ export class SkyDome {
       fragmentShader: DOME_FRAG,
       side: THREE.BackSide,
       depthWrite: false,
-      depthTest: false,
       fog: false,
     });
     this.mesh = new THREE.Mesh(geo, mat);
     this.mesh.name = 'cielo';
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1000;
+    // El cielo se pinta DESPUÉS de todo lo opaco, con prueba de profundidad en el plano lejano:
+    // así su shader solo corre en los píxeles donde se ve cielo, no en toda la pantalla para
+    // que luego lo tapen los edificios (antes iba el primero y sin prueba de profundidad).
+    this.mesh.renderOrder = 1000;
     this.mesh.matrixAutoUpdate = false;
     // sigue a la cámara justo antes de pintarse (después de cámara y temblores)
     this.mesh.onBeforeRender = (_r, _s, cam) => followCamera(this.mesh, cam);

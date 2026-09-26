@@ -97,8 +97,8 @@ const KINDS: Record<ParticleKind, KindDef> = {
 export class Particles implements System {
   name = 'particles';
   private pools: Record<KindDef['pool'], Pool>;
-  /** Luces de destello (explosiones, fogonazos). */
-  private flashes: { light: THREE.PointLight; t: number; dur: number; peak: number }[] = [];
+  /** Luz de destello (explosiones, fogonazos). null en calidad baja (una luz menos en cada píxel). */
+  private flashState: { light: THREE.PointLight; t: number; dur: number; peak: number } | null = null;
 
   constructor(private game: Game) {
     game.mod.particles = this;
@@ -113,11 +113,28 @@ export class Particles implements System {
       chip: makePool(s, chipGeo, new THREE.MeshLambertMaterial({ flatShading: true }), 500, true),
       flat: makePool(s, flatGeo, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), 700),
     };
-    for (let i = 0; i < 2; i++) {
+    this.setupFlash();
+    game.events.on('settings', () => this.setupFlash());
+  }
+
+  /**
+   * La luz de destello está SIEMPRE en la escena (a intensidad 0 cuando no se usa): si se encendiera
+   * y apagara con visible, cambiaría el número de luces y three tendría que recompilar todos los
+   * shaders en el primer tiro o explosión (medido: medio segundo congelado). Es una sola (cada luz
+   * cuesta en cada píxel) y en calidad baja no hay.
+   */
+  private setupFlash() {
+    const want = this.game.settings.quality !== 'baja';
+    if (want && !this.flashState) {
       const light = new THREE.PointLight('#ffb347', 0, 18, 1.6);
-      light.visible = false;
-      s.add(light);
-      this.flashes.push({ light, t: 0, dur: 0, peak: 0 });
+      light.name = 'destello';
+      light.position.set(0, -500, 0);
+      this.game.scene.add(light);
+      this.flashState = { light, t: 0, dur: 0, peak: 0 };
+    } else if (!want && this.flashState) {
+      this.flashState.light.removeFromParent();
+      this.flashState.light.dispose();
+      this.flashState = null;
     }
   }
 
@@ -163,14 +180,19 @@ export class Particles implements System {
 
   /** Destello de luz breve (explosión, fogonazo). */
   flash(pos: THREE.Vector3, color = '#ffb347', intensity = 60, dur = 0.25, distance = 18) {
-    let f = this.flashes.find((x) => x.t >= x.dur) ?? this.flashes[0];
+    const f = this.flashState;
+    if (!f) return;
+    // un fogonazo flojo no tapa una explosión que aún brilla más
+    if (f.t < f.dur) {
+      const k = 1 - f.t / f.dur;
+      if (intensity < f.peak * k * k) return;
+    }
     f.light.position.copy(pos);
     f.light.color.set(color);
     f.light.distance = distance;
     f.t = 0;
     f.dur = dur;
     f.peak = intensity;
-    f.light.visible = true;
   }
 
   /** Explosión visual completa (sin daño: el daño lo pone quien la provoca). */
@@ -194,13 +216,11 @@ export class Particles implements System {
   }
 
   update(dt: number) {
-    for (const f of this.flashes) {
-      if (f.t < f.dur) {
-        f.t += dt;
-        const k = 1 - f.t / f.dur;
-        f.light.intensity = f.peak * k * k;
-        if (f.t >= f.dur) f.light.visible = false;
-      }
+    const f = this.flashState;
+    if (f && f.t < f.dur) {
+      f.t += dt;
+      const k = 1 - f.t / f.dur;
+      f.light.intensity = f.t >= f.dur ? 0 : f.peak * k * k;
     }
     for (const key in this.pools) {
       const p = this.pools[key as KindDef['pool']];
@@ -257,7 +277,13 @@ export class Particles implements System {
       }
       p.mesh.count = maxIndex;
       if (maxIndex === 0) p.alive = 0;
-      p.mesh.instanceMatrix.needsUpdate = true;
+      else {
+        // a la GPU solo sube el tramo que se pinta (no las 700 piezas de cada tanda)
+        const im = p.mesh.instanceMatrix;
+        im.clearUpdateRanges();
+        im.addUpdateRange(0, maxIndex * 16);
+        im.needsUpdate = true;
+      }
     }
   }
 }

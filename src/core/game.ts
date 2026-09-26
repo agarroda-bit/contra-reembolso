@@ -5,6 +5,10 @@ import { Input } from './input';
 import { EventBus } from './events';
 import { loadSettings, saveSettings, QUALITY, type Settings, type QualityPreset } from './settings';
 import { defaultHudState, type GameEvents, type WorldData, type HudState } from './contracts';
+import type { FrameProfiler } from './debug';
+
+// fases del bucle (para llamar a los sistemas sin crear funciones por frame)
+const FIXED = 0, UPDATE = 1, POST = 2, PAUSED = 3;
 
 /**
  * Un sistema del juego. Todos los métodos son opcionales.
@@ -63,6 +67,8 @@ export class Game {
   readonly timeScaleMods = new Map<string, number>();
   shake = 0;
   running = false;
+  /** Medidor de tiempos por sistema y del render (lo pone debug.ts con ?debug=1). null = no mide nada. */
+  profiler: FrameProfiler | null = null;
 
   constructor(container: HTMLElement, ui: HTMLElement) {
     Game.current = this;
@@ -117,6 +123,21 @@ export class Game {
     fog.far = q.drawDistance;
     this.onResize();
     this.events.emit('settings', this.settings);
+    // cambiar sombras o luces obliga a recompilar los shaders: que sea en paralelo, no uno a uno
+    this.warmShaders();
+  }
+
+  /**
+   * Compila en segundo plano (en paralelo, si el navegador puede) los shaders de TODO lo que hay en
+   * la escena, también lo que aún no se ve (estrellas, lo que queda detrás, luces de noche...).
+   * Si no, se compilan de uno en uno la primera vez que aparecen y el juego se congela un momento.
+   */
+  warmShaders() {
+    try {
+      this.renderer.compileAsync(this.scene, this.camera).catch(() => {});
+    } catch {
+      /* no pasa nada: se compilarán al usarlos */
+    }
   }
 
   private onResize() {
@@ -148,6 +169,7 @@ export class Game {
     if (this.running) return;
     this.running = true;
     this.last = performance.now();
+    this.warmShaders();
     this.renderer.setAnimationLoop((t) => this.frame(t));
   }
 
@@ -156,7 +178,25 @@ export class Game {
     this.renderer.setAnimationLoop(null);
   }
 
+  /** Llama a una fase de todos los sistemas (midiendo cada uno si hay medidor). */
+  private runSystems(phase: number, dt: number) {
+    const list = this.systems;
+    const prof = this.profiler;
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i];
+      const fn = phase === FIXED ? s.fixedUpdate : phase === UPDATE ? s.update : phase === POST ? s.postUpdate : s.pausedUpdate;
+      if (!fn) continue;
+      if (prof) {
+        const t0 = performance.now();
+        fn.call(s, dt);
+        prof.add(s.name, performance.now() - t0);
+      } else fn.call(s, dt);
+    }
+  }
+
   private frame(now: number) {
+    const prof = this.profiler;
+    prof?.beginFrame(now);
     const realDt = Math.min(0.1, Math.max(0, (now - this.last) / 1000));
     this.last = now;
     this.time.real += realDt;
@@ -198,18 +238,26 @@ export class Game {
       this.accumulator += dt;
       let steps = 0;
       while (this.accumulator >= fixed && steps < 5) {
-        for (const s of this.systems) s.fixedUpdate?.(fixed);
-        this.physics.step();
+        this.runSystems(FIXED, fixed);
+        if (prof) {
+          const t0 = performance.now();
+          this.physics.step();
+          prof.add('física (Rapier)', performance.now() - t0);
+        } else this.physics.step();
         this.accumulator -= fixed;
         steps++;
       }
       if (steps >= 5) this.accumulator = 0;
 
-      for (const s of this.systems) s.update?.(dt);
-      for (const s of this.systems) s.postUpdate?.(dt);
-      this.world?.update(dt, this.time.elapsed);
+      this.runSystems(UPDATE, dt);
+      this.runSystems(POST, dt);
+      if (prof) {
+        const t0 = performance.now();
+        this.world?.update(dt, this.time.elapsed);
+        prof.add('mundo', performance.now() - t0);
+      } else this.world?.update(dt, this.time.elapsed);
     } else {
-      for (const s of this.systems) s.pausedUpdate?.(realDt);
+      this.runSystems(PAUSED, realDt);
     }
 
     // temblor de cámara
@@ -221,8 +269,13 @@ export class Game {
       this.shake = Math.max(0, this.shake - realDt * 2.5);
     }
 
-    this.render();
+    if (prof) {
+      prof.beginRender();
+      this.render();
+      prof.endRender();
+    } else this.render();
     this.input.endFrame();
+    prof?.endFrame();
   }
 
   /** Se puede sustituir (efectos de pantalla completa, fase 6). */
