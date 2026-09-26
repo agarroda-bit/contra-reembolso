@@ -309,16 +309,18 @@ export function buildIsland(game: Game, seed = 'puerto-paquete'): WorldData {
   const syncOverhangs = () => {
     const rig = game.mod.cameraRig as { mode: string; target: THREE.Vector3 } | undefined;
     const st = (game.mod.player as { state?: string } | undefined)?.state;
-    const riding = rig?.mode === 'vehicle' || st === 'vehicle' || st === 'busy';
-    if (overhangsOn === riding) {
-      overhangsOn = !riding;
-      setOverhangs(ctx.overhangs, overhangsOn);
-    }
-    const cut = rig?.mode === 'vehicle';
+    // hueco en los toldos: en vehículo o si la cámara de este frame se ha calculado con los voladizos
+    // apagados (el frame en que te bajas)
+    const cut = rig?.mode === 'vehicle' || !overhangsOn;
     u.uCut.value = cut ? 1 : 0;
     if (cut && rig) {
       u.uFocus.value.copy(rig.target);
       u.uFocus.value.y += AWNING_CUT.lift;
+    }
+    const riding = rig?.mode === 'vehicle' || st === 'vehicle' || st === 'busy';
+    if (overhangsOn === riding) {
+      overhangsOn = !riding;
+      setOverhangs(ctx.overhangs, overhangsOn);
     }
   };
   // también al principio de cada frame (antes que la cámara): así un cambio hecho entre frames (subir
