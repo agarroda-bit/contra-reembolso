@@ -124,9 +124,11 @@ export class Jobs implements System {
   private pickClient(): ClientProfile {
     let c: ClientProfile;
     let guard = 0;
+    // el del paquete SOSPECHOSO (emboscada) no aparece hasta fama 2: los primeros minutos, tranquilos
+    const early = (this.eco?.fameLevel ?? 1) < 2;
     do {
       c = CLIENTS[Math.floor(this.rng.next() * CLIENTS.length)];
-    } while (this.lastClients.includes(c.id) && guard++ < 10);
+    } while ((this.lastClients.includes(c.id) || (early && c.prefers === 'sospechoso')) && guard++ < 20);
     this.lastClients.push(c.id);
     if (this.lastClients.length > 4) this.lastClients.shift();
     return c;
