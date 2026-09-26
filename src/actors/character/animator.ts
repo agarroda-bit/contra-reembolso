@@ -472,6 +472,7 @@ export class Animator {
   private airW = 0;
   private airTime = 0;
   private groundTime = 0;
+  private vy = 0;
   private landT = 1;
   private landAmt = 0;
   aimW = 0;
@@ -523,6 +524,7 @@ export class Animator {
 
   update(dt: number, p: CharacterAnimParams) {
     dt *= p.timeScale ?? 1;
+    if (!(dt > 0)) dt = 0; // NaN o negativo: no avanza (un NaN aquí rompería el muñeco para siempre)
     if (dt > 0.1) dt = 0.1;
     this.t += dt;
     const pose = p.pose;
@@ -560,17 +562,20 @@ export class Animator {
 
     const speed = Math.max(0, p.speed || 0);
     this.speedS += (speed - this.speedS) * Math.min(1, dt * 9);
-    this.wobbleS += ((p.wobble ?? 0) - this.wobbleS) * Math.min(1, dt * 3);
+    const wob = p.wobble !== undefined && Number.isFinite(p.wobble) ? clamp01(p.wobble) : 0;
+    this.wobbleS += (wob - this.wobbleS) * Math.min(1, dt * 3);
     const canAim = pose === 'normal' || pose === 'drive' || pose === 'ride';
     const aimTarget = p.aiming && canAim ? 1 : 0;
     this.aimW += (aimTarget - this.aimW) * Math.min(1, dt * 14);
     if (this.aimW < 0.001) this.aimW = 0;
-    this.aimPitch += ((p.aimPitch ?? 0) - this.aimPitch) * Math.min(1, dt * 20);
+    const pitchIn = p.aimPitch;
+    this.aimPitch += ((pitchIn !== undefined && Number.isFinite(pitchIn) ? pitchIn : 0) - this.aimPitch) * Math.min(1, dt * 20);
     if (p.weapon) this.weapon = p.weapon;
     if (p.shot) this.recoil = 1;
     else this.recoil = Math.max(0, this.recoil - dt / (this.weapon === 'throw' ? 0.45 : 0.14));
 
-    const vy = p.vy ?? 0;
+    const vy = p.vy !== undefined && Number.isFinite(p.vy) ? p.vy : 0;
+    this.vy = vy;
     const air = pose === 'normal' && !grounded && (this.airTime > 0.1 || vy > 1.5) ? 1 : 0;
     this.airW += (air - this.airW) * Math.min(1, dt * (air ? 10 : 18));
 
@@ -663,7 +668,7 @@ export class Animator {
     this.loco(o, dt, stunned ? Math.min(speed, 1.2) : speed, Math.max(wob, stunned ? 0.6 : 0));
 
     if (this.airW > 0.001 && pose === 'normal') {
-      this.airPose(this.tmpA, p.vy ?? 0);
+      this.airPose(this.tmpA, this.vy);
       lerpInto(o, o, this.tmpA, this.airW);
     }
 

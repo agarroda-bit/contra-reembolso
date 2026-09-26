@@ -78,7 +78,7 @@ export class Character implements CharacterRig {
     this.sockets = {
       handR: sock(B.handR, 0, -0.065, 0.005, 'enganche-manoD'),
       handL: sock(B.handL, 0, -0.065, 0.005, 'enganche-manoI'),
-      head: sock(B.head, 0, 0.3, 0, 'enganche-cabeza'),
+      head: sock(B.head, 0, built.headTop + 0.005, 0, 'enganche-cabeza'),
       back: sock(B.spine, 0, 0.2, -(built.chestZ + 0.01), 'enganche-espalda'),
       chest: sock(B.spine, 0, 0.2, built.chestZ + 0.01, 'enganche-pecho'),
     };
@@ -108,6 +108,7 @@ export class Character implements CharacterRig {
     this.triangles = built.triangles;
     this.sockets.back.position.z = -(built.chestZ + 0.01);
     this.sockets.chest.position.z = built.chestZ + 0.01;
+    this.sockets.head.position.y = built.headTop + 0.005;
     this.look = look;
     this.anim.configure((look as CharacterLookExtra).kind, look.emblem);
     this.applyScale();
