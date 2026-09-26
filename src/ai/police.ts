@@ -527,10 +527,14 @@ export class Police implements System {
     }
 
     // policías a pie
-    for (let i = this.officers.length - 1; i >= 0; i--) {
-      const o = this.officers[i];
+    const officers = this.officers;
+    for (let i = officers.length - 1; i >= 0; i--) {
+      // (un disparo de este bucle puede matarte, y entonces clear() vacía la lista: se para aquí)
+      if (officers !== this.officers) break;
+      const o = officers[i];
+      if (!o) continue;
       if (o.removed) {
-        this.officers.splice(i, 1);
+        officers.splice(i, 1);
         continue;
       }
       const b = o.brain as CombatBrain;

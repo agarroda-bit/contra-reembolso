@@ -217,11 +217,16 @@ export class Gang implements System {
       const d = p.position.distanceTo(h.door);
       if (d < 130 && !this.guardsSpawned) {
         this.guardsSpawned = true;
+        const refY = g.world.heightAt(h.door.x, h.door.z);
         for (let i = 0; i < 6; i++) {
-          const a = (i / 6) * Math.PI * 2;
-          const pos = new THREE.Vector3(h.door.x + Math.cos(a) * (6 + i), 0, h.door.z + Math.sin(a) * (6 + i));
-          if (!g.world.isLand(pos.x, pos.z)) continue;
-          pos.y = g.world.heightAt(pos.x, pos.z);
+          // alrededor de la puerta, pero fuera de las naves (si no, se quedan encerrados dentro)
+          let pos: THREE.Vector3 | null = null;
+          for (let k = 0; k < 6 && !pos; k++) {
+            const a = (i / 6) * Math.PI * 2 + k * 0.5;
+            const c = new THREE.Vector3(h.door.x + Math.cos(a) * (6 + i), 0, h.door.z + Math.sin(a) * (6 + i));
+            if (this.goodSpot(c, refY)) pos = c;
+          }
+          if (!pos) continue;
           const m = this.spawnMember(pos);
           (m.brain as CombatBrain).home = pos.clone();
           this.guards.push(m);
@@ -268,8 +273,12 @@ export class Gang implements System {
     }
 
     // persecuciones
-    for (let i = this.chases.length - 1; i >= 0; i--) {
-      const c = this.chases[i];
+    const chases = this.chases;
+    for (let i = chases.length - 1; i >= 0; i--) {
+      // (un disparo desde la furgoneta puede matarte y vaciar la lista de persecuciones)
+      if (chases !== this.chases) break;
+      const c = chases[i];
+      if (!c) continue;
       c.life += dt;
       c.crew = c.crew.filter((n) => !n.removed);
       if (c.van.disposed) {

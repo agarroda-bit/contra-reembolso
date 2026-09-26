@@ -281,6 +281,8 @@ export class Combat implements System {
     let bestK = 1;
     for (const n of npcs) {
       if (!n.hostile || !n.alive || n.removed || n.vehicle) continue;
+      // a la policía que solo quiere detenerte no se le «ayuda» a disparar (sería un disgusto)
+      if (n.police && n.brain?.arrestOnly) continue;
       const dx = n.position.x - p.position.x, dz = n.position.z - p.position.z;
       if (dx * dx + dz * dz > ASSIST_RANGE * ASSIST_RANGE) continue;
       tmpB.set(n.position.x, n.position.y + (n.state === 'knocked' || n.state === 'taped' ? 0.4 : 1.15), n.position.z).sub(camPos);
