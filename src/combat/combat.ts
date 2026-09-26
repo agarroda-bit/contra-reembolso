@@ -63,6 +63,11 @@ const PACKAGE_HIT_PLAYER = 7;
 const ASSIST_CONE = 0.075;
 const ASSIST_PULL = 2;
 const ASSIST_RANGE = 45;
+/** Con mando: cono y fuerza del imán normales y del «salto» al empezar a apuntar. */
+const ASSIST_CONE_PAD = 0.14;
+const ASSIST_PULL_PAD = 4.5;
+const ASSIST_CONE_SNAP = 0.34;
+const ASSIST_PULL_SNAP = 11;
 
 const tracerGeo = new THREE.BoxGeometry(0.03, 0.03, 1);
 const tracerMat = new THREE.MeshBasicMaterial({ color: '#fff3b0', toneMapped: false });
@@ -98,6 +103,8 @@ export class Combat implements System {
   infiniteAmmo = false;
   /** Ayuda de apuntado suave (imán hacia el enemigo más cercano al centro al apuntar). */
   aimAssist = true;
+  /** Segundos que le quedan al «salto» de la mira al empezar a apuntar con el mando. */
+  private snapT = 0;
 
   constructor(private game: Game) {
     game.mod.combat = this;
@@ -106,11 +113,40 @@ export class Combat implements System {
       const a = e.amount || 0;
       if (a < 1) return;
       game.events.emit('camera:shake', { amount: Math.min(0.6, 0.18 + a / 30) });
+      // y el mando vibra (más fuerte y más largo cuanto más daño)
+      game.input.rumble(Math.min(1, 0.25 + a / 35), Math.min(1, 0.45 + a / 30), 110 + Math.min(300, a * 7));
       const cam = this.cam;
       if (cam && this.player?.state !== 'dead') {
         cam.pitch += Math.min(0.03, 0.006 + a * 0.0012);
         cam.yaw += (rnd.next() - 0.5) * Math.min(0.03, a * 0.0015);
       }
+    });
+    this.wirePad();
+  }
+
+  /**
+   * Mando: qué hace cada botón depende de si vas en coche y de si hay algo con lo que interactuar
+   * (entonces Ⓐ interactúa en vez de saltar). Vibra con las explosiones cercanas y los choques fuertes.
+   */
+  private wirePad() {
+    const g = this.game;
+    const input = g.input;
+    input.vehicleContext = () => g.mod.player?.state === 'vehicle';
+    input.interactContext = () => {
+      const it = g.mod.interaction;
+      return !!(it && (it.current || it.override));
+    };
+    g.events.on('explosion', (e) => {
+      const p = this.player;
+      if (!p) return;
+      const d = p.position.distanceTo(e.pos);
+      const k = 1 - d / (e.big ? 60 : 38);
+      if (k > 0) input.rumble(Math.min(1, k * 1.2), k * 0.8, (e.big ? 700 : 380) * (0.5 + k * 0.5));
+    });
+    g.events.on('vehicle:impact' as any, (e: any) => {
+      if (e.vehicle !== g.mod.vehicles?.current || !(e.dv > 5)) return;
+      const k = Math.min(1, (e.dv - 5) / 12);
+      input.rumble(0.3 + k * 0.7, 0.2 + k * 0.5, 120 + k * 280);
     });
   }
 
@@ -275,7 +311,13 @@ export class Combat implements System {
       this.tapedPlayer -= dt;
       if (this.tapedPlayer <= 0) p.speedMul = 1;
     }
-    if (aiming && this.aimAssist) this.assistAim(dt);
+    // con mando, al apretar el gatillo de apuntar la mira salta hacia el enemigo más centrado
+    // (un momento), y luego el imán es algo más fuerte que con ratón
+    const pad = input.usingGamepad;
+    if (pad && input.pressed('aim')) this.snapT = 0.3;
+    if (this.snapT > 0) this.snapT -= dt;
+    input.lookScale = 1;
+    if (aiming && this.aimAssist) this.assistAim(dt, pad);
 
     this.updateProjectiles(dt);
     this.updateTracers(dt);
@@ -285,7 +327,7 @@ export class Combat implements System {
    * Imán leve: si al apuntar hay un enemigo cerca del centro de la pantalla (y se le ve),
    * la mira se desliza un poco hacia él. Se nota, pero no apunta por ti.
    */
-  private assistAim(dt: number) {
+  private assistAim(dt: number, pad = false) {
     const g = this.game;
     const npcs = g.mod.npcs?.list as Npc[] | undefined;
     const cam = this.cam;
@@ -305,8 +347,8 @@ export class Combat implements System {
       const dist = tmpB.length();
       if (dist < 1.5) continue;
       const ang = Math.acos(Math.min(1, look.dot(tmpB) / dist));
-      // cono: unos grados más el tamaño del cuerpo a esa distancia
-      const cone = ASSIST_CONE + Math.atan(0.45 / dist);
+      // cono: unos grados más el tamaño del cuerpo a esa distancia (con mando, más ancho)
+      const cone = (pad ? (this.snapT > 0 ? ASSIST_CONE_SNAP : ASSIST_CONE_PAD) : ASSIST_CONE) + Math.atan(0.45 / dist);
       const k = ang / cone;
       if (k < bestK) {
         bestK = k;
@@ -324,7 +366,10 @@ export class Combat implements System {
     let dy = wantYaw - cam.yaw;
     dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     // más fuerte cuanto más centrado (así no «salta» de un enemigo a otro)
-    const pull = Math.min(1, dt * ASSIST_PULL * (1 - bestK * 0.6));
+    const pullK = pad ? (this.snapT > 0 ? ASSIST_PULL_SNAP : ASSIST_PULL_PAD) : ASSIST_PULL;
+    const pull = Math.min(1, dt * pullK * (1 - bestK * 0.6));
+    // con la mira encima de un enemigo, el stick derecho gira más despacio (es más fácil no pasarse)
+    if (pad && bestK < 0.6) this.game.input.lookScale = 0.5;
     cam.yaw += dy * pull;
     cam.pitch += (wantPitch - cam.pitch) * pull;
   }
@@ -361,6 +406,8 @@ export class Combat implements System {
       this.cam.yaw += (rnd.next() - 0.5) * def.recoil * 0.5;
     }
     if (def.recoil > 0.07) g.events.emit('camera:shake', { amount: def.recoil });
+    // (el mando da una patadita en cada disparo, más gorda con la escopeta)
+    g.input.rumble(Math.min(0.7, def.recoil * 5), Math.min(0.5, 0.12 + def.recoil * 3), 45 + def.recoil * 600);
   }
 
   private muzzleWorld(def: WeaponDef): THREE.Vector3 {

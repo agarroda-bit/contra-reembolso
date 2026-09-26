@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import type { Game, System } from '../core/game';
 import { WEAPONS, type WeaponId } from '../combat/weapons';
+import { BTN, PAD_GLYPH as P } from '../core/input';
 
 const tmpF = new THREE.Vector3();
 const tmpR = new THREE.Vector3();
@@ -23,7 +24,40 @@ const CSS = `
 .cr-arresto i b{display:block;height:100%;background:#2ec4ff}
 .cr-dano-dir{position:fixed;left:50%;top:50%;width:0;height:0;z-index:21;pointer-events:none;opacity:0}
 .cr-dano-dir i{position:absolute;left:-70px;top:calc(-1 * min(30vh, 210px));width:140px;height:40px;box-sizing:border-box;border-top:9px solid #ff2d55;border-radius:50%/100% 100% 0 0;filter:drop-shadow(0 -2px 0 #1b1030) drop-shadow(0 0 6px rgba(255,45,85,.8))}
+.cr-mando .hud-pista .cr-tecla{font-size:21px;min-width:38px;padding:0 6px}
+.cr-chuleta{position:fixed;right:16px;top:50%;transform:translateY(-50%) rotate(1deg);z-index:22;pointer-events:none;width:min(330px,calc(100vw - 32px));box-sizing:border-box;background:rgba(27,16,48,.9);color:#fff6e0;border:3px solid #fff6e0;border-radius:18px;box-shadow:6px 6px 0 #1b1030;padding:12px 14px 10px;font:700 13px/1.35 system-ui,-apple-system,sans-serif;opacity:0;transition:opacity .25s,transform .25s}
+.cr-chuleta.ve{opacity:1;transform:translateY(-50%) rotate(-1deg)}
+.cr-chuleta h4{margin:0 0 6px;font:900 18px system-ui;color:#ffd23f;letter-spacing:.5px}
+.cr-chuleta h5{margin:8px 0 3px;font:900 11px system-ui;color:#2ec4b6;letter-spacing:1px;text-transform:uppercase}
+.cr-chuleta ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:3px 10px}
+.cr-chuleta li{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.cr-chuleta b{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 4px;box-sizing:border-box;border-radius:11px;background:#fff6e0;color:#1b1030;font:900 12px system-ui}
+.cr-chuleta b.a{background:#3ecf5b;color:#fff}.cr-chuleta b.b{background:#ff4f5e;color:#fff}.cr-chuleta b.x{background:#3b8cff;color:#fff}.cr-chuleta b.y{background:#ffc93c}
+.cr-chuleta small{display:block;margin-top:8px;color:#bfb3d9;font-weight:700}
 `;
+
+/** Una fila de la chuleta del mando: botón (con su color) y qué hace. */
+const fila = (btn: string, txt: string, cls = '') => `<li><b class="${cls}">${btn}</b>${txt}</li>`;
+const CHULETA = `<h4>🎮 Mando</h4>
+<h5>A pie</h5><ul>
+${fila(P.LS, 'moverte')}${fila(P.RS, 'cámara')}
+${fila('L3', 'correr')}${fila('A', 'saltar / usar', 'a')}
+${fila('LT', 'apuntar')}${fila('RT', 'disparar')}
+${fila('X', 'recargar', 'x')}${fila('Y', 'subir al coche', 'y')}
+${fila('LB RB', 'cambiar arma')}${fila('B', 'decir que no', 'b')}
+${fila(P.UP, 'móvil')}${fila(P.BACK, 'mapa')}
+</ul><h5>En coche</h5><ul>
+${fila('RT', 'acelerar')}${fila('LT', 'frenar')}
+${fila('A', 'derrapar', 'a')}${fila('X', 'turbo', 'x')}
+${fila('B', 'claxon', 'b')}${fila('Y', 'bajar', 'y')}
+${fila('LB', 'apuntar fuera')}${fila('RB', 'disparar')}
+${fila(P.LEFT + P.RIGHT, 'emisora')}${fila(P.DOWN, 'otra arma')}
+</ul><small>${P.START} pausa · R3: enseñar u ocultar esto</small>`;
+
+/** Separador de dos pistas juntas (como las une interact.ts: «E — Entrar   ·   F — Subir»). */
+const HINT_SPLIT = /(\s{2,}·\s{2,})/;
+/** «E — texto»: la tecla (corta) y el resto. */
+const HINT_KEY = /^(\s*)([^—–-]{1,12}?)\s+([—–-])\s+(.+)$/s;
 
 export class CombatHud implements System {
   name = 'combatHud';
@@ -38,6 +72,15 @@ export class CombatHud implements System {
   private dirs: { el: HTMLDivElement; from: THREE.Vector3; t: number }[] = [];
   /** Marcas de enemigos del minimapa (se reutilizan cada frame). */
   private threatPool: { x: number; z: number; icon: string; color: string; threat: true }[] = [];
+  /** Chuleta de botones del mando (sale la primera vez que se usa; R3 la enseña u oculta). */
+  private chuleta: HTMLDivElement;
+  private chuletaT = 0;
+  private chuletaShown = false;
+  /** Pista traducida a botones del mando (se rehace solo cuando cambia el texto). */
+  private hintSrc: string | null = null;
+  private hintOut: string | null = null;
+  private hintCar = false;
+  private padMode = false;
 
   constructor(private game: Game) {
     const st = document.createElement('style');
@@ -51,7 +94,10 @@ export class CombatHud implements System {
     this.arrest = document.createElement('div');
     this.arrest.className = 'cr-arresto';
     this.arrest.innerHTML = '🚓 ¡TE ESTÁN DETENIENDO! Muévete<i><b></b></i>';
-    game.ui.append(this.wheel, this.hit, this.arrest);
+    this.chuleta = document.createElement('div');
+    this.chuleta.className = 'cr-chuleta';
+    this.chuleta.innerHTML = CHULETA;
+    game.ui.append(this.wheel, this.hit, this.arrest, this.chuleta);
     for (let i = 0; i < 4; i++) {
       const el = document.createElement('div');
       el.className = 'cr-dano-dir';
@@ -83,6 +129,51 @@ export class CombatHud implements System {
       wheelTimer -= dt;
       this.wheel.style.opacity = wheelTimer > 0 && game.hud.visible ? '1' : '0';
     };
+  }
+
+  /**
+   * Con el mando, las pistas de la pantalla enseñan sus botones («Ⓐ — Entregar» en vez de «E — Entregar»).
+   * Va en update (después de que interact.ts escriba la pista y antes de que el HUD la pinte).
+   */
+  update(dt: number) {
+    const g = this.game;
+    const input = g.input;
+    const pad = input.usingGamepad;
+    if (pad !== this.padMode) {
+      this.padMode = pad;
+      g.ui.classList.toggle('cr-mando', pad);
+    }
+    // chuleta del mando: la primera vez que se usa, y con R3
+    if (pad && !this.chuletaShown && input.gamepadSeen) {
+      this.chuletaShown = true;
+      this.chuletaT = 9;
+      g.events.emit('toast', { text: '🎮 ¡Mando listo! R3 enseña los botones', color: '#2ec4b6', time: 3 });
+    }
+    if (input.padEdge & (1 << BTN.R3) && g.mod.player?.state !== 'vehicle') this.chuletaT = this.chuletaT > 0 ? 0 : 12;
+    if (this.chuletaT > 0) this.chuletaT -= dt / Math.max(0.2, g.time.scale);
+    this.chuleta.classList.toggle('ve', this.chuletaT > 0 && g.hud.visible && input.enabled);
+    // pista con botones del mando
+    const h = g.hud.hint;
+    if (!pad || !h || h === this.hintOut) return;
+    const car = g.mod.player?.state === 'vehicle';
+    if (h !== this.hintSrc || car !== this.hintCar) {
+      this.hintSrc = h;
+      this.hintCar = car;
+      this.hintOut = this.padHint(h, car);
+    }
+    g.hud.hint = this.hintOut;
+  }
+
+  /** «E — Entrar   ·   F — Subir» → «Ⓐ — Entrar   ·   Ⓨ — Subir» (lo que no tenga botón, igual). */
+  private padHint(h: string, car: boolean): string {
+    const input = this.game.input;
+    let out = '';
+    for (const part of h.split(HINT_SPLIT)) {
+      const m = HINT_KEY.exec(part);
+      const label = m ? input.padLabel(m[2].trim(), car) : null;
+      out += m && label ? `${m[1]}${label} ${m[3]} ${m[4]}` : part;
+    }
+    return out;
   }
 
   postUpdate(dt: number) {
