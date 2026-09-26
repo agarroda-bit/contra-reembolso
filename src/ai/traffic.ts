@@ -29,6 +29,26 @@ export interface CarBrain {
   jam?: number;
   /** Intentos de desatascarse ante el mismo obstáculo (alterna marcha atrás y adelantar). */
   tries?: number;
+  /** Segundos que lleva la marcha atrás actual (si no se mueve, algo le tapa por detrás: se corta). */
+  revT?: number;
+  /** Momento (s de juego) de la última marcha atrás contra una pared o un obstáculo quieto. */
+  wallAt?: number;
+  /** Rodeo por las calles (persecución que choca con la misma pared): cruces que seguir antes de ir directo. */
+  detour?: THREE.Vector3[];
+  /** Segundos que le quedan al rodeo. */
+  detourT?: number;
+  /** Adónde iba cuando se planeó el rodeo (si el objetivo se mueve mucho, el rodeo ya no vale). */
+  detourGoal?: THREE.Vector3;
+  /** Muchas marchas atrás seguidas contra lo mismo sin salir: se retira en cuanto no se vea. */
+  hopeless?: boolean;
+  /** Veces seguidas que ha tenido que dar marcha atrás contra una pared (carril). */
+  walls?: number;
+  /** Lado (1 = derecha, −1 = izquierda) hacia el que esquiva tras chocar con algo fijo: alterna en cada intento. */
+  dodgeSide?: 1 | -1;
+  /** Segundos que le quedan esquivando hacia ese lado (persecución: una farola o una esquina en medio). */
+  dodge?: number;
+  /** Cuenta atrás para volver a mirar si el objetivo queda tapado por un edificio. */
+  lookT?: number;
 }
 
 const tmpV = new THREE.Vector3();
@@ -36,7 +56,8 @@ const tmpT = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 const tmpL = new THREE.Vector3();
 const tmpC = new THREE.Vector3();
-const tmpN = new THREE.Vector3();
+const tmpO = new THREE.Vector3();
+const tmpD = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const frustum = new THREE.Frustum();
 const sphere = new THREE.Sphere();
@@ -184,7 +205,7 @@ export class Traffic implements System {
       // lejos (y sin verse, salvo que esté ya muy lejos, en la niebla)
       let far = dFocus > 210 && (dFocus > 270 || !this.inView(tmpV, 4));
       // atascado un buen rato donde no se ve: se retira (así no se forman colas eternas)
-      if (!far && brain && (brain.jam ?? 0) > 18 && dFocus > 35 && !this.inView(tmpV, 4)) far = true;
+      if (!far && brain && ((brain.jam ?? 0) > 18 || brain.hopeless) && dFocus > 35 && !this.inView(tmpV, 4)) far = true;
       if (v === this.vm.current || (!driverNpc && !far)) {
         // lo ha cogido el jugador o se ha quedado sin conductor: ya no es tráfico
         if (!driverNpc) {
@@ -236,6 +257,107 @@ export class Traffic implements System {
   }
 
   /**
+   * Adónde ir en persecución: al objetivo, o al siguiente cruce del rodeo si hay uno en marcha.
+   * Una vez por segundo mira si el objetivo (lejano) queda tapado por un edificio: entonces planea un
+   * rodeo por las calles en vez de ir en línea recta contra la pared. El rodeo se acaba al llegar a su
+   * último cruce, al pasar su tiempo o si el objetivo se ha movido mucho.
+   */
+  private chaseGoal(v: Vehicle, brain: CarBrain, pos: THREE.Vector3, dt: number): THREE.Vector3 {
+    const goal = brain.chaseTarget!;
+    const d = brain.detour;
+    if (d) {
+      brain.detourT = (brain.detourT ?? 0) - dt;
+      while (d.length && Math.hypot(d[0].x - pos.x, d[0].z - pos.z) < 8) d.shift();
+      if (d.length && brain.detourT > 0 && !(brain.detourGoal && brain.detourGoal.distanceToSquared(goal) > 20 * 20)) return d[0];
+      brain.detour = undefined;
+    }
+    brain.lookT = (brain.lookT ?? rnd.next()) - dt;
+    if (brain.lookT <= 0) {
+      brain.lookT = 1;
+      const o = tmpO.set(pos.x, pos.y + 1, pos.z);
+      const dir = tmpD.set(goal.x - o.x, goal.y + 1 - o.y, goal.z - o.z);
+      const len = dir.length();
+      if (len > 25 && this.game.physics.raycast(o, dir, len - 2, G.STATIC) && this.planDetour(v, brain, pos)) return brain.detour![0];
+    }
+    return goal;
+  }
+
+  /**
+   * Rodeo por las calles hasta `chaseTarget`, empezando por el cruce que el coche tiene delante (así no
+   * intenta dar media vuelta donde no cabe). false = no hay rodeo que sirva (sería ir directo).
+   */
+  private planDetour(v: Vehicle, brain: CarBrain, pos: THREE.Vector3): boolean {
+    const R = this.roads;
+    const goal = brain.chaseTarget!;
+    let from = pos;
+    const ne = R.nearestEdge(pos, true);
+    if (ne && ne.dist < 14) {
+      const e = R.g.edges[ne.edge];
+      const a = R.g.nodes[e.a].pos, b = R.g.nodes[e.b].pos;
+      const h = v.heading;
+      from = (b.x - a.x) * Math.sin(h) + (b.z - a.z) * Math.cos(h) > 0 ? b : a;
+    }
+    const path = R.route(from, goal, true);
+    path.pop(); // el último punto es el propio objetivo
+    if (from !== pos && (!path.length || path[0].distanceToSquared(from) > 1)) path.unshift(from.clone());
+    // quitar los cruces que ya tiene encima
+    while (path.length && Math.hypot(path[0].x - pos.x, path[0].z - pos.z) < 8) path.shift();
+    // (si el rodeo es ir directo al objetivo, no sirve de nada)
+    if (!path.some((q) => q.distanceToSquared(goal) > 8 * 8)) return false;
+    brain.detour = path;
+    brain.detourT = 30;
+    brain.detourGoal = goal.clone();
+    return true;
+  }
+
+  /**
+   * Un perseguidor que no hay manera de sacar (metido en una plaza entre bolardos, en un rincón...):
+   * si nadie lo ve, se recoloca en el carril más cercano, mirando hacia su objetivo.
+   */
+  private rescue(v: Vehicle, brain: CarBrain, pos: THREE.Vector3): boolean {
+    if (this.inView(pos, 4) || pos.distanceTo(this.game.camera.position) < 30) return false;
+    const R = this.roads;
+    const ne = R.nearestEdge(pos, true);
+    if (!ne) return false;
+    const e = R.g.edges[ne.edge];
+    const goal = brain.chaseTarget!;
+    const dir: 1 | -1 = R.g.nodes[e.b].pos.distanceToSquared(goal) < R.g.nodes[e.a].pos.distanceToSquared(goal) ? 1 : -1;
+    const p = R.lanePoint(ne.edge, dir, dir === 1 ? ne.t : 1 - ne.t, e.width / 4, tmpO);
+    if (this.inView(p, 4) || this.vm.nearest(p, 4, (o) => o !== v)) return false;
+    v.place(p, R.heading(ne.edge, dir));
+    brain.edge = ne.edge;
+    brain.dir = dir;
+    brain.next = null;
+    brain.walls = 0;
+    brain.detour = undefined;
+    brain.reverse = 0;
+    brain.stuck = 0;
+    brain.blocked = 0;
+    return true;
+  }
+
+  /**
+   * Ha tenido que dar marcha atrás contra una pared o algo quieto: la próxima vez esquiva por otro lado.
+   * En persecución, cada dos veces seguidas rodea por las calles, y si sigue sin salir se recoloca cuando
+   * no se vea. En su carril, si le pasa muchas veces seguidas, se retira en cuanto no se vea.
+   */
+  private hitWall(v: Vehicle, brain: CarBrain, pos: THREE.Vector3) {
+    const now = this.game.time.elapsed;
+    const recent = now - (brain.wallAt ?? -99) < 15;
+    brain.wallAt = now;
+    brain.walls = recent ? (brain.walls ?? 0) + 1 : 1;
+    // cada intento, por un lado distinto
+    brain.dodgeSide = brain.dodgeSide === 1 ? -1 : brain.dodgeSide === -1 ? 1 : rnd.next() < 0.5 ? 1 : -1;
+    if (brain.mode !== 'chase' || !brain.chaseTarget) {
+      if (brain.walls >= 5) brain.hopeless = true;
+      return;
+    }
+    brain.dodge = 2.5;
+    if (brain.walls >= 5 && this.rescue(v, brain, pos)) return;
+    if (brain.walls % 2 === 0) this.planDetour(v, brain, pos);
+  }
+
+  /**
    * Conducción de un coche de IA: sigue su carril (girando alrededor de la esquina de cada cruce),
    * o va hacia `chaseTarget` en persecución. Frena ante lo que tiene delante; si es algo fijo
    * (una farola, una pared) da marcha atrás, y si es un coche parado o el jugador, acaba adelantando.
@@ -251,8 +373,27 @@ export class Traffic implements System {
     let target: THREE.Vector3;
     let wantSpeed = brain.cruise;
     if (brain.mode === 'chase' && brain.chaseTarget) {
-      target = tmpT.copy(brain.chaseTarget);
+      target = tmpT.copy(this.chaseGoal(v, brain, pos, dt));
       wantSpeed = v.spec.maxSpeed * 0.85;
+      // esquivando lo que le ha frenado: apunta unos metros a un lado del objetivo
+      if ((brain.dodge ?? 0) > 0 && brain.reverse <= 0) {
+        brain.dodge! -= dt;
+        const dx = target.x - pos.x, dz = target.z - pos.z;
+        const l = Math.hypot(dx, dz) || 1;
+        const side = (brain.dodgeSide ?? 1) * Math.min(6, l * 0.5);
+        target.x += (-dz / l) * side;
+        target.z += (dx / l) * side;
+      }
+      const d = brain.detour;
+      if (d && d.length) {
+        // siguiendo un rodeo: frenar antes de cada cruce según lo cerrado que sea el giro
+        const next = d.length > 1 ? d[1] : brain.chaseTarget;
+        const ax = target.x - pos.x, az = target.z - pos.z, bx = next.x - target.x, bz = next.z - target.z;
+        const dist = Math.hypot(ax, az);
+        const turn = Math.abs(Math.atan2(ax * bz - az * bx, ax * bx + az * bz));
+        const corner = 14 * THREE.MathUtils.clamp(1.05 - turn * 0.42, 0.3, 1);
+        wantSpeed = Math.min(wantSpeed, Math.sqrt(corner * corner + 7 * Math.max(0, dist - 6)));
+      }
     } else {
       if (!brain.next) brain.next = R.nextEdge(brain.edge, brain.dir, true);
       let h1 = R.heading(brain.edge, brain.dir);
@@ -338,17 +479,28 @@ export class Traffic implements System {
     // atascado: marcha atrás un momento
     if (brain.reverse > 0) {
       brain.reverse -= dt;
+      brain.revT = (brain.revT ?? 0) + dt;
+      // si tras un rato no se mueve, algo le tapa por detrás: vuelve a intentarlo hacia delante
+      if (brain.revT > 0.8 && absSpeed < 0.25) brain.reverse = 0;
       v.controls.throttle = -0.7;
-      v.controls.steer = -steer;
+      // con el objetivo casi de frente, recular recto no sirve (vuelve a dar en lo mismo): gira el morro
+      // hacia el lado por el que va a esquivar
+      v.controls.steer = Math.abs(steer) < 0.35 && brain.dodgeSide ? -brain.dodgeSide : -steer;
       v.controls.handbrake = false;
       v.controls.boost = false;
       return;
     }
-    if (wantSpeed > 1 && absSpeed < 0.4) {
+    brain.revT = 0;
+    // Atasco: quieto queriendo avanzar, o quieto con una pared (u obstáculo sin dueño) delante. Con algo
+    // delante la velocidad deseada baja de 1, así que eso también cuenta; en persecución, también un coche
+    // parado (la persecución no adelanta por el otro carril).
+    const blockedStill = !!hit && (staticHit || (brain.mode === 'chase' && stillHit && !blockedByPlayer));
+    if (absSpeed < 0.4 && (wantSpeed > 1 || blockedStill)) {
       brain.stuck += dt;
       if (brain.stuck > 3.5) {
         brain.stuck = 0;
         brain.reverse = 1.3;
+        this.hitWall(v, brain, pos);
       }
     } else brain.stuck = 0;
     brain.jam = absSpeed < 0.5 ? (brain.jam ?? 0) + dt : 0;
@@ -365,7 +517,9 @@ export class Traffic implements System {
       if (staticHit && brain.blocked > 1.5) {
         // una farola, un árbol o una esquina: atrás y a intentarlo otra vez
         brain.blocked = 0;
+        brain.stuck = 0;
         brain.reverse = 1.4;
+        this.hitWall(v, brain, pos);
       } else if (brain.mode === 'lane' && !staticHit && brain.blocked > (blockedByPlayer ? 7 : stillHit ? 4 : 9)) {
         brain.blocked = 0;
         const tries = (brain.tries = (brain.tries ?? 0) + 1);
@@ -386,6 +540,8 @@ export class Traffic implements System {
       }
     } else brain.blocked = 0;
     if (absSpeed > 3) brain.tries = 0;
+    // ya circula con normalidad (lejos de la última pared): se olvidan las marchas atrás
+    if (absSpeed > 6 && this.game.time.elapsed - (brain.wallAt ?? -99) > 4) brain.walls = 0;
 
     const diff = wantSpeed - speed;
     v.controls.throttle = diff > 0.5 ? THREE.MathUtils.clamp(diff * 0.35, 0.15, 1) : diff < -0.8 ? -1 : 0;
