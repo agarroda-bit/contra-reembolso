@@ -92,7 +92,8 @@ export class Breakables implements System {
   name = 'breakables';
   private meshes = new Map<Kind, THREE.InstancedMesh>();
   private items: Item[] = [];
-  private grid = new Map<string, Item[]>();
+  /** Rejilla de celdas (clave numérica: sin crear textos en cada consulta). */
+  private grid = new Map<number, Item[]>();
   private respawnTimer = 0;
 
   constructor(private game: Game) {
@@ -131,15 +132,18 @@ export class Breakables implements System {
     }
   }
 
+  private cellKey(cx: number, cz: number) {
+    return (cx + 20000) * 40000 + (cz + 20000);
+  }
   private key(x: number, z: number) {
-    return `${Math.floor(x / CELL)},${Math.floor(z / CELL)}`;
+    return this.cellKey(Math.floor(x / CELL), Math.floor(z / CELL));
   }
 
   private near(x: number, z: number, cb: (it: Item) => void) {
     const cx = Math.floor(x / CELL), cz = Math.floor(z / CELL);
     for (let i = -1; i <= 1; i++)
       for (let j = -1; j <= 1; j++) {
-        const cell = this.grid.get(`${cx + i},${cz + j}`);
+        const cell = this.grid.get(this.cellKey(cx + i, cz + j));
         if (cell) for (const it of cell) cb(it);
       }
   }
@@ -188,14 +192,21 @@ export class Breakables implements System {
         v.getPosition(tmpV);
         const h = v.spec.half;
         v.getQuaternion(tmpQ).invert();
-        this.near(tmpV.x, tmpV.z, (it) => {
-          if (it.broken) return;
-          const d = DEFS[it.kind];
-          tmpL.set(it.pos.x - tmpV.x, it.pos.y + d.half[1] - tmpV.y, it.pos.z - tmpV.z).applyQuaternion(tmpQ);
-          if (Math.abs(tmpL.x) < h.x + d.radius * 0.8 && Math.abs(tmpL.z) < h.z + d.radius * 0.8 && Math.abs(tmpL.y) < h.y + d.half[1] + 0.5) {
-            this.breakItem(it, v);
+        // (sin funciones nuevas: se recorre la rejilla aquí mismo)
+        const cx = Math.floor(tmpV.x / CELL), cz = Math.floor(tmpV.z / CELL);
+        for (let i = -1; i <= 1; i++)
+          for (let j = -1; j <= 1; j++) {
+            const cell = this.grid.get(this.cellKey(cx + i, cz + j));
+            if (!cell) continue;
+            for (const it of cell) {
+              if (it.broken) continue;
+              const d = DEFS[it.kind];
+              tmpL.set(it.pos.x - tmpV.x, it.pos.y + d.half[1] - tmpV.y, it.pos.z - tmpV.z).applyQuaternion(tmpQ);
+              if (Math.abs(tmpL.x) < h.x + d.radius * 0.8 && Math.abs(tmpL.z) < h.z + d.radius * 0.8 && Math.abs(tmpL.y) < h.y + d.half[1] + 0.5) {
+                this.breakItem(it, v);
+              }
+            }
           }
-        });
       }
     }
     // reaparecen al rato, lejos de la vista
