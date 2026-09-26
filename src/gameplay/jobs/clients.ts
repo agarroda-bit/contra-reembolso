@@ -49,7 +49,7 @@ export const CLIENTS: ClientProfile[] = [
   },
   {
     id: 'anselmo', name: 'Anselmo', avatar: '🤨', look: 'civil', quirk: 'no_he_pedido', voice: 0.75,
-    items: ['una batidora industrial', 'un kayak hinchable', 'veinte rollos de papel de cocina', 'un cortacésped', 'un busto de Beethoven'],
+    items: ['una batidora industrial', 'un kayak hinchable', 'veinte rollos de papel de cocina', 'un cortacésped', 'un busto de un señor con peluca'],
     ask: [
       'Entrega para Anselmo en {calle}. {item}. {precio}. (Pedido automático)',
       'Paquete: {item}. Cliente: Anselmo. Cobrar: {precio}. Plazo: {tiempo}.',
@@ -103,7 +103,7 @@ export const CLIENTS: ClientProfile[] = [
     broken: ['Esto no enfría ni el ambiente.'],
   },
   {
-    id: 'gimnasio', name: 'Músculo Feliz (gimnasio)', avatar: '💪', look: 'civil', quirk: 'none', voice: 0.7,
+    id: 'gimnasio', name: 'Músculo Feliz (gimnasio)', avatar: '💪', look: 'civil', quirk: 'none', voice: 0.7, prefers: 'pesado',
     items: ['cien kilos de pesas', 'batidos de proteína sabor chorizo', 'un espejo de cuerpo entero', 'una esterilla de yoga reforzada'],
     ask: ['¡VAMOS! {item}! {precio}! {tiempo}! ¡Sin excusas!', 'Entrega PESADA para el gimnasio. {item}. Si te cuesta, es entreno.'],
     happy: ['¡Eso es actitud! ¿Has entrenado pierna hoy? Se nota.'],
@@ -111,7 +111,7 @@ export const CLIENTS: ClientProfile[] = [
     broken: ['Da igual, las pesas no se rompen. Bueno, estas sí.'],
   },
   {
-    id: 'fiorella', name: 'Fiorella (pastelería)', avatar: '🎂', look: 'civil', quirk: 'none', voice: 1.25, districts: ['centro', 'viejo'],
+    id: 'fiorella', name: 'Fiorella (pastelería)', avatar: '🎂', look: 'civil', quirk: 'none', voice: 1.25, districts: ['centro', 'viejo'], prefers: 'fragil',
     items: ['una tarta de boda de cinco pisos', 'doscientos cruasanes', 'una escultura de azúcar', 'un roscón con sorpresa dentro de la sorpresa'],
     ask: ['¡FRÁGIL! {item}. {precio}. Si se rompe, lloro. Si llega tarde, lloro más.', '{item} a {calle}. Llévala como si fuera un bebé. Un bebé de nata.'],
     happy: ['¡Perfecta! Eres un artista del volante. Toma un cruasán.'],
@@ -119,7 +119,7 @@ export const CLIENTS: ClientProfile[] = [
     broken: ['Me han entregado una tarta de un piso y muchos pedacitos.'],
   },
   {
-    id: 'misterio', name: 'Número oculto', avatar: '🕶️', look: 'civil', quirk: 'none', voice: 0.65,
+    id: 'misterio', name: 'Número oculto', avatar: '🕶️', look: 'civil', quirk: 'none', voice: 0.65, prefers: 'sospechoso',
     items: ['un maletín que hace tic-tac', 'una caja que no se debe abrir', 'un sobre muy gordo', 'una estatuilla de un pato'],
     ask: ['No hagas preguntas. {item}. {precio}. {tiempo}. Nadie te sigue. Creo.', 'Paquete delicado. {item}. Pago triple: {precio}. Evita a los morados.'],
     happy: ['Esta conversación nunca ha existido. El dinero sí.'],
@@ -157,6 +157,183 @@ export const CLIENTS: ClientProfile[] = [
     happy: ['El Ayuntamiento le agradece los servicios prestados. Y le debe una rotonda.'],
     late: ['Tendremos que inaugurar la fuente sin tijeras. Con los dientes.'],
     broken: ['Lo declaramos patrimonio roto de la humanidad.'],
+  },
+  // ───────────── Fase 8: más clientes absurdos ─────────────
+  {
+    id: 'opositor', name: 'Chema (opositor, 11.º año)', avatar: '📚', look: 'civil', quirk: 'none', voice: 0.9,
+    items: ['el tomo 47 del temario', 'tres kilos de subrayadores', 'un flexo que ilumina el alma', 'café en polvo para untar'],
+    ask: [
+      'Buenas. Oposito desde hace once años y no puedo salir de casa. {item}. {precio}. {tiempo}. No toques el timbre, que pierdo el hilo.',
+      'Me faltan 4.000 temas y {item}. Te pago {precio}. Estoy en {calle}, entre apuntes.',
+    ],
+    happy: ['Gracias. Este año apruebo. Como los otros once.', 'Me has ahorrado siete minutos de estudio. Los usaré para agobiarme.'],
+    late: ['He perdido el ritmo. Vuelvo a empezar por el tema uno. Otra vez.'],
+    broken: ['El temario viene en fascículos sueltos. Bueno, así se estudia por partes.'],
+  },
+  {
+    id: 'encarna', name: 'Doña Encarna (la del quinto)', avatar: '👀', look: 'abuela', quirk: 'none', voice: 1.25, districts: ['viejo', 'centro', 'puerto'],
+    items: ['unos prismáticos de largo alcance', 'un vaso para escuchar paredes', 'una silla plegable para el balcón', 'una libreta gorda para apuntar matrículas'],
+    ask: [
+      'Hijo, {item}, que en el tercero pasa algo y necesito verlo bien. {precio}. {tiempo}.',
+      'Tráeme {item} a {calle}. Y de paso me cuentas quién vive en la casa amarilla. {precio}.',
+    ],
+    happy: ['Ay, gracias. Oye, ¿tú no eres el que salía con la de la frutería?', 'Qué majo. Por cierto, tu furgoneta pierde aceite. Lo tengo apuntado.'],
+    late: ['Ya se han ido todos del tercero y me lo he perdido. Se lo pienso contar a todo el barrio.'],
+    broken: ['Con esto roto no veo ni el portal. Menos mal que tengo el oído fino.'],
+  },
+  {
+    id: 'rigoberto', name: 'Rigoberto (ventanilla 3)', avatar: '📋', look: 'civil', quirk: 'firmas', voice: 0.8,
+    items: ['un sello con tres sellos dentro', 'quinientos impresos por triplicado', 'una grapadora industrial', 'un archivador de archivadores'],
+    ask: [
+      'Envío de {item} a {calle}. Importe: {precio}. Plazo: {tiempo}. Traiga el DNI, una fotocopia del DNI y una fotocopia de la fotocopia.',
+      'Buenos días. {item}. {precio}. Si no estoy, vuelva mañana. Si estoy, también.',
+    ],
+    happy: ['Todo en regla. Su expediente queda archivado en el cajón de los expedientes.', 'Correcto. Le devolveremos la llamada en un plazo de tres a cuarenta años.'],
+    late: ['Fuera de plazo. Tendrá que pedir cita para pedir cita.'],
+    broken: ['Viene dañado. Rellene el formulario de daños. Está dentro del paquete. Que viene dañado.'],
+  },
+  {
+    id: 'pena', name: 'Peña Los Chunda-Chunda', avatar: '🥁', look: 'fiestero', quirk: 'cambia_direccion', voice: 1.1,
+    items: ['un bombo más grande que tú', 'cuarenta pañuelos de fiestas', 'una charanga desmontable', 'confeti para tres pueblos'],
+    ask: [
+      '¡EEEH REPARTIDOOOR! ¡{item}! {precio} y te hacemos socio de la peña. Estamos en {calle}. Creo.',
+      'La peña necesita {item} en {tiempo}. {precio}. Si nos movemos, síguenos por el ruido.',
+    ],
+    happy: ['¡Socio de honor! El carnet te llega en fiestas. Del año que viene.', '¡OEEE, OEEE! ¡Ese repartidor!'],
+    late: ['Ya han pasado la procesión, el desfile y la resaca. Pero gracias.'],
+    broken: ['El bombo suena raro. Da igual, nosotros también.'],
+  },
+  {
+    id: 'mago', name: 'Maese Ulises (mago de cumpleaños)', avatar: '🪄', look: 'civil', quirk: 'no_he_pedido', voice: 1.0,
+    items: ['un conejo de peluche (el de verdad se escapó)', 'una baraja con sesenta ases', 'una caja para serrar gente', 'palomas de goma'],
+    ask: [
+      '¡Tachán! Necesito {item} para un cumpleaños. {precio}. {tiempo}. Si no me ves, es parte del truco.',
+      '{item} a {calle}. Pago {precio}. O lo hago aparecer, todavía no lo sé.',
+    ],
+    happy: ['¿Es este su paquete? ¡Tachán! Sí, era este.', 'Gracias. Elige una carta. No, esa no. Da igual, ya te puedes ir.'],
+    late: ['Los niños se han ido. Los he hecho desaparecer. Bueno, se han ido solos.'],
+    broken: ['Ahora el número se llama «la caja serrada de verdad». También vale.'],
+  },
+  {
+    id: 'bodas', name: 'Paquita (organiza bodas)', avatar: '💍', look: 'rico', quirk: 'none', voice: 1.2, districts: ['colina', 'centro'], prefers: 'fragil',
+    items: ['una tarta de nueve pisos', 'dos palomas mensajeras con resaca', 'trescientas copas de cristal fino', 'el vestido de la novia (con cola de veinte metros)'],
+    ask: [
+      '¡Emergencia nupcial! {item} a {calle}. {precio}. {tiempo}. La novia está llorando, pero de las buenas.',
+      'FRÁGIL, FRÁGIL, FRÁGIL. {item}. {precio}. Si se rompe, se suspende la boda y te caso a ti.',
+    ],
+    happy: ['¡Divino! Quédate al banquete: mesa 47, al lado de los cuñados.', 'La novia dice que eres el segundo hombre más guapo del día.'],
+    late: ['Se han casado ya. Han brindado con agua del grifo. Ha sido muy triste.'],
+    broken: ['Ahora la tarta es de un solo piso. El de abajo.'],
+  },
+  {
+    id: 'tuning', name: 'Jonathan «el Tuning»', avatar: '🔊', look: 'fiestero', quirk: 'regatea', voice: 0.95, districts: ['poligono', 'viejo', 'puerto'],
+    items: ['un alerón para una bici', 'luces de neón para los bajos', 'un tubo de escape que suena a dragón', 'un volante de peluche de leopardo'],
+    ask: [
+      'Illo, {item}. Te doy {precio}, pero eso lo hablamos, ¿eh? Estoy en {calle}.',
+      'Bro, {item} pa ya. {tiempo}. {precio}. Si llegas rápido te dejo oír el coche.',
+    ],
+    happy: ['¡Tope guapo! Escucha, escucha: BRRRRRM. ¿Qué? ¿QUÉ?', 'Te has ganado una pegatina en la luna. Mírala, brilla.'],
+    late: ['Tarde, bro. Ya he tuneado el coche con cinta aislante.'],
+    broken: ['Viene reventao. Mejor, así tiene un rollo más callejero.'],
+  },
+  {
+    id: 'monjas', name: 'Sor Remedios', avatar: '⛪', look: 'abuela', quirk: 'none', voice: 1.2,
+    items: ['doscientas yemas de convento', 'un órgano de iglesia portátil', 'velas con olor a «incienso intenso»', 'una bicicleta para llegar antes a misa'],
+    ask: [
+      'Paz y bien, hijo. {item}, si Dios quiere y tú también. {precio}. {tiempo}.',
+      'Las hermanas necesitamos {item} en {calle}. Pagamos {precio} y una oración de las buenas.',
+    ],
+    happy: ['Que el Señor te lo pague. Bueno, ya te pagamos nosotras. Toma.', 'Bendito seas. Y bendita tu furgoneta, que buena falta le hace.'],
+    late: ['Hemos rezado para que llegaras. Ha tardado en funcionar.'],
+    broken: ['Las yemas han llegado en forma de revuelto. Dios aprieta pero no ahoga.'],
+  },
+  {
+    id: 'chef', name: 'Chef Ramiro (cocina de autor)', avatar: '👨‍🍳', look: 'rico', quirk: 'none', voice: 0.9, districts: ['centro', 'puerto', 'colina'], prefers: 'urgente',
+    items: ['espuma de croqueta deconstruida', 'un kilo de brisa marina embotellada', 'una tortilla SIN cebolla (bajo protesta)', 'caviar de gazpacho'],
+    ask: [
+      'URGENTE. {item}. Tengo a un crítico en la mesa cinco. {precio}. {tiempo}. ¡VOLANDO!',
+      '{item} a {calle}. {precio}. Si tardas, el crítico se come la servilleta.',
+    ],
+    happy: ['¡Magnífico! El crítico ha llorado. De emoción, creo.', 'Te invito a un menú degustación: tres guisantes y una lágrima.'],
+    late: ['El crítico nos ha puesto una estrella. De cinco. Y era por la silla.'],
+    broken: ['«Paquete destrozado sobre lecho de disgusto». Lo pongo en la carta.'],
+  },
+  {
+    id: 'toni', name: 'Toñi (la del bingo)', avatar: '🎟️', look: 'abuela', quirk: 'abuela_centimos', voice: 1.35, districts: ['viejo', 'centro'],
+    items: ['un rotulador fosforito de la suerte', 'un cojín para aguantar cuatro horas de bingo', 'setenta cartones plastificados', 'una estampita del santo de la suerte'],
+    ask: [
+      '¡Línea! Digo… hola, guapo. {item}, que esta noche canto bingo. {precio}, en calderilla del premio.',
+      'Tráeme {item} a {calle}. {tiempo}, que empieza la partida. Pago {precio}. En suelto, eso sí.',
+    ],
+    happy: ['¡BINGO! Ah, no, que es el paquete. Toma, cariño.', 'Qué suerte me das. Esta noche me forro. Bueno, esta noche pierdo 20 €, como siempre.'],
+    late: ['Ya han cantado bingo. La de la mesa de al lado. Qué rabia me da esa mujer.'],
+    broken: ['Roto, como mi racha. Toma, anda.'],
+  },
+  {
+    id: 'destrozos', name: 'Dani Destrozos (canal de retos)', avatar: '🎥', look: 'fiestero', quirk: 'influencer', voice: 1.2,
+    items: ['una sandía gigante para aplastarla', 'cien huevos para un reto', 'una prensa hidráulica de juguete', 'un coche teledirigido blindado'],
+    ask: [
+      '¡¡QUÉ PASA, FAMILIA!! Necesito {item} para el vídeo de hoy. {precio}. {tiempo}. ¡Dale a la campanita!',
+      '¡{item} a {calle}! Si llega roto, mejor, que me ahorras trabajo. {precio}.',
+    ],
+    happy: ['¡Saluda al chat! Dicen que tienes cara de repartidor honrado.', '¡Brutal! Suscríbete, bro. No, en serio, suscríbete.'],
+    late: ['El directo se ha quedado en dos espectadores: mi madre y tú.'],
+    broken: ['¡ROTO! ¡Me has hecho el vídeo! «Repartidor destroza mi paquete (REAL, NO FAKE)».'],
+  },
+  {
+    id: 'capitan', name: 'Capitán Merluza', avatar: '⚓', look: 'civil', quirk: 'none', voice: 0.7, districts: ['puerto'],
+    items: ['un loro que solo dice «reembolso»', 'un parche de ojo con estampado de flores', 'un mapa del tesoro de la despensa', 'un timón de repuesto (el otro lo perdí)'],
+    ask: [
+      '¡Arrr, grumete! {item} al muelle. Pago {precio} en doblones. Bueno, en euros. {tiempo}.',
+      '{item} a {calle}. {precio}. Si no llegas a tiempo, te hago caminar por la tabla.',
+    ],
+    happy: ['¡Arrr! Buen trabajo, grumete. Te nombro contramaestre. No se cobra más.', '¡Por todas las merluzas! Toma tus doblones.'],
+    late: ['El barco zarpó sin mí. Estoy en tierra. Llorando. Arrr.'],
+    broken: ['Llega como mi barco: medio hundido. Arrr.'],
+  },
+  {
+    id: 'gatos', name: 'Gertrudis y sus 14 gatos', avatar: '🐈', look: 'abuela', quirk: 'none', voice: 1.3, districts: ['viejo', 'colina', 'centro'],
+    items: ['un rascador de tres plantas', 'catorce latas de paté para gatos', 'un sofá para gatos (el mío ya es suyo)', 'una fuente de agua con cascada'],
+    ask: [
+      'Hola, soy Gertrudis. Los gatos necesitan {item}. Pago {precio}. {tiempo}, que se ponen nerviosos.',
+      '{item} a {calle}. {precio}. Si ves un gato naranja en la puerta, es Mandarino. Mételo en casa, porfa.',
+    ],
+    happy: ['Los catorce te dan las gracias. Bueno, trece. Bigotes nunca da las gracias.', 'Toma. Y llévate un gato si quieres. No, en serio, llévate uno.'],
+    late: ['Los gatos han tirado todo lo que había en las estanterías. De aburrimiento.'],
+    broken: ['Da igual que esté roto: van a jugar con la caja. Siempre juegan con la caja.'],
+  },
+  {
+    id: 'nacho', name: 'Nacho «Mañana empiezo»', avatar: '🥱', look: 'civil', quirk: 'none', voice: 0.95, prefers: 'pesado',
+    items: ['una cinta de correr que acabará de perchero', 'unas pesas que acabarán de sujetapuertas', 'una bici estática para colgar la ropa', 'una colchoneta para hacer abdominales (mañana)'],
+    ask: [
+      'Holaaa. {item}. Es PESADO, lo siento. Es que mañana empiezo a entrenar. {precio}.',
+      '{item} a {calle}. {precio}. {tiempo}. Súbemelo, porfa, que yo aún no estoy en forma.',
+    ],
+    happy: ['Genial. Lo dejo aquí y empiezo mañana. O el lunes. El lunes seguro.', 'Gracias, crack. Me canso solo de verte cargarlo.'],
+    late: ['Bueno, como ya es tarde, empiezo la semana que viene.'],
+    broken: ['Viene roto. Pues nada, ya tengo excusa para no empezar.'],
+  },
+  {
+    id: 'turista', name: 'Ingrid (turista despistada)', avatar: '🗺️', look: 'civil', quirk: 'none', voice: 1.3, districts: ['centro', 'puerto', 'colina'],
+    items: ['un mapa de Puerto Paquete puesto al revés', 'crema solar de factor 900', 'un diccionario de gestos españoles', 'una paella congelada para seis'],
+    ask: [
+      '¡Hola! Yo querer {item}. Pagar {precio}. Estoy en {calle}… o eso dice el mapa. {tiempo}.',
+      '¡Holaaa! {item}, por favor. {precio}. Hoy me he perdido tres veces. Esta es la cuarta.',
+    ],
+    happy: ['¡Muchas gracias! ¡Olé! ¿Se dice así? ¿Olé?', '¡Qué amable! En mi país esto tarda tres semanas y llega en otra caja.'],
+    late: ['Ya he cenado. A las siete. Aquí la gente me mira raro.'],
+    broken: ['¿Aquí las cosas siempre llegan así? Lo pondré en mi guía.'],
+  },
+  {
+    id: 'loli', name: 'Loli (siempre en el bar)', avatar: '🍻', look: 'civil', quirk: 'vecino_banda', voice: 1.15, districts: ['viejo', 'puerto', 'poligono'],
+    items: ['un mando universal para la tele', 'unas cortinas opacas', 'un colchón hinchable de matrimonio', 'una freidora de aire'],
+    ask: [
+      'Estoy en el bar, cariño. {item}, {precio}. Déjaselo al vecino del segundo, que es de fiar. Creo.',
+      '{item} a {calle}. No estaré. Te lo recoge el vecino, que es muy majo. Siempre va de morado.',
+    ],
+    happy: ['Ay, gracias. ¿El vecino te ha tratado bien? Últimamente está muy raro.'],
+    late: ['He vuelto del bar y ni rastro. Me vuelvo al bar.'],
+    broken: ['El vecino dice que así venía. El vecino dice muchas cosas.'],
   },
 ];
 

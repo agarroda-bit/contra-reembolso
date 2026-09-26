@@ -27,7 +27,10 @@ export class RandomEvents implements System {
 
   private busy(): boolean {
     const g = this.game;
-    return !!(g.mod.story?.running || g.mod.interiors?.inside || (g.mod.police?.wanted ?? 0) > 0 || g.mod.tutorial?.done === false);
+    // el tutorial solo cuenta si está en marcha (al continuar una partida a medias se queda en el paso 0 para siempre)
+    const tuto = g.mod.tutorial;
+    const inTutorial = !!tuto && !tuto.done && tuto.step > 0;
+    return !!(g.mod.story?.running || g.mod.interiors?.inside || (g.mod.police?.wanted ?? 0) > 0 || inTutorial);
   }
 
   update(dt: number) {

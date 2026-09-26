@@ -39,7 +39,8 @@ interface Mission {
   pitch: string; // descripción en el tablón
   reward: number;
   fameReward: number;
-  intro: string;
+  /** Mensaje del jefe al empezar (se manda después de preparar el primer paso). */
+  intro: string | ((c: Ctx) => string);
   outro: string;
   steps: Step[];
   cleanup?: (c: Ctx) => void;
@@ -63,15 +64,51 @@ function onFootNear(g: Game, p: THREE.Vector3, r: number) {
   const pl = g.mod.player;
   return pl.state === 'foot' && pl.position.distanceTo(p) < r;
 }
+/** ¿Ha pulsado E? La gasta, para que la misma pulsación no entre además en la oficina o la tienda de al lado. */
 function pressedE(g: Game) {
-  return g.input.enabled && g.input.pressed('interact');
+  if (!g.input.enabled || !g.input.pressed('interact')) return false;
+  (g.input as any).justDown?.delete?.('interact');
+  return true;
 }
 function poi(g: Game, kind: Poi['kind']): Poi {
   return g.world.pois.find((p) => p.kind === kind) ?? g.world.pois[0];
 }
-function spotIn(g: Game, district: DeliverySpot['district'], avoid?: THREE.Vector3, minDist = 0): DeliverySpot {
-  const list = g.world.deliverySpots.filter((d) => d.district === district && (!avoid || d.door.distanceTo(avoid) > minDist));
-  return (list.length ? list : g.world.deliverySpots)[Math.floor(rng.next() * (list.length || g.world.deliverySpots.length))];
+/** ¿Hay calle a menos de `max` metros de la puerta? (para misiones que piden aparcar la furgoneta al lado). */
+function nearRoad(g: Game, d: DeliverySpot, max = 16): boolean {
+  const roads = g.mod.traffic?.roads;
+  if (!roads) return true;
+  const ne = roads.nearestEdge(d.door, true);
+  return !!ne && ne.dist < max;
+}
+/** Un sitio del barrio al que se llega con la furgoneta, a una distancia razonable de `from`. */
+function vanSpotIn(g: Game, district: DeliverySpot['district'], from?: THREE.Vector3, minDist = 0, maxDist = Infinity): DeliverySpot {
+  const all = g.world.deliverySpots.filter((d) => d.district === district && nearRoad(g, d));
+  const ok = from ? all.filter((d) => { const k = d.door.distanceTo(from); return k > minDist && k < maxDist; }) : all;
+  const list = ok.length ? ok : all.length ? all : g.world.deliverySpots;
+  return list[Math.floor(rng.next() * list.length)];
+}
+/** Punto de mar a unos metros de `p` (para tirar la bomba). */
+function seaPointNear(g: Game, p: THREE.Vector3, dist = 10): THREE.Vector3 {
+  for (let r = dist; r <= dist * 3; r += dist) {
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r;
+      if (!g.world.isLand(x, z)) return new THREE.Vector3(x, g.world.seaLevel, z);
+    }
+  }
+  return new THREE.Vector3(p.x, g.world.seaLevel, p.z + dist);
+}
+/** Miembros de la banda vivos a menos de `r` metros de `p`. */
+function gangNear(g: Game, p: THREE.Vector3, r: number): number {
+  let n = 0;
+  for (const m of (g.mod.gang?.members ?? []) as Npc[]) if (m.alive && !m.removed && m.position.distanceTo(p) < r) n++;
+  return n;
+}
+/** «Supermercado El Carrito Loco» → «el Supermercado El Carrito Loco» (para que las frases suenen bien). */
+function withArticle(name: string): string {
+  if (/^(Supermercado|Videoclub|Bar|Casino|Club|Taller|Estanco)\b/.test(name)) return 'el ' + name;
+  if (/^(Panadería|Óptica|Armería|Tienda|Oficina|Taberna|Joyería|Frutería)\b/.test(name)) return 'la ' + name;
+  return name;
 }
 function msg(g: Game, from: { id: string; name: string; avatar: string }, text: string) {
   g.mod.messages?.receive(from.id, from.name, from.avatar, text);
@@ -115,19 +152,20 @@ function spawnBoss(g: Game, pos: THREE.Vector3): Npc {
 function missions(): Mission[] {
   return [
     {
-      id: 'reloj', num: 1, title: 'El reloj de la señora Puri', icon: '⌚', fame: 2, reward: 1500, fameReward: 60,
+      id: 'reloj', num: 1, title: 'El reloj de la señora Puri', icon: '⌚', fame: 2, reward: 1500, fameReward: 100,
       pitch: 'Un reloj de oro de 50.000 € para una señora de la Colina. Los Devueltos lo saben. Todo el mundo lo sabe.',
-      intro: 'Chaval, esto es serio: la señora Puri de la Colina ha comprado un reloj de oro de 50.000 €. Recógelo en la joyería del Centro y llévaselo sin un rasguño. Y ojo, que Los Devueltos se han enterado. No sé cómo. Yo no he sido.',
+      intro: (c) =>
+        `Recoge un reloj de oro de 50.000 € en ${withArticle(c.data.shop.name)} (Centro: la joyería está de obras y lo guardan allí, entre los yogures) y llévaselo a la señora Puri, en la Colina, sin un rasguño. Ojo, que Los Devueltos se han enterado. Yo no he sido.`,
       outro: '¡Reloj entregado! La señora Puri dice que es el repartidor más guapo que ha visto. Y eso que ve fatal. Toma tu parte.',
       failText: 'El reloj ha acabado en manos (moradas) equivocadas.',
       steps: [
         {
-          objective: 'Recoge el reloj en la joyería del Centro (E en la puerta)',
+          objective: (c) => `Recoge el reloj en ${withArticle(c.data.shop.name)} (E en la puerta)`,
           target: (c) => c.data.shop.door,
           enter: (c) => {
             const shops = c.g.world.pois.filter((p) => p.kind === 'shop');
-            c.data.shop = shops.find((p) => p.district === 'centro') ?? shops[0] ?? poi(c.g, 'clothes');
-            c.data.dest = spotIn(c.g, 'colina');
+            c.data.shop = shops.find((p) => p.id === 'shop-super') ?? shops.find((p) => p.district === 'centro') ?? shops[0] ?? poi(c.g, 'clothes');
+            c.data.dest = vanSpotIn(c.g, 'colina');
           },
           update: (c) => {
             if (onFootNear(c.g, c.data.shop.door, 3)) {
@@ -177,18 +215,18 @@ function missions(): Mission[] {
       cleanup: (c) => c.data.off?.(),
     },
     {
-      id: 'mudanza', num: 2, title: 'Mudanza exprés', icon: '🛋️', fame: 3, reward: 1400, fameReward: 70,
+      id: 'mudanza', num: 2, title: 'Mudanza exprés', icon: '🛋️', fame: 3, reward: 1800, fameReward: 150,
       pitch: 'Kevin se muda. Otra vez. Tres minutos para llevarle los muebles sin romper nada. Necesitas la furgoneta.',
       intro: 'Kevin se muda y quiere que se lo hagas tú, con la furgoneta. Tiene un sofá, una lámpara de lava, un espejo y una estatua de un flamenco. Tres minutos, sin romper NADA. Él ya está en la casa nueva. De momento.',
       outro: 'Mudanza hecha. Kevin dice que ya se está pensando la siguiente. Cóbrale el doble.',
       failText: 'La mudanza ha salido regular. Tirando a mal.',
       steps: [
         {
-          objective: 'Ve con la furgoneta a casa de Kevin (Barrio Viejo) a cargar los muebles',
+          objective: (c) => `Ve con la furgoneta a casa de Kevin (${c.data.from.label}, Barrio Viejo) y pulsa E en su puerta`,
           target: (c) => c.data.from.door,
           enter: (c) => {
-            c.data.from = spotIn(c.g, 'viejo');
-            c.data.to = spotIn(c.g, 'puerto', c.data.from.door, 150);
+            c.data.from = vanSpotIn(c.g, 'viejo');
+            c.data.to = vanSpotIn(c.g, 'puerto', c.data.from.door, 150, 380);
           },
           update: (c) => {
             const pl = c.g.mod.player;
@@ -253,7 +291,7 @@ function missions(): Mission[] {
       },
     },
     {
-      id: 'tictac', num: 3, title: 'El paquete que hace tic-tac', icon: '⏰', fame: 4, reward: 2200, fameReward: 90,
+      id: 'tictac', num: 3, title: 'El paquete que hace tic-tac', icon: '⏰', fame: 4, reward: 2500, fameReward: 200,
       pitch: 'Un cliente anónimo quiere que lleves «un despertador» al casino. Paga muy bien. Demasiado bien.',
       intro: 'Me ha llamado un número oculto: quiere que lleves un despertador al casino. Paga el triple. Yo no haría preguntas. Bueno, yo sí haría preguntas, pero tú no.',
       outro: 'El Ayuntamiento te da una medalla y un cheque por salvar el casino. El concejal Pérez dice que va a inaugurar una rotonda con tu nombre. Algún día.',
@@ -294,25 +332,29 @@ function missions(): Mission[] {
           },
         },
         {
-          objective: '¡ES UNA BOMBA! Llévala al final del muelle y tírala al mar (E)',
+          objective: '¡ES UNA BOMBA! Llévala al final del muelle de pescadores y tírala al mar (E)',
           target: (c) => c.data.pier,
           timer: (c) => c.data.bomb,
           enter: (c) => {
             msg(c.g, { id: 'oculto', name: 'Número oculto', avatar: '🕶️' }, 'Jejeje. El casino me debe dinero. Disfruta del despertador. 💣');
-            msg(c.g, BOSS, '¡CHAVAL, QUE ES UNA BOMBA! ¡Al mar con ella, al final del muelle del Puerto! ¡CORRE!');
+            msg(c.g, BOSS, '¡CHAVAL, QUE ES UNA BOMBA! ¡Al mar con ella, al final del muelle de pescadores del Puerto! ¡CORRE!');
             c.g.events.emit('toast', { text: '💣 ¡ES UNA BOMBA!', color: '#ff4f81', time: 3 });
-            // punto del muelle: el sitio de tierra del Puerto más cercano al agua
-            const office = poi(c.g, 'office');
-            let best = office.door.clone();
-            let bestZ = -Infinity;
-            for (const s of c.g.world.deliverySpots.concat(c.g.world.collectibles.map((p) => ({ door: p } as any)))) {
-              const d = (s as any).door as THREE.Vector3;
-              if (c.g.world.districtAt(d.x, d.z) === 'puerto' && d.z > bestZ) {
-                bestZ = d.z;
-                best = d.clone();
+            // el final del muelle de pescadores (si no existe, el punto del Puerto más metido en el mar)
+            const w = c.g.world;
+            const pescadores = w.deliverySpots.find((d) => d.id === 'muelle-pescadores');
+            let best = poi(c.g, 'office').door.clone();
+            if (pescadores) best = pescadores.door.clone();
+            else {
+              let bestZ = -Infinity;
+              for (const d of w.deliverySpots) {
+                if (d.district === 'puerto' && d.door.z > bestZ) {
+                  bestZ = d.door.z;
+                  best = d.door.clone();
+                }
               }
             }
             c.data.pier = best;
+            c.data.splash = seaPointNear(c.g, best, 8);
           },
           update: (c, dt) => {
             c.data.bomb -= dt;
@@ -322,9 +364,7 @@ function missions(): Mission[] {
               hint(c.g, 'E — ¡Tirar la bomba al mar!');
               if (pressedE(c.g)) {
                 hint(c.g, null);
-                const p = c.data.pier.clone();
-                p.z += 12;
-                p.y = 0;
+                const p = c.data.splash.clone();
                 setTimeout(() => {
                   c.g.mod.particles?.emit('splash', p, { count: 40, scale: 3, speed: 2 });
                   c.g.mod.particles?.explosion(p, true);
@@ -347,27 +387,39 @@ function missions(): Mission[] {
       },
     },
     {
-      id: 'guarida', num: 4, title: 'Asalto a la guarida', icon: '💀', fame: 5, reward: 3500, fameReward: 120,
+      id: 'guarida', num: 4, title: 'Asalto a la guarida', icon: '💀', fame: 5, reward: 3500, fameReward: 250,
       pitch: 'Los Devueltos han robado los paquetes de TODA la isla. Hay que entrar en su guarida y recuperarlos.',
       intro: 'Esto ya es personal: Los Devueltos han robado los paquetes de toda la isla y los tienen en su guarida del Polígono. Entra, abre su almacén y tráete los paquetes a la oficina. Lleva algo más que buenas intenciones.',
       outro: '¡Los paquetes de toda la isla, de vuelta! Media isla te quiere. La otra media está cabreada, pero es la que viste de morado.',
       failText: 'Los paquetes siguen en manos moradas.',
       steps: [
         {
-          objective: 'Asalta la guarida de Los Devueltos (Polígono): derriba a los guardias',
-          target: () => null,
+          objective: (c) =>
+            c.data.spawned ? `Derriba a los guardias de la guarida · quedan ${c.data.left ?? '?'}` : 'Ve a la guarida de Los Devueltos (Polígono) y derriba a los guardias',
+          target: (c) => c.data.h.door,
           enter: (c) => {
-            const h = poi(c.g, 'hideout');
-            c.data.h = h;
-            c.data.guards = c.g.mod.gang?.ambush(h.door, 7) ?? [];
-            // uno con lanzapaquetes
-            const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', true);
-            if (extra) c.data.guards.push(extra);
+            c.data.h = poi(c.g, 'hideout');
+            c.data.spawned = false;
           },
           update: (c) => {
-            const alive = (c.data.guards as Npc[]).filter((n) => n.alive && !n.removed).length;
-            c.data.left = alive;
-            if (alive === 0 && near(c.g, c.data.h.door, 60)) return 'next';
+            const h = c.data.h as Poi;
+            // los guardias salen cuando llegas (si salieran desde la oficina, la banda los borraría por estar lejos)
+            if (!c.data.spawned && near(c.g, h.door, 150)) {
+              c.data.spawned = true;
+              c.data.guards = c.g.mod.gang?.ambush(h.door, 2) ?? [];
+              const extra = c.g.mod.gang?.spawnMember(h.door.clone().add(new THREE.Vector3(3, 0, 3)), 'launcher', true);
+              if (extra) c.data.guards.push(extra);
+            }
+            if (!c.data.spawned) return;
+            // si te alejas mucho, desaparecen: vuelven a salir cuando vuelvas
+            const guards = c.data.guards as Npc[];
+            if (guards.length && guards.every((n) => n.removed) && guards.some((n) => n.health > 0) && !near(c.g, h.door, 150)) {
+              c.data.spawned = false;
+              return;
+            }
+            // cuentan todos los de la banda que queden alrededor (los suyos y los guardias de siempre)
+            c.data.left = gangNear(c.g, h.door, 45);
+            if (c.data.left === 0 && near(c.g, h.door, 60)) return 'next';
           },
         },
         {
@@ -387,7 +439,7 @@ function missions(): Mission[] {
         },
         {
           objective: 'Vuelve a la oficina con los paquetes. ¡Te persiguen!',
-          target: () => null,
+          target: (c) => poi(c.g, 'office').door,
           enter: (c) => {
             c.g.mod.police?.setWanted(2);
             c.g.mod.gang?.startChase();
@@ -395,23 +447,21 @@ function missions(): Mission[] {
             msg(c.g, { id: 'devueltos', name: 'Los Devueltos', avatar: '↩️' }, '¡¡¡NUESTROS PAQUETES!!! ¡A por él! ¡Y alguien que llame a El Devolución!');
           },
           update: (c) => {
-            const o = poi(c.g, 'office');
-            (c as any).tgt = o.door;
-            if (near(c.g, o.door, 12)) return 'done';
+            if (near(c.g, poi(c.g, 'office').door, 12)) return 'done';
           },
         },
       ],
     },
     {
-      id: 'jefe', num: 5, title: 'El Devolución', icon: '👑', fame: 6, reward: 10000, fameReward: 300,
-      pitch: 'El jefe de Los Devueltos en persona, con su camión blindado. Última entrega: la suya.',
-      intro: 'Ha llegado el día, chaval. El Devolución, el jefe de Los Devueltos, anda por la isla en su camión blindado devolviendo todo lo que pilla. Hay que pararle. Dale caña al camión hasta que se pare y luego… lo que tenga que ser. Suerte. Te la vas a necesitar.',
+      id: 'jefe', num: 5, title: 'El Devolución', icon: '👑', fame: 6, reward: 10000, fameReward: 400,
+      pitch: 'El jefe de Los Devueltos en persona, con su camión blindado. Última entrega: la suya. Lleva munición de sobra.',
+      intro: 'Ha llegado el día, chaval. El Devolución, el jefe de Los Devueltos, anda por la isla en su camión blindado. Dale caña al camión (tiros, embestidas o paquetes FRÁGIL) hasta que se pare, y luego… lo que tenga que ser. Lleva munición de sobra.',
       outro: '¡LO HAS CONSEGUIDO! El Devolución ha sido devuelto al remitente. Puerto Paquete es libre. Bueno, libre y con muchos paquetes por repartir. ¡A trabajar, campeón!',
       failText: 'El Devolución sigue devolviendo cosas por ahí.',
       steps: [
         {
-          objective: (c) => `Para el camión blindado de El Devolución · blindaje ${Math.round((c.data.truck?.health / c.data.truck?.spec.health) * 100 || 100)} %`,
-          target: (c) => (c.data.truck && !c.data.truck.destroyed ? c.data.truck.getPosition(new THREE.Vector3()) : null),
+          objective: (c) => `Para el camión blindado de El Devolución · blindaje ${armorPct(c.data.truck)} %`,
+          target: (c) => (c.data.truck && !c.data.truck.destroyed ? c.data.tp : null),
           enter: (c) => {
             const h = poi(c.g, 'hideout');
             const roads = c.g.mod.traffic?.roads;
@@ -426,6 +476,7 @@ function missions(): Mission[] {
             const driver = spawnBoss(c.g, pos.clone());
             driver.enterVehicle(truck);
             c.data.truck = truck;
+            c.data.tp = pos.clone();
             c.data.boss = driver;
             (truck as any).brain = { edge: 0, dir: 1, t: 0, next: null, cruise: 18, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() } as CarBrain;
             c.data.route = [];
@@ -439,10 +490,10 @@ function missions(): Mission[] {
           },
           update: (c, dt) => {
             const truck: Vehicle = c.data.truck;
-            const hp = truck.health / truck.spec.health;
+            const armor = armorPct(truck);
             // conduce por la isla de punta a punta
             const roads = c.g.mod.traffic?.roads;
-            const tp = truck.getPosition(new THREE.Vector3());
+            const tp = truck.getPosition(c.data.tp);
             if (roads && (!c.data.route.length || c.data.route[0].distanceTo(tp) < 12)) {
               if (c.data.route.length) c.data.route.shift();
               if (!c.data.route.length) {
@@ -456,7 +507,7 @@ function missions(): Mission[] {
             brain.cruise = c.data.phase >= 2 ? 22 : 17;
             if (!truck.destroyed && truck.driver) c.g.mod.traffic?.drive(truck, dt);
             // fase 2: llama a sus furgonetas y suelta paquetes FRÁGIL
-            if (c.data.phase === 1 && hp < 0.6) {
+            if (c.data.phase === 1 && armor < 50) {
               c.data.phase = 2;
               c.g.mod.gang && (c.g.mod.gang.calm = false);
               c.g.mod.gang?.startChase();
@@ -476,12 +527,12 @@ function missions(): Mission[] {
                 }
               }
             }
-            if (hp < 0.25 || truck.destroyed) return 'next';
+            if (armor <= 0 || truck.destroyed) return 'next';
           },
         },
         {
           objective: (c) => `¡Derriba a El Devolución! · ${Math.max(0, Math.round(c.data.boss?.health ?? 0))} de vida`,
-          target: (c) => (c.data.boss ? c.data.boss.position : null),
+          target: (c) => (c.data.boss && !c.data.boss.removed ? c.data.boss.position : c.data.tp),
           enter: (c) => {
             const truck: Vehicle = c.data.truck;
             (truck as any).brain = undefined;
@@ -496,7 +547,16 @@ function missions(): Mission[] {
           },
           update: (c) => {
             const boss: Npc = c.data.boss;
-            if (!boss.alive || boss.removed) return 'done';
+            if (boss.health <= 0) return 'done';
+            if (boss.removed) {
+              // se ha borrado por estar lejos (no ha caído): vuelve a salir junto al camión cuando te acerques
+              if (near(c.g, c.data.tp, 120)) {
+                const nb = spawnBoss(c.g, c.data.tp.clone().add(new THREE.Vector3(3, 0, 3)));
+                nb.health = Math.max(80, boss.health);
+                c.data.boss = nb;
+                c.g.mod.bubbles?.say(nb, '¿Creías que me había ido? ¡Las devoluciones no caducan!', 3);
+              }
+            } else if (!boss.vehicle) c.data.tp.copy(boss.position);
           },
         },
       ],
@@ -510,11 +570,31 @@ function missions(): Mission[] {
 }
 
 import { WEAPONS } from '../combat/weapons';
+
+/** El camión se para al bajar al 45 % de su vida: el «blindaje» que se ve va de 100 a 0 hasta ahí. */
+const TRUCK_STOP = 0.45;
+function armorPct(truck: Vehicle | undefined): number {
+  if (!truck) return 100;
+  const hp = truck.health / truck.spec.health;
+  return Math.max(0, Math.min(100, Math.round(((hp - TRUCK_STOP) / (1 - TRUCK_STOP)) * 100)));
+}
+
 function require_fragile() {
   return { ...WEAPONS.fragile, damage: 70 };
 }
 
 // ─────────── el sistema ───────────
+
+/** Repetir una misión ya hecha paga el 40 % del dinero y el 25 % de la fama. */
+const REPEAT_MONEY = 0.4;
+const REPEAT_FAME = 0.25;
+
+/** Quita del minimapa los marcadores de la historia (sin crear una lista nueva cada frame). */
+function removeStoryMarkers(list: { story?: boolean }[] | any[]) {
+  let w = 0;
+  for (let i = 0; i < list.length; i++) if (!(list[i] as any).story) list[w++] = list[i];
+  list.length = w;
+}
 
 export class Story implements System {
   name = 'story';
@@ -527,10 +607,29 @@ export class Story implements System {
     game.mod.story = this;
     game.events.on('player:died', () => this.active && this.fail('Te han devuelto a ti.'));
     game.events.on('player:busted' as any, () => this.active && this.fail('Te ha pillado la policía.'));
+    // al subir de fama, si se abre una misión nueva, el jefe avisa
+    game.events.on('fame:level' as any, (e: any) => {
+      const m = this.nextMission();
+      if (!m || this.active || m.fame !== e.level) return;
+      this.announced = m.id;
+      msg(game, BOSS, `¡Ya tienes fama ${e.level}, chaval! Tengo un encargo gordo para ti: «${m.title}». Está en el tablón de la oficina (E en la puerta).`);
+      game.events.emit('toast', { text: `${m.icon} Nueva misión en el tablón de la oficina`, color: '#d4af37', time: 3 });
+    });
   }
 
   get running() {
     return !!this.active;
+  }
+
+  /** Premio de una misión (repetirla paga menos: si no, el jefe final sería un cajero automático). */
+  reward(m: Mission): { money: number; fame: number } {
+    const again = this.completed.has(m.id);
+    return { money: again ? Math.round((m.reward * REPEAT_MONEY) / 50) * 50 : m.reward, fame: again ? Math.round(m.fameReward * REPEAT_FAME) : m.fameReward };
+  }
+
+  /** La siguiente misión por hacer (o null si ya están todas). */
+  private nextMission(): Mission | null {
+    return this.missions.find((m) => !this.completed.has(m.id)) ?? null;
   }
 
   /** Tarjetas del tablón (las pinta la tienda de la oficina). */
@@ -540,8 +639,9 @@ export class Story implements System {
       const done = this.completed.has(m.id);
       const prevDone = i === 0 || this.completed.has(this.missions[i - 1].id);
       const lockedFame = lvl < m.fame;
+      const r = this.reward(m);
       return {
-        id: m.id, icon: m.icon, name: `${m.num}. ${m.title}`, desc: m.pitch, price: 0,
+        id: m.id, icon: m.icon, name: `${m.num}. ${m.title}`, desc: `${m.pitch} Premio: ${fmt(r.money)} y ⭐ +${r.fame}${done ? ' (repetida)' : ''}.`, price: 0,
         owned: done, label: done ? 'Repetir' : 'Aceptar', disabled: !!this.active,
         locked: !prevDone ? 'Termina la anterior' : lockedFame ? `Fama ${m.fame}` : undefined,
         buy: () => {
@@ -558,10 +658,10 @@ export class Story implements System {
     if (!m || this.active) return;
     const ctx: Ctx = { g: this.game, t: 0, total: 0, data: {}, story: this };
     this.active = { m, step: 0, ctx };
-    msg(this.game, BOSS, m.intro);
+    m.steps[0].enter?.(ctx);
+    msg(this.game, BOSS, typeof m.intro === 'function' ? m.intro(ctx) : m.intro);
     this.game.events.emit('toast', { text: `${m.icon} ${m.title}`, color: '#d4af37', time: 3.2 });
     this.game.mod.audio?.play('bell');
-    m.steps[0].enter?.(ctx);
   }
 
   private fail(reason?: string) {
@@ -585,7 +685,7 @@ export class Story implements System {
     hint(this.game, null);
     this.active = null;
     const hud = this.game.hud;
-    hud.markers = hud.markers.filter((x) => !(x as any).story);
+    removeStoryMarkers(hud.markers);
     if (hud.waypoint && (hud.waypoint as any).story) hud.waypoint = null;
   }
 
@@ -593,23 +693,41 @@ export class Story implements System {
     const a = this.active!;
     const g = this.game;
     const bonus = a.ctx.data.bonus ?? 0;
+    const r = this.reward(a.m);
+    const first = !this.completed.has(a.m.id);
     this.completed.add(a.m.id);
     this.finishCleanup();
-    g.mod.economy?.addCash(a.m.reward + bonus, 'misión');
-    g.mod.economy?.addFame(a.m.fameReward, 'misión');
+    msg(g, BOSS, a.m.outro);
+    this.announced = '';
+    g.mod.economy?.addCash(r.money + bonus, 'misión');
+    g.mod.economy?.addFame(r.fame, 'misión');
     g.mod.audio?.play('success');
     g.mod.particles?.emit('confetti', g.mod.player.position.clone().setY(g.mod.player.position.y + 2), { count: 60, speed: 1.3 });
-    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(a.m.reward + bonus)}`, color: '#d4af37', time: 3.5 });
-    msg(g, BOSS, a.m.outro);
+    g.events.emit('toast', { text: `¡MISIÓN CUMPLIDA! +${fmt(r.money + bonus)}  ·  ⭐ +${r.fame}`, color: '#d4af37', time: 3.5 });
+    // qué viene ahora (si subir de fama no lo ha anunciado ya)
+    const next = this.nextMission();
+    if (first && next && a.m.id !== 'jefe' && this.announced !== next.id) {
+      const lvl = g.mod.economy?.fameLevel ?? 1;
+      setTimeout(() => {
+        if (lvl >= next.fame) msg(g, BOSS, `Y ya tengo el siguiente: «${next.title}». Cuando quieras, en el tablón de la oficina.`);
+        else msg(g, BOSS, `El siguiente encargo gordo («${next.title}») es para gente con fama ${next.fame}. Tú vas por la ${lvl}: haz entregas, mejor si son perfectas, y date algún lujo.`);
+      }, 4000);
+    }
     g.events.emit('story:done' as any, { id: a.m.id } as any);
     g.mod.save?.save();
     if (a.m.id === 'jefe') setTimeout(() => this.rollCredits(), 2500);
   }
 
+  private readonly hudJob = { id: 'story', title: '', timeLeft: null as number | null, integrity: null as number | null, color: '#d4af37' };
+  private readonly marker = { x: 0, z: 0, icon: '', color: '#d4af37', label: '', story: true };
+  private readonly wp = { x: 0, z: 0, label: '', color: '#d4af37', auto: true, story: true };
+  /** Última misión anunciada al subir de fama (para no repetir el aviso). */
+  private announced = '';
+
   update(dt: number) {
     const a = this.active;
     const hud = this.game.hud;
-    hud.markers = hud.markers.filter((x) => !(x as any).story);
+    removeStoryMarkers(hud.markers);
     if (!a) return;
     const c = a.ctx;
     c.t += dt;
@@ -635,11 +753,30 @@ export class Story implements System {
     // interfaz: objetivo en la lista de encargos y GPS
     const obj = typeof step.objective === 'function' ? step.objective(c) : step.objective;
     const timer = step.timer ? step.timer(c) : null;
-    hud.jobs = [{ id: 'story', title: `${a.m.icon} ${obj}`, timeLeft: timer, integrity: c.data.integrity !== undefined && a.m.id !== 'tictac' ? Math.max(0, c.data.integrity) : null, color: '#d4af37' }, ...hud.jobs.filter((j) => j.id !== 'story')];
-    const tgt = step.target ? step.target(c) : (c as any).tgt ?? null;
+    const hj = this.hudJob;
+    hj.title = `${a.m.icon} ${obj}`;
+    hj.timeLeft = timer;
+    hj.integrity = c.data.integrity !== undefined && a.m.id !== 'tictac' ? Math.max(0, c.data.integrity) : null;
+    const k = hud.jobs.indexOf(hj);
+    if (k > 0) hud.jobs.splice(k, 1);
+    if (k !== 0) hud.jobs.unshift(hj);
+    const tgt = step.target ? step.target(c) : null;
     if (tgt) {
-      hud.waypoint = { x: tgt.x, z: tgt.z, label: a.m.title, color: '#d4af37', auto: true, story: true } as any;
-      hud.markers.push({ x: tgt.x, z: tgt.z, icon: a.m.icon, color: '#d4af37', label: a.m.title, story: true } as any);
+      // la misión manda sobre el GPS de los encargos normales (salvo que el jugador haya puesto uno a mano)
+      const cur = hud.waypoint as any;
+      if (!cur || cur.auto) {
+        const wp = this.wp;
+        wp.x = tgt.x;
+        wp.z = tgt.z;
+        wp.label = a.m.title;
+        hud.waypoint = wp;
+      }
+      const mk = this.marker;
+      mk.x = tgt.x;
+      mk.z = tgt.z;
+      mk.icon = a.m.icon;
+      mk.label = a.m.title;
+      hud.markers.push(mk);
     }
   }
 

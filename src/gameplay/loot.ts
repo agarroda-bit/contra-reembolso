@@ -13,6 +13,7 @@ export class Loot implements System {
   packages = 0;
   /** Tiempo de juego (s) en que se pierde el botín. */
   deadline = 0;
+  private lastLabelCash = -1;
 
   constructor(private game: Game) {
     game.mod.loot = this;
@@ -81,10 +82,20 @@ export class Loot implements System {
     this.packages = 0;
   }
 
+  private readonly marker = { x: 0, z: 0, icon: '💰', color: '#6c3bd1', label: '', loot: true };
+  private markerOn = false;
+  private hideout: { door: THREE.Vector3 } | null | undefined;
+
   update() {
     const g = this.game;
-    const h = g.world?.pois.find((p) => p.kind === 'hideout');
-    g.hud.markers = g.hud.markers.filter((m) => !(m as any).loot);
+    if (this.hideout === undefined && g.world) this.hideout = g.world.pois.find((p) => p.kind === 'hideout') ?? null;
+    const h = this.hideout;
+    // quitar el marcador del botín (sin crear una lista nueva cada frame)
+    if (this.markerOn) {
+      const i = g.hud.markers.indexOf(this.marker as any);
+      if (i >= 0) g.hud.markers.splice(i, 1);
+      this.markerOn = false;
+    }
     if (this.cash <= 0 && this.packages <= 0) return;
     if (g.time.elapsed > this.deadline) {
       g.mod.messages?.receive('devueltos', 'Los Devueltos', '↩️', `Se acabó el plazo. Nos hemos gastado tus ${fmt(this.cash)} en cartón y cinta. Gracias 😘`);
@@ -92,7 +103,17 @@ export class Loot implements System {
       this.packages = 0;
       return;
     }
-    if (h) g.hud.markers.push({ x: h.door.x, z: h.door.z, icon: '💰', color: '#6c3bd1', label: `Botín: ${fmt(this.cash)}`, loot: true } as any);
+    if (h) {
+      const m = this.marker;
+      m.x = h.door.x;
+      m.z = h.door.z;
+      if (!m.label || this.lastLabelCash !== this.cash) {
+        this.lastLabelCash = this.cash;
+        m.label = `Botín: ${fmt(this.cash)}`;
+      }
+      g.hud.markers.push(m as any);
+      this.markerOn = true;
+    }
   }
 }
 
