@@ -332,7 +332,12 @@ export class Seats {
     const inp = g.input;
     if (!inp.enabled || s.t < 0.4) return;
     const ax = inp.moveAxis();
-    if (Math.hypot(ax.x, ax.y) > 0.3 || inp.pressed('interact') || inp.pressed('jump')) this.stand();
+    const e = inp.pressed('interact');
+    if (Math.hypot(ax.x, ax.y) > 0.3 || e || inp.pressed('jump')) {
+      // la E que te levanta se gasta aquí: si no, la misma pulsación te vuelve a sentar (o reinicia la fiesta)
+      if (e) (inp as unknown as { justDown?: Set<string> }).justDown?.delete('interact');
+      this.stand();
+    }
   }
 }
 

@@ -19,6 +19,8 @@ export interface AtticItemDef {
   price: number;
   desc: string;
   art?: boolean;
+  /** Juegos y locuras (fase 9): van en su propia sección de la tablet. */
+  fun?: boolean;
 }
 
 export const ATTIC_ITEMS: AtticItemDef[] = [
@@ -32,6 +34,15 @@ export const ATTIC_ITEMS: AtticItemDef[] = [
   { id: 'cuadro1', icon: '😱', name: '«El grito del cliente»', price: 1500, desc: 'Expresionismo puro: un cliente que abre un paquete FRÁGIL.', art: true },
   { id: 'cuadro2', icon: '📦', name: '«Bodegón con cajas»', price: 1500, desc: 'Tres cajas, una manzana y muchísima profundidad artística.', art: true },
   { id: 'cuadro3', icon: '🙂', name: '«La Paquetonda»', price: 1500, desc: 'Sonríe como si supiera dónde está tu paquete.', art: true },
+  // fase 9: juegos y locuras
+  { id: 'flamenco', icon: '🦩', name: 'Flamenco hinchable gigante', price: 900, desc: 'Flota en el jacuzzi (si tienes jacuzzi). Si no, es un cojín rosa muy raro. Te puedes montar.', fun: true },
+  { id: 'robot', icon: '🤖', name: 'Robot aspirador «Paquetito»', price: 1200, desc: 'Aspira, pita y da vueltas a tu estatua. Lleva gorro de fiesta. Nadie sabe por qué.', fun: true },
+  { id: 'futbolin', icon: '⚽', name: 'Futbolín', price: 1800, desc: 'Rojos contra azules. Juegas contra ti mismo y aun así puedes perder.', fun: true },
+  { id: 'recreativa', icon: '🕹️', name: 'Máquina recreativa', price: 2500, desc: '«PAQUETE-MAN»: come paquetes y huye de los fantasmas de Los Devueltos. Guarda tu récord.', fun: true },
+  { id: 'bolas', icon: '🎈', name: 'Piscina de bolas', price: 3500, desc: 'Doscientas bolas de colores. Te tiras de culo y sales nuevo (+aguante).', fun: true },
+  { id: 'dj', icon: '🎧', name: 'Cabina de DJ', price: 6000, desc: 'Dos platos, altavoces que tiemblan y fiesta con luces y música en cuanto pinchas.', fun: true },
+  { id: 'tobogan', icon: '🎢', name: 'Tobogán al jacuzzi', price: 7500, desc: 'De la torre al jacuzzi en un segundo. Sin jacuzzi también funciona, pero duele.', fun: true },
+  { id: 'trono', icon: '👑', name: 'Trono dorado', price: 12000, desc: 'Para sentarte como lo que eres: el rey del reparto de Puerto Paquete.', fun: true },
 ];
 
 const lambert = vertexColorMaterial;

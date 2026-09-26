@@ -11,7 +11,7 @@ import type { Interiors, InteriorContext, InteriorDef, InteriorInstance } from '
 import type { ShopItem } from '../../../ui/shop';
 import { fmt } from '../../../gameplay/economy';
 import {
-  canvasTexture, texPlane, glowMaterial, haloTexture, meshOf, toast, pick, Fader, Seats, Popper, nearestSpot,
+  canvasTexture, texPlane, glowMaterial, haloTexture, meshOf, toast, pick, say, Fader, Seats, Popper, nearestSpot,
   playerLook, lookKey, outlinedText, marbleTexture, type Spot,
 } from './kit';
 import {
@@ -21,12 +21,15 @@ import {
 import type { FishTank } from './kit';
 import { buildAtticView, type AtticView } from './view';
 import { PartyMusic } from './music';
+import { buildThrone, buildFoosball, buildArcade, buildBallPit, buildFlamingo, buildDjBooth, buildSlide, buildRobot, bezier } from './toys';
 
 export { ATTIC_ITEMS } from './luxuries';
 
 export interface AtticState {
   owned: boolean;
   items: string[];
+  /** Récord de la máquina recreativa (partidas de antes: no lo traen). */
+  record?: number;
 }
 
 export const ATTIC_PRICE = 25000;
@@ -59,6 +62,16 @@ const P = {
   paintings: { cuadro1: V(8.0, 17.93, 2.35), cuadro2: V(11.2, 17.93, 2.35), cuadro3: V(14.25, 17.93, 2.35) } as Record<string, THREE.Vector3>,
   garage: [V(18.7, 14.0), V(20.7, 14.0), V(22.7, 14.0), V(18.7, 16.6), V(20.7, 16.6), V(22.7, 16.6)],
   partySwitch: V(23.85, 12.0, 1.35), // lejos de la salida (si no, la pista «Salir» lo tapa)
+  // fase 9: juegos y locuras
+  throne: V(14.3, 3.4),
+  foos: V(14.3, 6.5),
+  arcade: V(11.45, 0.6),
+  pit: V(14.1, 15.2),
+  flamingo: V(3.3, 15.35),
+  dj: V(3.9, 9.3),
+  djStand: V(3.1, 9.3),
+  slideTower: V(1.0, 12.35),
+  slide: { a: V(1.0, 12.8, 2.05), c: V(1.3, 13.95, 1.05), e: V(2.5, 14.05, 0.62) },
 };
 
 const DREAMS = [
@@ -99,12 +112,31 @@ const GARAGE = [
   'Soplas el polvo de la furgoneta en miniatura. Te emocionas un poco.',
   'Una colección digna de museo. De museo de barrio, pero museo.',
 ];
+const THRONE = [
+  'Te sientas en el trono. Los paquetes del mundo tiemblan.',
+  'Primer decreto: los clientes estarán en casa. Nadie te hace caso.',
+  'Desde aquí se reparte mejor. Mentalmente.',
+  'Toñi te manda un audio: «¿Otra vez en el trono? Hay encargos, majestad».',
+];
+const PIT = [
+  'Te hundes en las bolas. Encuentras un calcetín, dos euros y una bola que no es de aquí.',
+  '¡Al fondo no se llega nunca! (+aguante)',
+  'Nadas a mariposa entre bolas. Olímpico. (+aguante)',
+];
+const FLAMINGO = [
+  'Te subes al flamenco. Te mira con desprecio, pero aguanta.',
+  'Flotas con dignidad. Bueno, flotas.',
+  'El flamenco y tú, contra el mundo.',
+];
+const ROBOT = ['¡Bip bup! (Paquetito te quiere)', 'Bip. (Se ha comido un calcetín tuyo)', '¡Biiip! (Pide un aumento)', 'Bup bup bip. (Dice que la estatua le mira mal)'];
 
 // ─────────────────────────────── el objeto Ático ───────────────────────────────
 
 export class Attic {
   owned = false;
   readonly items = new Set<string>();
+  /** Récord de PAQUETE-MAN en la máquina recreativa. */
+  record = 0;
   /** El escenario construido (solo existe tras entrar la primera vez). */
   scene: AtticScene | null = null;
   sleeping = false;
@@ -116,11 +148,12 @@ export class Attic {
   }
 
   getState(): AtticState {
-    return { owned: this.owned, items: [...this.items] };
+    return { owned: this.owned, items: [...this.items], record: this.record };
   }
 
   setState(s: Partial<AtticState> | null | undefined) {
     this.owned = !!s?.owned;
+    this.record = Math.max(0, Math.floor(Number(s?.record) || 0));
     this.items.clear();
     for (const id of s?.items ?? []) if (ATTIC_ITEMS.some((i) => i.id === id)) this.items.add(id);
     this.scene?.apply(false);
@@ -220,7 +253,8 @@ export class Attic {
       color: '#ff4f81',
       icon: '🛋️',
       sections: () => [
-        { title: 'Caprichos de rico', items: ATTIC_ITEMS.filter((i) => !i.art).map(card) },
+        { title: 'Caprichos de rico', items: ATTIC_ITEMS.filter((i) => !i.art && !i.fun).map(card) },
+        { title: 'Juegos y locuras (pulsa E en cada uno)', items: ATTIC_ITEMS.filter((i) => i.fun).map(card) },
         { title: 'Arte para el salón (1.500 € cada cuadro)', items: ATTIC_ITEMS.filter((i) => i.art).map(card) },
       ],
     });
@@ -916,6 +950,30 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   root.add(garagePlaceholder);
   add('garaje', garage.group, gCols, garagePlaceholder, V(20.7, 15.3, 2), false);
 
+  // ── Juegos y locuras (fase 9) ──
+  const throne = buildThrone();
+  throne.position.copy(P.throne);
+  add('trono', throne, [box(P.throne.x, 0.9, P.throne.z, 1.0, 0.9, 0.85)], null, V(P.throne.x, P.throne.z, 2.8));
+  const foos = buildFoosball();
+  foos.group.position.copy(P.foos);
+  add('futbolin', foos.group, [box(P.foos.x, 0.5, P.foos.z, 0.8, 0.5, 0.45)], null, V(P.foos.x, P.foos.z, 1.5));
+  const arcade = buildArcade();
+  arcade.group.position.copy(P.arcade);
+  add('recreativa', arcade.group, [box(P.arcade.x, 1.05, P.arcade.z, 0.43, 1.05, 0.4)], null, V(P.arcade.x, P.arcade.z + 0.6, 2.3));
+  const pit = buildBallPit();
+  pit.group.position.copy(P.pit);
+  add('bolas', pit.group, [box(P.pit.x, 0.35, P.pit.z, 1.4, 0.35, 1.4)], null, V(P.pit.x, P.pit.z, 1.2));
+  const flamingo = buildFlamingo();
+  flamingo.group.position.copy(P.flamingo);
+  add('flamenco', flamingo.group, [], null, V(P.flamingo.x, P.flamingo.z, 2.2));
+  const dj = buildDjBooth();
+  dj.group.position.copy(P.dj);
+  add('dj', dj.group, [box(P.dj.x, 0.7, P.dj.z, 0.36, 0.7, 1.65)], null, V(P.dj.x, P.dj.z, 2.2));
+  const slide = buildSlide({ tower: P.slideTower, ...P.slide });
+  add('tobogan', slide, [box(P.slideTower.x, 1.2, P.slideTower.z, 0.45, 1.2, 0.45)], null, V(P.slideTower.x, P.slideTower.z, 3.2), false);
+  const robot = buildRobot(P.statue, 1.55);
+  add('robot', robot.group, [], null, V(P.statue.x, P.statue.z, 1.5));
+
   // ── Luces (solo existen mientras estás dentro: el grupo se oculta al salir) ──
   const L1 = new THREE.PointLight('#ffd9a8', 26, 17, 1.4);
   L1.position.set(ch.x, H - 1.2, ch.z);
@@ -956,14 +1014,16 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
   const P3 = (v: THREE.Vector3) => V(v.x, v.z);
   let party = 0;
   const music = new PartyMusic();
-  const startParty = () => {
+  /** Modo fiesta. `at`: dónde bailas (la cabina de DJ); sin él, donde estés. */
+  const startParty = (at?: { pos: THREE.Vector3; heading: number; text: string }) => {
     party = 24;
     const p = game.mod.player;
-    toast(game, '¡FIESTA EN EL ÁTICO! Tú solo, pero con estilo.', '#ff2e88', 2.6);
+    toast(game, at?.text ?? '¡FIESTA EN EL ÁTICO! Tú solo, pero con estilo.', '#ff2e88', 2.6);
     music.start(game.mod.audio, () => game.paused);
     game.mod.audio?.play('cheer', { volume: 0.5 });
     // bailas mirando al salón (de cara a la cámara, que se queda donde estaba)
-    if (p) seats.sit(p.position.clone(), -Math.PI / 2, p.position.clone(), { pose: 'dance', hint: 'E o WASD — Dejar de bailar', onStand: () => stopParty() });
+    const spot = at ? toWorld(at.pos) : p?.position.clone();
+    if (p && spot) seats.sit(spot, at ? at.heading : -Math.PI / 2, spot, { pose: 'dance', hint: 'E o WASD — Dejar de bailar', onStand: () => stopParty() });
   };
   const stopParty = () => {
     if (party <= 0 && !music.playing) return;
@@ -1039,7 +1099,180 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       pos: V(P.partySwitch.x - 0.6, P.partySwitch.z), r: 1.3, on: () => attic.has('neon'), text: () => (party > 0 ? 'Acabar la fiesta' : 'Modo fiesta (luces y música)'),
       run: () => (party > 0 ? stopParty() : startParty()),
     },
+    // ── juegos y locuras ──
+    {
+      pos: V(P.throne.x, P.throne.z + 1.5), r: 1.4, on: () => attic.has('trono') && !seats.busy, text: 'Sentarse en el trono dorado',
+      run: () => {
+        seats.sit(toWorld(V(P.throne.x, P.throne.z + 0.05, 0.25)), 0, toWorld(V(P.throne.x, P.throne.z + 1.6)), { hint: 'E o WASD — Bajar del trono' });
+        faceCamera(0);
+        toast(game, '👑 ' + pick(THRONE), '#ffd23f', 3.2);
+        game.mod.audio?.play('bell', { pitch: 0.6, volume: 0.4 });
+        game.mod.particles?.emit('confetti', toWorld(V(P.throne.x, P.throne.z, 2.9)), { count: 16, color: ['#ffd23f', '#fff3b0'], speed: 0.5 });
+      },
+    },
+    {
+      pos: V(P.foos.x, P.foos.z + 0.85), r: 1.3, on: () => attic.has('futbolin'), text: () => (foos.busy ? 'Partido en juego…' : 'Echar un futbolín'),
+      run: () => {
+        if (foos.busy) return;
+        const p = game.mod.player;
+        if (p) p.heading = Math.PI;
+        toast(game, '⚽ Rojos (tú) contra azules (también tú). ¡A tres goles!', '#ffffff', 2.4);
+        foos.play((r, b) => {
+          const msg = r > b ? `¡Ganas ${r}-${b} a… ti mismo! Qué partidazo.` : r < b ? `Pierdes ${r}-${b} contra ti mismo. Esto pide VAR.` : `${r}-${b}. Empate técnico: los dos equipos estáis cansados.`;
+          toast(game, '⚽ ' + msg, '#ffffff', 3.4);
+          game.mod.audio?.play(r > b ? 'success' : 'fail', { volume: 0.5 });
+        }, game);
+      },
+    },
+    {
+      pos: V(P.arcade.x, P.arcade.z + 1.0), r: 1.2, on: () => attic.has('recreativa'),
+      text: () => (arcade.busy ? 'Partida en curso…' : `Jugar a PAQUETE-MAN${attic.record ? ` (récord: ${attic.record})` : ''}`),
+      run: () => {
+        if (arcade.busy) return;
+        const p = game.mod.player;
+        if (p) p.heading = Math.PI;
+        game.mod.audio?.play('coin', { volume: 0.5 });
+        arcade.play((score) => {
+          if (score > attic.record) {
+            attic.record = score;
+            toast(game, `🕹️ ¡Nuevo récord en PAQUETE-MAN: ${score} puntos! Los fantasmas morados lloran.`, '#ffd23f', 3.4);
+            game.mod.audio?.play('success', { volume: 0.5 });
+            game.mod.save?.save(true);
+          } else toast(game, `🕹️ ${score} puntos. El récord (${attic.record}) sigue ahí, riéndose de ti.`, '#ffffff', 3.2);
+        });
+      },
+    },
+    {
+      pos: V(P.pit.x, P.pit.z - 1.8), r: 1.5, on: () => attic.has('bolas') && !seats.busy, text: 'Tirarse a la piscina de bolas',
+      run: () => {
+        seats.sit(toWorld(V(P.pit.x, P.pit.z, 0.02)), Math.PI, toWorld(V(P.pit.x, P.pit.z - 1.9)), { hint: 'E o WASD — Salir de la piscina' });
+        faceCamera(Math.PI);
+        pit.splash();
+        const p = game.mod.player;
+        if (p) p.stamina = 100;
+        game.mod.audio?.play('pop', { volume: 0.6, pitch: 0.7 });
+        window.setTimeout(() => game.mod.audio?.play('pop', { volume: 0.4, pitch: 1.3 }), 120);
+        toast(game, '🎈 ' + pick(PIT), '#ff4f81', 3.2);
+      },
+    },
+    {
+      pos: P.flamingo, r: 2.0, on: () => attic.has('flamenco') && !seats.busy, text: 'Montarse en el flamenco hinchable',
+      run: () => {
+        const wet = attic.has('jacuzzi');
+        seats.sit(toWorld(V(P.flamingo.x, P.flamingo.z, flamingo.seatY(wet) - 0.46)), Math.PI / 2, toWorld(wet ? V(4.6, 17.1) : V(4.7, P.flamingo.z)), { hint: 'E o WASD — Bajarse del flamenco' });
+        faceCamera(Math.PI / 2);
+        if (wet) game.mod.audio?.play('splash', { volume: 0.4 });
+        toast(game, '🦩 ' + (wet ? pick(FLAMINGO) : 'Te subes al flamenco… en el suelo. Sin jacuzzi, esto es un cojín muy raro.'), '#ff7ab8', 3);
+      },
+    },
+    {
+      pos: P.djStand, r: 1.2, on: () => attic.has('dj'), text: () => (party > 0 ? 'Acabar la fiesta' : 'Pinchar música (fiesta)'),
+      run: () => {
+        if (party > 0) return stopParty();
+        startParty({ pos: P.djStand, heading: Math.PI / 2, text: '🎧 ¡DJ Paquetón a los platos! El ático entero vibra.' });
+        faceCamera(Math.PI / 2);
+      },
+    },
+    { pos: V(P.slideTower.x, P.slideTower.z - 0.95), r: 1.0, on: () => attic.has('tobogan') && !ride, text: 'Tirarse por el tobogán', run: () => startRide() },
+    {
+      pos: robot.pos, r: 1.0, on: () => attic.has('robot'), text: 'Acariciar a Paquetito (el robot)',
+      run: () => {
+        robot.poke();
+        say(game, { position: toWorld(robot.pos).setY(O.y + 0.5) }, pick(ROBOT), 2.6);
+        game.mod.audio?.play('bell', { pitch: 2.4, volume: 0.3 });
+        window.setTimeout(() => game.mod.audio?.play('bell', { pitch: 1.8, volume: 0.3 }), 140);
+      },
+    },
   ];
+
+  /** Cámara de frente a quien se sienta (en el trono, la piscina, el flamenco o la cabina se te ve la cara). */
+  function faceCamera(heading: number) {
+    const p = game.mod.player;
+    if (p?.state === 'busy') game.mod.cameraRig?.snapBehind(heading + Math.PI);
+  }
+
+  // ── Tobogán: subes por la escalera, bajas sentado y caes al jacuzzi (o al suelo) ──
+  let ride: { t: number; phase: 'climb' | 'slide' | 'floor' } | null = null;
+  const rideTmp = new THREE.Vector3(), rideTmp2 = new THREE.Vector3();
+  const endRide = () => {
+    ride = null;
+    const p = game.mod.player;
+    if (game.mod.interaction) game.mod.interaction.override = null;
+    if (p && p.state === 'busy') {
+      p.state = 'foot';
+      p.pose = 'normal';
+      p.poseTimer = 0;
+    }
+  };
+  const startRide = () => {
+    const p = game.mod.player;
+    if (!p || p.state !== 'foot' || ride) return;
+    p.state = 'busy';
+    p.velocity.set(0, 0, 0);
+    p.aiming = false;
+    p.pose = 'hands_up';
+    p.poseTimer = 0;
+    p.heading = 0;
+    ride = { t: 0, phase: 'climb' };
+    if (game.mod.interaction) game.mod.interaction.override = '¡Allá vaaas!';
+  };
+  const updateRide = (dt: number) => {
+    if (!ride) return;
+    const p = game.mod.player;
+    if (!p || p.state !== 'busy') {
+      ride = null;
+      if (game.mod.interaction) game.mod.interaction.override = null;
+      return;
+    }
+    ride.t += dt;
+    const S = P.slide;
+    if (ride.phase === 'climb') {
+      const k = Math.min(1, ride.t / 0.9);
+      rideTmp.set(P.slideTower.x, 0, P.slideTower.z - 0.9).lerp(rideTmp2.set(P.slideTower.x, S.a.y, P.slideTower.z), k);
+      p.teleport(toWorld(rideTmp));
+      if (k >= 1) {
+        ride = { t: 0, phase: 'slide' };
+        p.pose = 'sit';
+        p.poseTimer = 0;
+        game.mod.audio?.play('whoosh', { volume: 0.6 });
+      }
+    } else if (ride.phase === 'slide') {
+      const k = Math.min(1, ride.t / 1.0);
+      const u = k * k;
+      bezier(S.a, S.c, S.e, u, rideTmp);
+      bezier(S.a, S.c, S.e, Math.min(1, u + 0.05), rideTmp2);
+      p.heading = Math.atan2(rideTmp2.x - rideTmp.x, rideTmp2.z - rideTmp.z) || p.heading;
+      rideTmp.y -= 0.4;
+      p.teleport(toWorld(rideTmp));
+      if (k >= 1) {
+        const end = toWorld(V(S.e.x, S.e.z, 0.45));
+        if (attic.has('jacuzzi')) {
+          endRide();
+          seats.sit(toWorld(V(P.jacuzzi.x + 0.75, P.jacuzzi.z, -0.3)), -Math.PI / 2, toWorld(V(P.jacuzzi.x + 0.3, P.jacuzzi.z - 2.45)), { hint: 'E o WASD — Salir del jacuzzi' });
+          p.stamina = 100;
+          p.health = Math.min(p.maxHealth, p.health + 25);
+          game.mod.audio?.play('splash', { volume: 0.9 });
+          game.mod.particles?.emit('splash', end, { count: 30, speed: 1.2 });
+          game.mod.particles?.emit('water', end, { count: 16, speed: 1 });
+          toast(game, '🎢 ¡PLOF! Directo al jacuzzi. (+aguante, +vida)', '#35d0ff', 2.8);
+        } else {
+          ride = { t: 0, phase: 'floor' };
+          p.teleport(toWorld(V(S.e.x + 0.3, S.e.z + 0.2)));
+          p.pose = 'knocked';
+          p.poseTimer = 0;
+          game.mod.audio?.play('hit', { volume: 0.7 });
+          game.mod.particles?.emit('stars', end, { count: 8 });
+          toast(game, '🎢 ¡Pumba! Sin jacuzzi, el tobogán acaba en el mármol. Cómprate un jacuzzi.', '#ffd23f', 3.2);
+        }
+      }
+    } else if (ride.t > 1.6) {
+      endRide();
+    } else if (ride.t > 1.0 && p.pose !== 'getup') {
+      p.pose = 'getup';
+      p.poseTimer = 0;
+    }
+    game.mod.cameraRig?.target.copy(p.position);
+  };
 
   // ── Niebla: dentro se ve más lejos (para disfrutar de la vista); al salir se deja como estaba ──
   let insideFog = false;
@@ -1097,6 +1330,7 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       restoreFog();
       stopParty();
       if (seats.busy) seats.stand();
+      if (ride) endRide();
       root.visible = false;
     },
     update(dt, inside) {
@@ -1111,6 +1345,17 @@ function buildAtticScene(ctx: InteriorContext, attic: Attic): AtticScene {
       if (attic.has('acuario')) tank.update(dt);
       if (attic.has('garaje')) garage.update(dt);
       if (attic.has('estatua')) statueHolder.rotation.y += dt * 0.25;
+      // juegos y locuras
+      if (attic.has('futbolin')) foos.update(dt, game);
+      if (attic.has('recreativa')) arcade.update(dt);
+      if (attic.has('bolas')) pit.update(dt);
+      if (attic.has('flamenco')) flamingo.update(dt, attic.has('jacuzzi'));
+      if (attic.has('dj')) dj.update(dt, party > 0);
+      if (attic.has('robot')) {
+        const pl = game.mod.player;
+        robot.update(dt, pl && pl.state === 'foot' ? tmp.copy(pl.position).sub(O) : null, game);
+      }
+      updateRide(dt);
       const hasNeon = attic.has('neon');
       if (hasNeon) neon.update(dt, party > 0);
       // luces: más cálidas y fuertes de noche; rosa si hay neón
