@@ -448,6 +448,7 @@ export class Combat implements System {
         this.particles?.emit('cardboard', hit.point, { count: 2, scale: 0.5 });
         return;
       }
+      const wasAlive = owner.alive;
       if (def.mode === 'stamp') {
         owner.stun(2.5);
         owner.hurt(def.damage, { cause: 'sellos', shooter }, dir, 0);
@@ -458,7 +459,8 @@ export class Combat implements System {
       const back = tmpA.copy(dir).negate();
       this.particles?.emit(def.mode === 'stamp' ? 'stamps' : 'cardboard', hit.point, { count: def.mode === 'stamp' ? 3 : 5, dir: back, spread: 0.6, scale: 0.6 });
       if (def.mode !== 'stamp') this.particles?.emit('dust', hit.point, { count: 2, dir: back, scale: 0.45, life: 0.6 });
-      if (shooter.kind === 'player') {
+      // (a uno que ya está derribado no se le cuenta otra «baja»)
+      if (shooter.kind === 'player' && wasAlive) {
         g.events.emit('hitmarker' as any, { kill: !owner.alive } as any);
         g.mod.audio?.play('wood', { pos: hit.point, volume: 0.3, pitch: 1.5 });
         if (!owner.alive) this.particles?.emit('stars', hit.point, { count: 4 });
