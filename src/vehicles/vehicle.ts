@@ -304,7 +304,7 @@ export class Vehicle {
         if (Math.sign(w.y) !== Math.sign(target) || Math.abs(w.y) < Math.abs(target)) {
           this.body.setAngvel({ x: w.x, y: w.y + (target - w.y) * Math.min(1, dt * 6), z: w.z }, wake);
         }
-      } else if (!ctl.handbrake && this.slip > 2.5 && ctl.steer * w.y >= 0) {
+      } else if (!ctl.handbrake && (this.slip > 2.5 || s.drifty !== undefined) && ctl.steer * w.y >= 0) {
         this.body.setAngvel({ x: w.x, y: w.y * (1 - Math.min(1, dt * (s.spinDamp ?? 2.5))), z: w.z }, wake);
       }
     }

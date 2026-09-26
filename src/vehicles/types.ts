@@ -239,10 +239,11 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
     seat: { x: 0.55, y: 0.5, z: 2.4 }, pose: 'drive',
     colors: ['#4a2a8a'], heavy: true,
   },
+  // (los locos nuevos usan ruedas del mismo tamaño que otros vehículos: comparten su dibujo instanciado)
   granny: {
     kind: 'granny', name: 'Silla eléctrica de la yaya',
     half: { x: 0.42, y: 0.42, z: 0.72 }, mass: 380,
-    wheelX: 0.34, wheelZFront: 0.5, wheelZBack: -0.46, wheelY: -0.22, wheelRadius: 0.16,
+    wheelX: 0.34, wheelZFront: 0.5, wheelZBack: -0.46, wheelY: -0.34, wheelRadius: 0.12,
     suspension: 0.16, stiffness: 44, damping: 4.5, friction: 2.8,
     engine: 300, maxSpeed: 6, reverseSpeed: 2.2, brake: 14, steer: 0.8, drive: 'rwd',
     health: 1000, capacity: 1, camDistance: 4.6, camHeight: 2.0,
@@ -252,7 +253,7 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
   paella: {
     kind: 'paella', name: 'Paella-móvil',
     half: { x: 0.95, y: 1.0, z: 2.1 }, mass: 1700,
-    wheelX: 0.86, wheelZFront: 1.35, wheelZBack: -1.3, wheelY: -0.6, wheelRadius: 0.38,
+    wheelX: 0.86, wheelZFront: 1.35, wheelZBack: -1.3, wheelY: -0.62, wheelRadius: 0.42,
     suspension: 0.36, stiffness: 26, damping: 3.2, friction: 2.4,
     engine: 3900, maxSpeed: 26, reverseSpeed: 8, brake: 75, steer: 0.6, drive: 'rwd',
     health: 1300, capacity: 4, camDistance: 8, camHeight: 3.0,
@@ -262,17 +263,17 @@ export const VEHICLES: Record<VehicleKind, VehicleSpec> = {
   sofa: {
     kind: 'sofa', name: 'Sofá con motor del rastro',
     half: { x: 0.95, y: 0.42, z: 0.5 }, mass: 260,
-    wheelX: 0.78, wheelZFront: 0.34, wheelZBack: -0.34, wheelY: -0.24, wheelRadius: 0.14,
+    wheelX: 0.78, wheelZFront: 0.34, wheelZBack: -0.34, wheelY: -0.35, wheelRadius: 0.12,
     suspension: 0.16, stiffness: 40, damping: 4.2, friction: 1.5,
     engine: 700, maxSpeed: 16, reverseSpeed: 5, brake: 16, steer: 0.55, drive: 'rwd',
     health: 600, capacity: 3, camDistance: 5.4, camHeight: 2.2,
-    seat: { x: 0, y: 0, z: -0.05 }, pose: 'drive', sideGrip: 0.08, rearGrip: 0.6, drifty: 2.2, spinDamp: 1.2,
+    seat: { x: 0, y: 0, z: -0.05 }, pose: 'drive', sideGrip: 0.08, rearGrip: 0.6, drifty: 2.2, spinDamp: 2,
     colors: ['#7f5539', '#588157', '#bc4749', '#6d597a'],
   },
   forklift: {
     kind: 'forklift', name: 'Carretilla elevadora del puerto',
     half: { x: 0.62, y: 0.62, z: 1.45 }, mass: 2600,
-    wheelX: 0.5, wheelZFront: 0.42, wheelZBack: -0.95, wheelY: -0.3, wheelRadius: 0.28,
+    wheelX: 0.5, wheelZFront: 0.42, wheelZBack: -0.95, wheelY: -0.3, wheelRadius: 0.3,
     suspension: 0.2, stiffness: 55, damping: 5, friction: 2.4,
     engine: 4200, maxSpeed: 11, reverseSpeed: 10, brake: 110, steer: 0.85, drive: 'fwd',
     health: 3000, capacity: 2, tough: true, rearSteer: true, camDistance: 7, camHeight: 3.0,

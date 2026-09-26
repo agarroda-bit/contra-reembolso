@@ -40,7 +40,7 @@ const EXTRA_SPOTS: { kind: VehicleKind; x: number; z: number; heading: number }[
   { kind: 'granny', x: 59.6, z: 24.5, heading: Math.PI }, // en la acera del centro de salud
   { kind: 'paella', x: -108, z: 185.5, heading: -Math.PI / 2 }, // delante de la lonja
   { kind: 'sofa', x: -165.5, z: 51, heading: Math.PI / 2 }, // junto a los puestos del mercadillo del Barrio Viejo
-  { kind: 'forklift', x: 44, z: 212, heading: Math.PI }, // junto a los contenedores del muelle
+  { kind: 'forklift', x: 40, z: 206, heading: Math.PI }, // junto a los contenedores del muelle
 ];
 
 const GRANNY_LINES = ['¡PIII! ¡Que voy!', '¡Paso, que tengo médico!', '¡En mis tiempos esto era todo campo!', '¡Jovencito, el intermitente!', '¡Que se me enfrían las croquetas!', '¡Esta silla corre más que tu coche!'];
@@ -327,17 +327,19 @@ export class CrazyVehicles implements System {
     if (st.music > 0) return;
     st.music = PAELLA_TUNE_SECONDS;
     paellaMusic(this.game, v.getPosition(tmpV));
-    // la gente de alrededor pide su ración
+    // la gente de alrededor pide su ración (y los peatones que quieran pueden acercarse: evento 'vehicle:music')
     const npcs = this.game.mod.npcs?.list ?? [];
     let shouts = 0;
     for (const n of npcs) {
       if (shouts >= 3) break;
-      if (n.role !== 'civil' || !n.alive || n.vehicle || n.position.distanceTo(tmpV) > 22) continue;
-      if (rnd.next() < 0.6) {
+      if (n.role !== 'civil' || !n.alive || n.vehicle || n.position.distanceTo(tmpV) > 35) continue;
+      if (rnd.next() < 0.7) {
         shouts++;
         this.game.events.emit('npc:shout' as any, { npc: n, text: PAELLA_LINES[Math.floor(rnd.next() * PAELLA_LINES.length)] } as any);
       }
     }
+    if (shouts) this.game.mod.audio?.play('cheer', { pos: tmpV, volume: 0.45 });
+    this.game.events.emit('vehicle:music' as any, { vehicle: v, pos: tmpV.clone(), radius: 35, seconds: PAELLA_TUNE_SECONDS } as any);
   }
 
   private startLift(v: Vehicle) {
@@ -511,7 +513,7 @@ export class CrazyVehicles implements System {
         st.wobble -= dt;
         if (st.wobble <= 0) {
           st.wobble = 0.8 + rnd.next() * 1.4;
-          v.body.applyTorqueImpulse({ x: 0, y: v.spec.mass * (rnd.next() < 0.5 ? -1 : 1) * (0.35 + rnd.next() * 0.35), z: 0 }, true);
+          v.body.applyTorqueImpulse({ x: 0, y: v.spec.mass * (rnd.next() < 0.5 ? -1 : 1) * (0.2 + rnd.next() * 0.2), z: 0 }, true);
         }
       }
     }
