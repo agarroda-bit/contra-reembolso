@@ -293,7 +293,9 @@ export class Company implements System {
       g.hud.markers.push({ x: r.pos.x, z: r.pos.z, icon: '🆘', color: '#ff4f81', label: `Ayuda a ${r.emp.name}`, rescue: true } as any);
       const p = g.mod.player;
       if (!r.enemies.length && p.position.distanceTo(r.pos) < 60) r.enemies = g.mod.gang?.ambush(r.pos, 3) ?? [];
-      const beaten = r.enemies.length > 0 && r.enemies.every((n: any) => !n.alive || n.removed);
+      // si se han borrado por distancia sin morir, volverán a salir cuando vuelvas
+      if (r.enemies.length && r.enemies.some((n: any) => n.removed && n.state !== 'dead')) r.enemies = [];
+      const beaten = r.enemies.length > 0 && r.enemies.every((n: any) => n.state === 'dead' || (n.killable && n.health <= 0));
       if (beaten) {
         g.mod.messages?.receive('staff-' + r.emp.id, r.emp.name, r.emp.avatar, '¡Gracias, jefe! ¡Eres un crack! Mañana te traigo el doble. Bueno, lo normal. 🙏');
         this.eco.addFame(15, 'rescate');

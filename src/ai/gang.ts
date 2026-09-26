@@ -31,6 +31,7 @@ export class Gang implements System {
   name = 'gang';
   readonly members: Npc[] = [];
   private guards: Npc[] = [];
+  private guardsSpawned = false;
   private chases: Chase[] = [];
   private rng = new Rng('devueltos');
   private roads: Roads;
@@ -61,6 +62,13 @@ export class Gang implements System {
       if (r < 0.45) game.mod.pickups?.spawn('cash', pos, 20 + Math.floor(rnd.next() * 60), 40);
       else if (r < 0.65) game.mod.pickups?.spawn('ammo', pos, 20, 40);
       else if (r < 0.72) game.mod.pickups?.spawn('health', pos, 1, 40);
+    });
+    // embestidas de la furgoneta morada: se te caen paquetes
+    game.events.on('vehicle:impact' as any, (e: any) => {
+      const v = e.vehicle;
+      if (v !== game.mod.vehicles?.current || e.dv < 8 || !v.packages) return;
+      const near = this.chases.some((c) => !c.van.disposed && c.van.getPosition(tmpV).distanceTo(v.getPosition(tmpV2)) < v.spec.half.z + c.van.spec.half.z + 3);
+      if (near) game.mod.jobs?.dropFrom(v, 1);
     });
     game.events.on('player:died', () => this.clearChases());
     game.events.on('player:respawn', () => this.clearChases());
@@ -127,11 +135,7 @@ export class Gang implements System {
     for (let i = 0; i < 3; i++) {
       const n = this.spawnMember(pos.clone(), i === 0 ? 'pistol' : i === 1 ? 'smg' : 'fists', true);
       if (i === 0) n.enterVehicle(van);
-      else {
-        n.rig.root.visible = false;
-        n.setState('driving');
-        n.collider.setEnabled(false);
-      }
+      else n.rideAlong(van);
       crew.push(n);
     }
     const brain: CarBrain = { edge: eid, dir, t: 0.5, next: null, cruise: 22, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() };
@@ -158,7 +162,8 @@ export class Gang implements System {
     // guardias de la guarida
     if (h) {
       const d = p.position.distanceTo(h.door);
-      if (d < 130 && this.guards.filter((x) => !x.removed).length === 0 && !(g as any).hideoutCleared) {
+      if (d < 130 && !this.guardsSpawned) {
+        this.guardsSpawned = true;
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           const pos = new THREE.Vector3(h.door.x + Math.cos(a) * (6 + i), 0, h.door.z + Math.sin(a) * (6 + i));
@@ -168,9 +173,10 @@ export class Gang implements System {
           (m.brain as CombatBrain).home = pos.clone();
           this.guards.push(m);
         }
-      } else if (d > 190) {
+      } else if (d > 190 && this.guardsSpawned) {
         for (const x of this.guards) if (!x.removed) this.npcs.remove(x);
         this.guards = [];
+        this.guardsSpawned = false;
       }
       // zona de la banda: si te acercas a menos de 45 m te atacan
       if (d < 45) {
@@ -195,6 +201,12 @@ export class Gang implements System {
         continue;
       }
       const b = m.brain as CombatBrain;
+      // los que bajan de la furgoneta intentan sacarte del vehículo y quitarte los paquetes
+      const cur = this.vm.current;
+      if ((b as any).robber && m.alive && !m.busy && !m.vehicle && cur && Math.abs(cur.speed) < 2) {
+        this.tryRob(m);
+        continue;
+      }
       if (!b.aggro && b.home && !m.busy && !m.vehicle) {
         // patrulla tranquila alrededor de su sitio
         if (!m.target && rnd.next() < dt * 0.3) m.goTo(b.home.clone().add(new THREE.Vector3((rnd.next() - 0.5) * 8, 0, (rnd.next() - 0.5) * 8)));
@@ -207,10 +219,25 @@ export class Gang implements System {
       const c = this.chases[i];
       c.life += dt;
       c.crew = c.crew.filter((n) => !n.removed);
+      if (c.van.disposed) {
+        this.chases.splice(i, 1);
+        continue;
+      }
       const far = c.van.getPosition(tmpV).distanceTo(p.position) > 230;
-      if (far || c.crew.length === 0 || c.life > 180) {
+      if (far) {
         for (const n of c.crew) if (!n.removed) this.npcs.remove(n);
         if (!c.van.destroyed && c.van !== this.vm.current) this.vm.remove(c.van);
+        this.chases.splice(i, 1);
+        continue;
+      }
+      if (c.van.destroyed && !c.dismounted) this.dismount(c);
+      if (c.crew.every((n) => !n.alive) || c.life > 180 || c.van === this.vm.current) {
+        // se acabó: la furgoneta se queda aparcada (te la puedes llevar) y los que queden van a pie
+        if (!c.van.destroyed && c.van !== this.vm.current) {
+          if (!c.dismounted) this.dismount(c);
+          (c.van as any).brain = undefined;
+          this.game.mod.traffic?.parked.push(c.van);
+        }
         this.chases.splice(i, 1);
         continue;
       }
@@ -227,6 +254,28 @@ export class Gang implements System {
         if (tempting && this.chases.length === 0 && rnd.next() < 0.6) this.startChase();
       }
     }
+  }
+
+  private lastRob = -99;
+  private tryRob(m: Npc) {
+    const g = this.game;
+    const v = this.vm.current;
+    if (!v || Math.abs(v.speed) > 2 || g.time.elapsed - this.lastRob < 12) return;
+    const door = this.vm.doorPoint(v, new THREE.Vector3());
+    if (m.position.distanceTo(door) > 2.6) {
+      m.goTo(door, true);
+      return;
+    }
+    this.lastRob = g.time.elapsed;
+    g.mod.bubbles?.say(m, '¡Fuera de ahí! ¡Esos paquetes son nuestros!', 2.5);
+    g.mod.jobs?.dropFrom(v, 99);
+    this.vm.forceExit();
+    const p = g.mod.player;
+    p.push.set((rnd.next() - 0.5) * 6, 4, (rnd.next() - 0.5) * 6);
+    p.pose = 'knocked';
+    p.poseTimer = 1.2;
+    p.hurt(8, { cause: 'puñetazo' });
+    g.events.emit('toast', { text: '¡Te han sacado de la furgoneta! Recoge los paquetes del suelo', color: '#6c3bd1', time: 3 });
   }
 
   private driveChase(c: Chase, dt: number) {

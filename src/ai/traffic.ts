@@ -99,8 +99,24 @@ export class Traffic implements System {
     // limpiar: lejos, destruidos o robados
     for (let i = this.cars.length - 1; i >= 0; i--) {
       const v = this.cars[i];
+      if (v.disposed) {
+        this.cars.splice(i, 1);
+        continue;
+      }
       const brain = (v as any).brain as CarBrain | undefined;
       const driverNpc = v.driver && v.driver.kind === 'npc' ? v.driver.npc : null;
+      if (v.destroyed) {
+        // los restos los retira VehicleDamageFx; el conductor sale despedido y se queda como peatón
+        this.cars.splice(i, 1);
+        (v as any).brain = undefined;
+        if (driverNpc) {
+          const out = v.getPosition(new THREE.Vector3());
+          driverNpc.leaveVehicle(out);
+          driverNpc.knock(new THREE.Vector3((rnd.next() - 0.5) * 8, 6, (rnd.next() - 0.5) * 8));
+          this.game.mod.pedestrians?.adopt?.(driverNpc);
+        }
+        continue;
+      }
       const far = v.getPosition(tmpV).distanceTo(focus) > 210;
       if (v === this.vm.current || (!driverNpc && !far)) {
         // lo ha cogido el jugador o se ha quedado sin conductor: ya no es tráfico
@@ -111,7 +127,7 @@ export class Traffic implements System {
         }
         continue;
       }
-      if (far || v.destroyed || !brain) {
+      if (far || !brain) {
         this.cars.splice(i, 1);
         if (driverNpc) this.npcs.remove(driverNpc);
         if (v !== this.vm.current && !v.owned) this.vm.remove(v);
@@ -119,7 +135,7 @@ export class Traffic implements System {
     }
     for (let i = this.parked.length - 1; i >= 0; i--) {
       const v = this.parked[i];
-      if (v === this.vm.current || v.owned || !v.transient) {
+      if (v.disposed || v === this.vm.current || v.owned || !v.transient) {
         this.parked.splice(i, 1);
         continue;
       }

@@ -78,7 +78,8 @@ export class Npc implements NpcDriver {
     const w = game.physics.world;
     this.body = w.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(pos.x, pos.y + 0.9, pos.z));
     this.collider = w.createCollider(
-      RAPIER.ColliderDesc.capsule(0.5, 0.33).setCollisionGroups(groups(G.NPC, G.PLAYER | G.PROJECTILE | G.VEHICLE)),
+      // no choca con vehículos (los atropellos los resuelve NpcManager.runOvers): si no, son postes
+      RAPIER.ColliderDesc.capsule(0.5, 0.33).setCollisionGroups(groups(G.NPC, G.PLAYER | G.PROJECTILE)),
       this.body,
     );
     game.physics.tag(this.collider, this);
@@ -92,7 +93,7 @@ export class Npc implements NpcDriver {
   }
 
   get alive() {
-    return this.state !== 'dead' && !this.removed;
+    return this.state !== 'dead' && !this.removed && !(this.killable && this.health <= 0);
   }
   get busy() {
     return this.state === 'knocked' || this.state === 'down' || this.state === 'getup' || this.state === 'dead' || this.state === 'taped' || this.state === 'stunned' || this.state === 'pulled';
@@ -143,7 +144,8 @@ export class Npc implements NpcDriver {
   }
 
   die(source?: unknown) {
-    this.setState('dead');
+    // si va volando, termina el vuelo y al caer pasa a 'dead' (lo hace el estado knocked)
+    if (this.state !== 'knocked') this.setState('dead');
     this.target = null;
     this.poofTimer = 1.1;
     this.game.events.emit('npc:killed' as any, { npc: this, source } as any);
@@ -177,11 +179,25 @@ export class Npc implements NpcDriver {
     this.rig.root.rotation.set(0, 0, 0);
   }
 
+  /** Va de pasajero (invisible) hasta que se baja con leaveVehicle. */
+  rideAlong(v: Vehicle) {
+    this.vehicle = v;
+    this.setState('driving');
+    this.collider.setEnabled(false);
+    this.rig.root.visible = false;
+    this.passenger = true;
+    v.mesh.group.add(this.rig.root);
+    this.rig.root.position.set(-v.spec.seat.x, v.spec.seat.y - v.spec.half.y * 0.2, v.spec.seat.z);
+  }
+  passenger = false;
+
   leaveVehicle(exitPos?: THREE.Vector3) {
     const v = this.vehicle;
     if (!v) return;
     if (v.driver && v.driver.kind === 'npc' && v.driver.npc === this) v.driver = null;
     this.vehicle = null;
+    this.passenger = false;
+    this.rig.root.visible = true;
     this.game.scene.add(this.rig.root);
     const p = exitPos ?? this.game.mod.vehicles?.doorPoint(v, new THREE.Vector3()) ?? v.getPosition(new THREE.Vector3());
     this.position.copy(p);
@@ -212,6 +228,8 @@ export class Npc implements NpcDriver {
     switch (this.state) {
       case 'driving':
         pose = this.vehicle?.spec.pose ?? 'drive';
+        // la posición lógica sigue al vehículo (explosiones, búsquedas por distancia...)
+        if (this.vehicle && !this.vehicle.disposed) this.vehicle.getPosition(this.position);
         break;
       case 'knocked': {
         // vuelo balístico con rebote

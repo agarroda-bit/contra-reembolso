@@ -127,35 +127,46 @@ export class Vehicle {
     this.syncVisual(0);
   }
 
+  /** Ya borrado del mundo: no se puede tocar su cuerpo de Rapier (se usa la última posición). */
+  disposed = false;
+  private lastT = { x: 0, y: 0, z: 0 };
+  private lastR = { x: 0, y: 0, z: 0, w: 1 };
+  private tr() {
+    return this.disposed ? this.lastT : this.body.translation();
+  }
+  private rt() {
+    return this.disposed ? this.lastR : this.body.rotation();
+  }
+
   get position(): THREE.Vector3 {
-    const t = this.body.translation();
+    const t = this.tr();
     return tmpV.set(t.x, t.y, t.z);
   }
   getPosition(out: THREE.Vector3): THREE.Vector3 {
-    const t = this.body.translation();
+    const t = this.tr();
     return out.set(t.x, t.y, t.z);
   }
   getQuaternion(out: THREE.Quaternion): THREE.Quaternion {
-    const r = this.body.rotation();
+    const r = this.rt();
     return out.set(r.x, r.y, r.z, r.w);
   }
   /** Rumbo en el plano (0 = mirando a +Z). */
   get heading(): number {
-    const r = this.body.rotation();
+    const r = this.rt();
     tmpQ.set(r.x, r.y, r.z, r.w);
     tmpV2.set(0, 0, 1).applyQuaternion(tmpQ);
     return Math.atan2(tmpV2.x, tmpV2.z);
   }
   /** Punto local → mundo. */
   localToWorld(local: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
-    const r = this.body.rotation();
-    const t = this.body.translation();
+    const r = this.rt();
+    const t = this.tr();
     tmpQ.set(r.x, r.y, r.z, r.w);
     return out.copy(local).applyQuaternion(tmpQ).add(tmpV2.set(t.x, t.y, t.z));
   }
   /** ¿Está volcado? */
   get upsideDown(): boolean {
-    const r = this.body.rotation();
+    const r = this.rt();
     tmpQ.set(r.x, r.y, r.z, r.w);
     tmpV2.set(0, 1, 0).applyQuaternion(tmpQ);
     return tmpV2.y < 0.3;
@@ -390,6 +401,13 @@ export class Vehicle {
   }
 
   dispose() {
+    if (this.disposed) return;
+    const t = this.body.translation(), r = this.body.rotation();
+    this.lastT = { x: t.x, y: t.y, z: t.z };
+    this.lastR = { x: r.x, y: r.y, z: r.z, w: r.w };
+    this.disposed = true;
+    this.destroyed = true;
+    this.driver = null;
     const g = this.game;
     g.scene.remove(this.mesh.group);
     this.mesh.bodyGeo.dispose();

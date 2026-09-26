@@ -76,9 +76,18 @@ function spotIn(g: Game, district: DeliverySpot['district'], avoid?: THREE.Vecto
 function msg(g: Game, from: { id: string; name: string; avatar: string }, text: string) {
   g.mod.messages?.receive(from.id, from.name, from.avatar, text);
 }
+let storyHintActive = false;
+/** Pista de la misión: solo borra la que puso ella (no pisa las de las entregas). */
 function hint(g: Game, text: string | null) {
   const it = g.mod.interaction;
-  if (it) it.override = text;
+  if (!it) return;
+  if (text) {
+    it.override = text;
+    storyHintActive = true;
+  } else if (storyHintActive) {
+    it.override = null;
+    storyHintActive = false;
+  }
 }
 function spawnBoss(g: Game, pos: THREE.Vector3): Npc {
   const look = randomLookFor(rng, 'devuelto');
@@ -141,7 +150,7 @@ function missions(): Mission[] {
               if (e.vehicle === c.g.mod.vehicles?.current) c.data.integrity -= Math.max(0, e.dv - 5) * 4;
             });
             c.g.mod.gang?.startChase();
-            setTimeout(() => c.g.mod.gang?.startChase(), 12000);
+            setTimeout(() => c.story.running && c.g.mod.gang?.startChase(), 12000);
             msg(c.g, { id: 'devueltos', name: 'Los Devueltos', avatar: '↩️' }, 'Bonito reloj, repartidor. ¿Nos dices la hora? 😈');
           },
           update: (c) => {
@@ -216,6 +225,10 @@ function missions(): Mission[] {
           update: (c) => {
             if (c.t > 180) {
               c.data.failText = 'Se acabó el tiempo. Kevin ha dormido en el suelo.';
+              return 'fail';
+            }
+            if (c.data.van.disposed || c.data.van.destroyed) {
+              c.data.failText = 'La furgoneta con la mudanza ha quedado para chatarra.';
               return 'fail';
             }
             if (c.data.integrity <= 20) {
@@ -378,7 +391,7 @@ function missions(): Mission[] {
           enter: (c) => {
             c.g.mod.police?.setWanted(2);
             c.g.mod.gang?.startChase();
-            setTimeout(() => c.g.mod.gang?.startChase(), 15000);
+            setTimeout(() => c.story.running && c.g.mod.gang?.startChase(), 15000);
             msg(c.g, { id: 'devueltos', name: 'Los Devueltos', avatar: '↩️' }, '¡¡¡NUESTROS PAQUETES!!! ¡A por él! ¡Y alguien que llame a El Devolución!');
           },
           update: (c) => {
@@ -489,6 +502,8 @@ function missions(): Mission[] {
       ],
       cleanup: (c) => {
         if (c.g.mod.gang) c.g.mod.gang.calm = false;
+        const boss = c.data.boss; const truck = c.data.truck;
+        if (boss && boss.alive) { c.g.mod.npcs?.remove(boss); if (truck && !truck.disposed && truck !== c.g.mod.vehicles?.current) c.g.mod.vehicles.remove(truck); }
       },
     },
   ];

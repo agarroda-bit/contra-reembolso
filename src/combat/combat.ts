@@ -382,7 +382,7 @@ export class Combat implements System {
   }
 
   private melee(shooter: Shooter, def: WeaponDef, pos: THREE.Vector3, dir: THREE.Vector3) {
-    this.cooldown = 1 / def.rate;
+    if (shooter.kind === 'player') this.cooldown = 1 / def.rate;
     const g = this.game;
     const origin = shooter.kind === 'player' ? this.player.position : shooter.npc!.position;
     const heading = shooter.kind === 'player' ? this.player.heading : shooter.npc!.heading;

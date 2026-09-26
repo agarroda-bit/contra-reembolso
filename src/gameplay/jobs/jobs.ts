@@ -53,6 +53,8 @@ export class Jobs implements System {
     game.mod.jobs = this;
     game.events.on('vehicle:impact' as any, (e: any) => this.onImpact(e.vehicle as Vehicle, e.dv as number));
     game.events.on('vehicle:landed' as any, (e: any) => this.onLanded(e.vehicle as Vehicle, e.air as number));
+    game.events.on('player:died', () => this.abortScene());
+    game.events.on('player:busted' as any, () => this.abortScene());
     game.events.on('player:hurt', (e) => {
       for (const j of this.active) if (j.state === 'carry' && j.where === 'hands') this.damage(j, e.amount * 0.6);
     });
@@ -302,15 +304,24 @@ export class Jobs implements System {
         j.state = 'carry';
         j.where = pv ? 'vehicle' : 'hands';
         j.vehicleId = pv?.id ?? null;
+        this.clearDrop(j);
         this.updateVehiclePackages();
         this.game.events.emit('toast', { text: '¡Paquete recuperado!', color: '#ffd23f' });
       });
       (j as any).droppedAt = this.game.time.elapsed;
+      (j as any).dropPos = pos.clone();
+      (j as any).dropExpires = this.game.time.elapsed + 45;
     }
     if (jobs.length) {
       this.game.events.emit('toast', { text: `¡Se te ha caído ${jobs.length > 1 ? jobs.length + ' paquetes' : 'un paquete'}! Recógelo rápido`, color: '#ff4f81' });
       this.updateVehiclePackages();
     }
+  }
+
+  private clearDrop(j: ActiveJob) {
+    delete (j as any).droppedAt;
+    delete (j as any).dropPos;
+    delete (j as any).dropExpires;
   }
 
   private cleanup() {
@@ -328,7 +339,8 @@ export class Jobs implements System {
 
   /** Destino actual de un encargo. */
   targetOf(j: ActiveJob): THREE.Vector3 {
-    return j.state === 'pickup' ? ((j as any).droppedAt ? j.offer.pickupPos : j.offer.pickupPos) : j.offer.dest.door;
+    if (j.state === 'pickup') return (j as any).dropPos ?? j.offer.pickupPos;
+    return j.offer.dest.door;
   }
 
   // ─────────── Bucle ───────────
@@ -359,6 +371,11 @@ export class Jobs implements System {
     for (const j of this.active) {
       if (j.state === 'done' || j.state === 'failed') continue;
       if (this.scene?.job === j) continue;
+      // el paquete del suelo ha desaparecido: se puede volver a recoger en la tienda
+      if ((j as any).dropExpires !== undefined && g.time.elapsed > (j as any).dropExpires && j.state === 'pickup') {
+        this.clearDrop(j);
+        this.game.events.emit('toast', { text: `El paquete de ${j.offer.client.name} ha vuelto a ${j.offer.pickupName}`, color: '#ffd23f' });
+      }
       j.timeLeft -= dt;
       if (j.timeLeft < -60) {
         j.state = 'failed';
@@ -436,6 +453,13 @@ export class Jobs implements System {
 
   // ─────────── Escena de entrega ───────────
 
+  /** Corta la escena de entrega sin cobrar (muerte, arresto, te has ido). */
+  private abortScene() {
+    if (!this.scene) return;
+    this.scene = null;
+    this.setHint(null);
+  }
+
   private setHint(text: string | null) {
     const it = this.game.mod.interaction;
     if (it) it.override = text;
@@ -471,6 +495,8 @@ export class Jobs implements System {
     const j = s.job;
     const quirk = j.offer.client.quirk;
     const input = g.input;
+    if (j.state !== 'carry' || p.state === 'dead') return this.abortScene();
+    if (s.step > 0 && quirk !== 'abuela_centimos' && p.position.distanceTo(j.offer.dest.door) > 8) return this.abortScene();
     // si el jugador se va, se acaba la escena (y se pierde la entrega en algunos casos)
     if (p.position.distanceTo(j.offer.dest.door) > 8 && s.step > 0) {
       if (quirk === 'abuela_centimos' && s.step === 1) {
@@ -542,7 +568,9 @@ export class Jobs implements System {
             thief.onDeath = () => {
               // suelta el paquete
               j.state = 'pickup';
+              (j as any).dropPos = thief.position.clone();
               g.mod.pickups?.spawn('package', thief.position.clone(), 1, 60, () => {
+                this.clearDrop(j);
                 j.state = 'carry';
                 j.where = 'hands';
                 j.offer.client = { ...j.offer.client, quirk: 'none', happy: ['¡Mi paquete! El vecino es un sinvergüenza. Toma, y un extra por las molestias.'] };
@@ -555,6 +583,7 @@ export class Jobs implements System {
           gang?.ambush(j.offer.dest.door, 2, 'pistol');
           j.state = 'pickup';
           (j as any).droppedAt = g.time.elapsed;
+          if (thief) (j as any).dropPos = thief.position; // el GPS sigue al ladrón
           g.events.emit('toast', { text: '¡El vecino era de Los Devueltos! Derríbale para recuperar el paquete', color: '#6c3bd1', time: 3 });
           this.clientNpcs.delete(j);
           this.scene = null;

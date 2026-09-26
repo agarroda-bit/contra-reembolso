@@ -36,6 +36,19 @@ export class Pedestrians implements System {
     game.events.on('explosion', (e) => scare(e.pos, 45));
     game.events.on('weapon:shot' as any, (e: any) => scare(e.pos, 28));
     game.events.on('npc:runover' as any, (e: any) => scare(e.npc.position, 14));
+    // a los conductores que sacas del coche los adopta la población de peatones (se borran lejos)
+    game.events.on('npc:carjacked' as any, (e: any) => {
+      if (!e.npc.hostile && !e.npc.police) this.adopt(e.npc);
+    });
+  }
+
+  /** Convierte un NPC suelto en peatón (para que se borre al alejarse). */
+  adopt(npc: Npc) {
+    if (this.peds.includes(npc) || npc.removed) return;
+    const ne = this.roads.nearestEdge(npc.position, false);
+    npc.role = 'civil';
+    npc.brain = { edge: ne?.edge ?? 0, dir: 1, t: ne?.t ?? 0, side: 1, pause: 0, panic: 4, from: npc.position.clone() } as PedBrain;
+    this.peds.push(npc);
   }
 
   private get npcs(): NpcManager {

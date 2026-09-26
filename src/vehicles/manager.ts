@@ -43,10 +43,45 @@ export class VehicleManager implements System {
   }
 
   remove(v: Vehicle) {
+    if (v.disposed) return;
     const i = this.list.indexOf(v);
     if (i >= 0) this.list.splice(i, 1);
     if (this.current === v) this.forceExit();
+    if (this.transition?.vehicle === v) this.cancelTransition();
+    // los NPC que iban dentro se bajan antes de borrar el coche
+    const at = v.getPosition(new THREE.Vector3());
+    for (const n of this.game.mod.npcs?.list ?? []) if (n.vehicle === v) n.leaveVehicle(at);
     v.dispose();
+  }
+
+  /** Cancela la animación de subir/robar (el coche ha desaparecido, el jugador ha muerto...). */
+  cancelTransition() {
+    const tr = this.transition;
+    if (!tr) return;
+    this.transition = null;
+    const p = this.player;
+    if (tr.kind !== 'exit' && p.state === 'busy') {
+      p.state = 'foot';
+      p.pose = 'normal';
+    }
+  }
+
+  /** Barrido de coches abandonados lejos (los que usaste y dejaste tirados). */
+  private sweepTimer = 3;
+  private sweep(dt: number) {
+    this.sweepTimer -= dt;
+    if (this.sweepTimer > 0) return;
+    this.sweepTimer = 3;
+    const p = this.player?.position;
+    if (!p) return;
+    const now = this.game.time.elapsed;
+    for (const v of [...this.list]) {
+      if (v === this.current || v.owned || v.driver || v.lastDriven < 0) continue;
+      if ((v as any).fleet || (v as any).homeSpot) continue;
+      if (now - v.lastDriven < 60) continue;
+      if (v.getPosition(tmpV).distanceTo(p) < 200) continue;
+      this.remove(v);
+    }
   }
 
   /** Vehículo más cercano a una posición (dentro de maxDist). */
@@ -84,7 +119,7 @@ export class VehicleManager implements System {
       this.game.mod.crazy?.modifyControls?.(v);
     }
     for (const veh of this.list) {
-      if (veh !== this.current && (!veh.driver || veh.destroyed)) {
+      if (veh !== this.current && (!veh.driver || veh.destroyed || !(veh as any).brain)) {
         veh.controls.throttle = 0;
         veh.controls.steer = 0;
         veh.controls.handbrake = !veh.destroyed;
@@ -99,6 +134,7 @@ export class VehicleManager implements System {
     const player = this.player;
     for (const v of this.list) v.syncVisual(dt);
     if (g.time.frame % 30 === 0) setHeadlightsNight(g.night);
+    this.sweep(dt);
     this.hornCooldown -= dt;
     this.updateAudio();
 
@@ -214,6 +250,10 @@ export class VehicleManager implements System {
   private runTransition(dt: number) {
     const tr = this.transition!;
     const p = this.player;
+    if ((tr.kind !== 'exit' && p.state !== 'busy') || tr.vehicle.disposed || (tr.kind !== 'exit' && tr.vehicle.destroyed)) {
+      this.cancelTransition();
+      return;
+    }
     tr.t += dt;
     const k = Math.min(1, tr.t / tr.dur);
     if (tr.kind === 'enter' || tr.kind === 'steal') {
@@ -234,7 +274,6 @@ export class VehicleManager implements System {
     this.transition = null;
     this.current = v;
     v.driver = { kind: 'player' };
-    v.transient = false;
     v.lastDriven = this.game.time.elapsed;
     p.state = 'vehicle';
     p.pose = v.spec.pose;

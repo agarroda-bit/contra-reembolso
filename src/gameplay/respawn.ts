@@ -61,7 +61,8 @@ export class Respawn implements System {
   }
 
   private onDeath(cause: string) {
-    if (this.timer >= 0) return;
+    // si estaba en la pantalla de "al agua", la muerte manda
+    if (this.timer >= 0 && this.kind !== 'water') return;
     const p = this.player;
     this.kind = 'dead';
     this.killerGang = /bala|caja|puñetazo|explosi/.test(cause) && (this.game.mod.gang?.members?.some((m: any) => m.alive && m.position.distanceTo(p.position) < 60) ?? false);
@@ -126,7 +127,7 @@ export class Respawn implements System {
         }
       }
       pos = best.clone();
-      p.hurt(10, { cause: 'agua' });
+      p.health = Math.max(1, p.health - 10);
       where = 'la orilla';
     } else if (this.kind === 'busted') {
       pos = w.playerSpawn.pos.clone();
@@ -156,6 +157,12 @@ export class Respawn implements System {
       g.events.emit('notify', { title: 'Centro de Salud Tiritas', text: `Te hemos recompuesto con cinta de embalar. Has perdido ${Math.round(lost)} € de efectivo.`, from: 'Doctora Venda', icon: '🩹' });
     }
     if (this.kind !== 'water') p.health = p.maxHealth;
+    // soltar cualquier vehículo o animación de subir a medias
+    const vm = g.mod.vehicles;
+    vm?.cancelTransition?.();
+    if (vm?.current) vm.forceExit();
+    p.seated = false;
+    if (p.root.parent !== g.scene) g.scene.add(p.root);
     p.state = 'foot';
     p.pose = 'normal';
     p.poseTimer = 0;

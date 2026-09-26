@@ -366,7 +366,19 @@ export class Shops implements System {
   /** Pone un vehículo tuyo en el mundo (quitando el anterior si existía). */
   deliverTo(o: OwnedVehicle, pos: THREE.Vector3, heading?: number) {
     const vm = this.game.mod.vehicles;
-    if (o.live && !o.live.destroyed && o.live !== vm.current) vm.remove(o.live);
+    if (o.live && !o.live.disposed) {
+      if (o.live === vm.current) {
+        this.game.events.emit('toast', { text: '¡Si ya vas montado en él!', color: '#ff7b54' });
+        return o.live;
+      }
+      if (!o.live.destroyed) {
+        // el mismo vehículo (con sus paquetes) se trae hasta aquí
+        o.live.place(pos, heading ?? 0);
+        o.live.lastDriven = this.game.time.elapsed;
+        return o.live;
+      }
+      vm.remove(o.live);
+    }
     const v = vm.spawn(o.kind, pos, heading ?? 0, o.color);
     v.owned = true;
     v.transient = false;

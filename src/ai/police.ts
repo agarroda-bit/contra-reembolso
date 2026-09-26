@@ -132,7 +132,11 @@ export class Police implements System {
   seesPoint(pt: THREE.Vector3, maxDist = 60): boolean {
     const eyes: THREE.Vector3[] = [];
     for (const o of this.officers) if (o.alive && !o.vehicle) eyes.push(tmpV2.copy(o.position).setY(o.position.y + 1.6).clone());
-    for (const u of this.units) if (!u.car.destroyed) eyes.push(u.car.getPosition(new THREE.Vector3()).setY(u.car.getPosition(tmpV2).y + 0.8));
+    for (const u of this.units) {
+      // solo cuentan los coches con un policía al volante (no el que conduces tú ni uno vacío)
+      if (u.car.destroyed || u.car.disposed || u.car === this.vm.current || u.car.driver?.kind !== 'npc') continue;
+      eyes.push(u.car.getPosition(new THREE.Vector3()).setY(u.car.getPosition(tmpV2).y + 0.8));
+    }
     const target = pt.clone().setY(pt.y + 1);
     for (const e of eyes) {
       const d = e.distanceTo(target);
@@ -192,12 +196,8 @@ export class Police implements System {
       crew.push(n);
     }
     crew[0].enterVehicle(car);
-    for (let i = 1; i < crew.length; i++) {
-      // los demás "van dentro": invisibles hasta que bajan
-      crew[i].rig.root.visible = false;
-      crew[i].setState('driving');
-      crew[i].collider.setEnabled(false);
-    }
+    // los demás van dentro, invisibles hasta que bajan
+    for (let i = 1; i < crew.length; i++) crew[i].rideAlong(car);
     const brain: CarBrain = { edge: eid, dir, t: 0.5, next: null, cruise: 20, blocked: 0, stuck: 0, reverse: 0, honked: 0, mode: 'chase', chaseTarget: new THREE.Vector3() };
     (car as any).brain = brain;
     const unit: Unit = { car, crew, route: [], routeTimer: 0, onFoot: roadblock, roadblock };
@@ -221,7 +221,7 @@ export class Police implements System {
         n.setState('idle');
         this.game.scene.add(n.rig.root);
       }
-      this.officers.push(n);
+      if (!this.officers.includes(n)) this.officers.push(n);
     });
     car.controls.throttle = 0;
     car.controls.handbrake = true;
@@ -239,6 +239,11 @@ export class Police implements System {
       // retirar lo que quede lejos
       for (let i = this.units.length - 1; i >= 0; i--) {
         const u = this.units[i];
+        if (u.car.disposed || u.car === this.vm.current) {
+          for (const n of u.crew) if (!n.removed && n.position.distanceTo(p.position) > 60) this.npcs.remove(n);
+          this.units.splice(i, 1);
+          continue;
+        }
         if (u.car.getPosition(tmpV).distanceTo(p.position) > 70) {
           this.despawnUnit(u);
           this.units.splice(i, 1);
@@ -285,10 +290,30 @@ export class Police implements System {
     for (let i = this.units.length - 1; i >= 0; i--) {
       const u = this.units[i];
       u.crew = u.crew.filter((n) => !n.removed);
+      if (u.car.disposed) {
+        // el coche ya no existe: los agentes siguen a pie
+        for (const n of u.crew) if (!this.officers.includes(n)) this.officers.push(n);
+        this.units.splice(i, 1);
+        continue;
+      }
       const alive = u.crew.some((n) => n.alive);
-      const far = u.car.getPosition(tmpV).distanceTo(p.position) > 220;
-      if ((!alive && u.onFoot) || far || (u.car.destroyed && u.crew.every((n) => !n.vehicle && n.removed))) {
+      const carIsMine = u.car === this.vm.current;
+      const ref = carIsMine ? u.crew.find((n) => !n.removed)?.position ?? p.position : u.car.getPosition(tmpV);
+      const far = ref.distanceTo(p.position) > 220;
+      if (far) {
         this.despawnUnit(u);
+        this.units.splice(i, 1);
+        continue;
+      }
+      if (u.car.destroyed && !u.onFoot) this.dismount(u);
+      if ((!alive && u.onFoot) || carIsMine || u.car.destroyed) {
+        // sin agentes (o se lo has robado): el coche se queda aparcado y la unidad se disuelve
+        if (!u.car.destroyed && !carIsMine) {
+          (u.car as any).brain = undefined;
+          u.car.sirenOn = false;
+          this.traffic?.parked.push(u.car);
+        }
+        for (const n of u.crew) if (n.alive && !n.vehicle && !this.officers.includes(n)) this.officers.push(n);
         this.units.splice(i, 1);
         continue;
       }
