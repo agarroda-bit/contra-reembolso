@@ -205,7 +205,9 @@ export class Particles implements System {
     this.emit('debris', pos, { count: 14 * k });
     this.emit('confetti', pos, { count: 10 * k });
     this.flash(pos, '#ffb347', big ? 220 : 120, big ? 0.6 : 0.35, big ? 40 : 26);
-    this.game.events.emit('camera:shake', { amount: big ? 1.2 : 0.6 });
+    // la pantalla tiembla según lo cerca que pille: a 60 m o más, nada
+    const near = THREE.MathUtils.clamp(1 - pos.distanceTo(this.game.camera.position) / 60, 0, 1);
+    if (near > 0) this.game.events.emit('camera:shake', { amount: (big ? 1.2 : 0.6) * near });
   }
 
   /** Enemigo derribado: nube de cartón y confeti (sin sangre). */
