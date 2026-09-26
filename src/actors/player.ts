@@ -4,6 +4,7 @@ import type { Game, System } from '../core/game';
 import { RAPIER, G, groups } from '../core/physics';
 import type { CharacterAnimParams, CharacterLook, CharacterRig, CharacterPose } from '../core/contracts';
 import type { CameraRig } from './cameraRig';
+import { JUMP_WINDUP, type Animator, type Gesture } from './character/animator';
 
 export const PLAYER_RADIUS = 0.35;
 export const PLAYER_HALF = 0.55; // mitad del cilindro de la cápsula
@@ -12,6 +13,8 @@ const CENTER_Y = PLAYER_HALF + PLAYER_RADIUS; // del pie al centro de la cápsul
 const WALK = 3.4;
 const RUN = 7.2;
 const AIM_WALK = 2.6;
+/** Agachado (tecla C): de puntillas, despacito. */
+const CROUCH_WALK = 1.8;
 const JUMP_V = 7.8;
 const GRAVITY = -24;
 
@@ -66,6 +69,10 @@ export class Player implements System {
   private lastGroundedTime = 0;
   private placeholder: THREE.Object3D | null = null;
   private landTimer = 0;
+  /** Preparación del salto (se agacha un instante antes de despegar). */
+  private jumpWind = 0;
+  /** Agachado (mantener C). */
+  crouching = false;
   /** Parámetros de animación (se reutilizan: nada de objetos nuevos por frame). */
   private readonly anim: CharacterAnimParams = { speed: 0, grounded: true, vy: 0, pose: 'normal', aiming: false, aimPitch: 0, weapon: 'none', shot: false, wobble: 0 };
 
@@ -91,6 +98,13 @@ export class Player implements System {
     this.controller.setCharacterMass(80);
 
     game.scene.add(this.root);
+    // celebraciones: al cobrar, un puño arriba; al conseguir algo gordo, saltito, bailecito y vuelta
+    const ev = game.events;
+    ev.on('job:done' as any, (e: any) => this.celebrate(e?.job && e.job.integrity < 40 ? 'shrug' : 'cheer'));
+    for (const big of ['fame:level', 'story:done', 'attic:bought', 'loot:recovered']) ev.on(big as any, () => this.celebrate('celebrate'));
+    ev.on('toast', (e) => {
+      if (typeof e?.text === 'string' && e.text.startsWith('🏆')) this.celebrate('celebrate');
+    });
     if (makeRig && look) this.setRig(makeRig(look));
     else this.makePlaceholder();
   }
@@ -105,6 +119,11 @@ export class Player implements System {
       this.placeholder = null;
     }
     this.rig = rig;
+    const an = this.animator;
+    if (an) {
+      an.fidgetAfter = 10; // parado 10 s: mira el reloj, bosteza...
+      an.danceMix = false; // baila el paso que elige (el club dice su nombre)
+    }
     rig.root.traverse((o) => {
       if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true;
     });
@@ -124,6 +143,22 @@ export class Player implements System {
     g.add(body, nose);
     this.placeholder = g;
     this.root.add(g);
+  }
+
+  /** El animador del muñeco (gestos, agacharse...), si el muñeco lo tiene. */
+  get animator(): Animator | null {
+    const r = this.rig as { anim?: Animator } | null;
+    return r && r.anim ? r.anim : null;
+  }
+
+  /**
+   * Gesto de alegría (o de fastidio) que no estorba: solo a pie y sin apuntar. Andando se hace
+   * de cintura para arriba; una celebración larga se corta si echas a andar.
+   */
+  celebrate(g: Gesture) {
+    const an = this.animator;
+    if (!an || this.state !== 'foot' || this.pose !== 'normal' || this.aiming || this.crouching) return;
+    an.gesture(g);
   }
 
   teleport(p: THREE.Vector3, heading?: number) {
@@ -159,16 +194,19 @@ export class Player implements System {
       this.syncVisual(dt);
       return;
     }
+    // Derribado o levantándose del suelo: no se mueve ni apunta hasta estar de pie
+    const down = this.pose === 'knocked' || this.pose === 'getup';
     // Entrada → dirección deseada relativa a la cámara
-    const ax = input.enabled ? input.moveAxis() : NO_MOVE;
+    const ax = input.enabled && !down ? input.moveAxis() : NO_MOVE;
     const fwd = cam ? cam.forwardXZ(tmpF) : tmpF.set(0, 0, -1);
     const right = cam ? cam.rightXZ(tmpR) : tmpR.set(1, 0, 0);
     this.wantMove.set(0, 0, 0).addScaledVector(fwd, ax.y).addScaledVector(right, ax.x);
     const len = this.wantMove.length();
     if (len > 1) this.wantMove.divideScalar(len);
-    this.aiming = input.enabled && input.down('aim');
-    this.sprint = input.enabled && input.down('sprint') && len > 0.1 && !this.aiming && this.stamina > 1;
-    if (input.enabled && input.pressed('jump')) this.jumpQueued = 0.15;
+    this.aiming = input.enabled && !down && input.down('aim');
+    this.crouching = input.enabled && !down && input.down('crouch') && this.pose === 'normal';
+    this.sprint = input.enabled && input.down('sprint') && len > 0.1 && !this.aiming && !this.crouching && this.stamina > 1;
+    if (input.enabled && !down && input.pressed('jump')) this.jumpQueued = 0.15;
 
     // Aguante
     if (this.sprint) this.stamina = Math.max(0, this.stamina - dt * 14);
@@ -190,7 +228,15 @@ export class Player implements System {
     }
     if (this.poseTimer > 0) {
       this.poseTimer -= dt;
-      if (this.poseTimer <= 0) this.pose = 'normal';
+      if (this.poseTimer <= 0) {
+        if (this.pose === 'knocked') {
+          // del suelo no se pasa a estar de pie de golpe: se levanta (si aún va por el aire, espera)
+          if (this.grounded) {
+            this.pose = 'getup';
+            this.poseTimer = 0.8;
+          } else this.poseTimer = 0.1;
+        } else this.pose = 'normal';
+      }
     }
     this.jumpQueued = Math.max(0, this.jumpQueued - dt);
     this.syncVisual(dt);
@@ -198,7 +244,7 @@ export class Player implements System {
 
   fixedUpdate(dt: number) {
     if (this.state !== 'foot') return;
-    const speed = (this.aiming ? AIM_WALK : this.sprint ? RUN : WALK) * this.speedMul;
+    const speed = (this.crouching ? CROUCH_WALK : this.aiming ? AIM_WALK : this.sprint ? RUN : WALK) * this.speedMul;
     // aceleración suave en horizontal
     const targetVX = this.wantMove.x * speed;
     const targetVZ = this.wantMove.z * speed;
@@ -215,12 +261,23 @@ export class Player implements System {
     // salto con margen ("coyote time")
     const now = this.game.time.elapsed;
     if (this.grounded) this.lastGroundedTime = now;
-    if (this.jumpQueued > 0 && now - this.lastGroundedTime < 0.15 && this.pose === 'normal') {
-      this.vy = JUMP_V;
+    if (this.jumpQueued > 0 && this.jumpWind <= 0 && now - this.lastGroundedTime < 0.15 && this.pose === 'normal') {
+      // primero se agacha un instante (anticipación de dibujo animado) y luego despega
+      this.jumpWind = JUMP_WINDUP;
       this.jumpQueued = 0;
-      this.lastGroundedTime = -1;
-      this.grounded = false;
-      this.game.events.emit('player:jump' as any, {} as any);
+      this.animator?.jumpWindup();
+    }
+    if (this.jumpWind > 0) {
+      this.jumpWind -= dt;
+      if (this.jumpWind <= 0) {
+        this.jumpWind = 0;
+        if (this.pose === 'normal') {
+          this.vy = JUMP_V;
+          this.lastGroundedTime = -1;
+          this.grounded = false;
+          this.game.events.emit('player:jump' as any, {} as any);
+        }
+      }
     }
     this.vy += GRAVITY * dt;
     if (this.vy < -40) this.vy = -40;
@@ -279,6 +336,13 @@ export class Player implements System {
       a.weapon = this.weaponKind;
       a.shot = this.shotPulse;
       a.wobble = this.wobble;
+      // levantarse del suelo, algo más rápido que los peatones
+      a.timeScale = this.pose === 'getup' ? 1.3 : 1;
+      const an = this.animator;
+      if (an) {
+        an.heading = this.state === 'foot' && !this.seated ? this.heading : NaN;
+        an.crouch = this.crouching && this.state === 'foot';
+      }
       this.rig.update(dt, a);
       this.shotPulse = false;
     }
