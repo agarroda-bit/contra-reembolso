@@ -620,7 +620,11 @@ export function renderTalk(sr: number, secs: number, base: number, fscale: numbe
   renderVoiceInto(sr, segs, pitch, { fscale, vib: 0.05, vibRate: 5, breath: 0.12 }, [out], [1]);
   // sonido de micro de radio: banda recortada y un poco de saturación
   const hp = new Biquad(sr).hp(220, 0.7), lp = new Biquad(sr).lp(4200, 0.7), pk = new Biquad(sr).peak(2400, 1, 4);
-  for (let i = 0; i < n; i++) out[i] = Math.tanh(pk.run(lp.run(hp.run(out[i]))) * 2.2);
+  for (let i = 0; i < n; i++) out[i] = pk.run(lp.run(hp.run(out[i])));
+  // primero a escala y luego una saturación suave (si no, satura muchísimo y suena a zumbido)
+  normalize(out, 0.8);
+  const k = Math.tanh(1.4);
+  for (let i = 0; i < n; i++) out[i] = Math.tanh(out[i] * 1.4) / k;
   return normalize(fadeEdges(out, sr, 0.05), 0.8) as Float32Array;
 }
 

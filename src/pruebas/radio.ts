@@ -14,6 +14,7 @@ import { buildChain } from '../audio/radio';
 import { PerreoStation } from '../audio/radio/stations/perreo';
 import { ElectroStation } from '../audio/radio/stations/electro';
 import { RumbaStation } from '../audio/radio/stations/rumba';
+import { chantSpec, quejioSpec } from '../audio/radio/voices';
 
 const CSS = `
 .rp{position:fixed;left:18px;top:18px;width:470px;max-height:calc(100vh - 36px);overflow:auto;background:#fff7e6;border:4px solid #1b1030;border-radius:24px;
@@ -260,6 +261,63 @@ async function main() {
     if (nan || pk > 1 || rms < -45) bad.push(`${sp.key}: pico ${pk.toFixed(2)} rms ${rms.toFixed(1)}${nan ? ' NaN' : ''}`);
   }
   return { muestras: n, peorPico: +worstPeak.toFixed(2), rmsMasBajo: +quietest.toFixed(1), malas: bad };
+};
+
+/** Pinta el espectrograma de varias voces (gritos, quejío, locutor) para revisarlas a ojo. */
+(window as any).__voces = () => {
+  const sr = 22050;
+  const list: [string, RR.Spec][] = [
+    ['¡eh! (coro)', chantSpec(sr, 'eh')],
+    ['¡dale!', chantSpec(sr, 'dale')],
+    ['¡prrra!', chantSpec(sr, 'prra')],
+    ['¡olé! (coro)', chantSpec(sr, 'ole')],
+    ['¡arsa!', chantSpec(sr, 'arsa')],
+    ['¡eso es!', chantSpec(sr, 'esoes')],
+    ['ah (corte)', chantSpec(sr, 'ah')],
+    ['quejío', quejioSpec(sr, 'q', [[64, 0.6], [65, 0.4], [64, 0.4], [62, 1.2], [60, 1.2]])],
+    ['locutor', RR.spec('t', 'renderTalk', sr, 2.4, 130, 1, 1, 1.2)],
+    ['cuña', RR.spec('t2', 'renderTalk', sr, 2.4, 150, 1.06, 1.35, 1.5)],
+  ];
+  const cv = document.createElement('canvas');
+  cv.width = 1240;
+  cv.height = 680;
+  cv.style.cssText = 'position:fixed;left:20px;top:20px;z-index:80;border:4px solid #1b1030;border-radius:12px;background:#1b1030';
+  document.body.appendChild(cv);
+  const g = cv.getContext('2d')!;
+  g.fillStyle = '#1b1030';
+  g.fillRect(0, 0, cv.width, cv.height);
+  const N = 512, hop = 128, H = 120, W = 240;
+  list.forEach(([name, sp], idx) => {
+    const out = RR.runSpec(sp);
+    const d = Array.isArray(out) ? out[0] : out;
+    const x0 = (idx % 5) * (W + 8) + 4, y0 = Math.floor(idx / 5) * (H + 200) + 24;
+    const cols = Math.min(W, Math.floor((d.length - N) / hop));
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let c = 0; c < cols; c++) {
+      for (let i = 0; i < N; i++) { re[i] = d[c * hop + i] * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1))); im[i] = 0; }
+      fft(re, im);
+      for (let y = 0; y < H; y++) {
+        const f = (1 - y / H) * 5000;
+        const k = Math.round((f / sr) * N);
+        const v = (20 * Math.log10(Math.hypot(re[k], im[k]) + 1e-9) + 10) / 55;
+        g.fillStyle = heat(v);
+        g.fillRect(x0 + c, y0 + y, 1, 1);
+      }
+    }
+    // forma de onda
+    g.strokeStyle = '#2ec4b6';
+    g.beginPath();
+    for (let x = 0; x < W; x++) {
+      const i = Math.floor((x / W) * d.length);
+      const y = y0 + H + 40 - d[i] * 35;
+      if (x === 0) g.moveTo(x0 + x, y); else g.lineTo(x0 + x, y);
+    }
+    g.stroke();
+    g.fillStyle = '#ffd23f';
+    g.font = '800 13px system-ui';
+    g.fillText(`${name} · ${(d.length / sr).toFixed(2)} s`, x0, y0 - 6);
+  });
+  return list.length;
 };
 
 /** Cuánto tarda cada generador de muestras (ms), para vigilar tirones. */

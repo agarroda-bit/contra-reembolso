@@ -125,6 +125,11 @@ export class RumbaStation extends Station<RumbaSong> {
     });
   }
 
+  /** La rumba no filtra la intro (guitarra y quejío suenan limpios); solo cierra el final. */
+  protected cutoff(sec: Section, barInSec: number, frac: number) {
+    return sec.kind === 'intro' ? 18000 : super.cutoff(sec, barInSec, frac);
+  }
+
   protected onStop() {
     this.strings.fill(null);
     this.bassV = this.reqV = null;

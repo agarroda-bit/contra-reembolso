@@ -173,8 +173,8 @@ class RadioSystem implements System, Radio {
     this.distTarget = Math.max(0, Math.min(1, Number.isFinite(k) ? k : 0));
   }
   /**
-   * Hace sonar una emisora aunque no vayas en coche (club, menú...). null = volver a lo normal.
-   * No toca el HUD. Se silencia igualmente en pausa.
+   * Hace sonar una emisora aunque vayas a pie (club, menú...). null = volver a lo normal.
+   * Si subes a un vehículo, manda la radio del coche. No toca el HUD. En pausa se silencia.
    */
   setOverride(i: number | null) {
     this.override = i === null || i < 0 ? null : Math.min(this.stations.length - 1, Math.floor(i));
@@ -250,7 +250,8 @@ class RadioSystem implements System, Radio {
     const chain = this.chain!;
     if (ctx.state !== 'running') return;
     const now = ctx.currentTime;
-    const want = this.override ?? (this.inVehicle ? this.selected : -1);
+    // en el coche manda la radio del coche; a pie, la emisora "forzada" (club, menú...) si la hay
+    const want = this.inVehicle ? this.selected : (this.override ?? -1);
     if (want !== this.playing) this.switchTo(want, now);
     // volumen general: pausa y encendido
     const on = !paused && this.playing >= 0;
